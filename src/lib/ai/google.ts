@@ -77,7 +77,7 @@ export async function analyzeWithGoogle(input: AnalyzeInput, model: string): Pro
       responseMimeType: 'application/json',
       responseJsonSchema: RESPONSE_SCHEMA,
       temperature: 0.2,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 8192, // termasuk token thinking pada Gemini 3.x
     },
   };
 
@@ -92,8 +92,17 @@ export async function analyzeWithGoogle(input: AnalyzeInput, model: string): Pro
         throw new HttpError(422, `AI menghentikan analisa (${finish}). Coba foto ulang.`);
       }
       const text = response.text;
-      if (!text) throw new HttpError(502, 'AI tidak mengembalikan hasil. Coba analisa ulang.');
-      return normalize(parseJson(text), response.modelVersion ?? model);
+      if (!text) {
+        console.error('[ai/google] respons kosong', JSON.stringify({ finish, usage: response.usageMetadata }));
+        throw new HttpError(502, 'AI tidak mengembalikan hasil. Coba analisa ulang.');
+      }
+      try {
+        return normalize(parseJson(text), response.modelVersion ?? model);
+      } catch (e) {
+        console.error('[ai/google] output bukan JSON', JSON.stringify({ finish, usage: response.usageMetadata, head: text.slice(0, 400) }));
+        if (finish === 'MAX_TOKENS') throw new HttpError(502, 'Output AI terpotong (batas token). Coba analisa ulang.');
+        throw e;
+      }
     } catch (err) {
       if (err instanceof HttpError) throw err;
       if (err instanceof ApiError) {

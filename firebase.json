@@ -5,5 +5,19 @@
   },
   "storage": {
     "rules": "storage.rules"
+  },
+  "apphosting": {
+    "backendId": "store-cleanliness",
+    "rootDir": "/",
+    "ignore": [
+      "node_modules",
+      ".git",
+      ".next",
+      ".env",
+      ".env.*",
+      "*.log",
+      "scratchpad"
+    ],
+    "alwaysDeployFromSource": true
   }
 }
