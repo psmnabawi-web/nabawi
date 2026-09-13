@@ -1,6 +1,5 @@
 # Firebase App Hosting (Next.js).
 # Nilai NEXT_PUBLIC_* diisi otomatis oleh scripts/deploy.sh. Secret dibuat dengan:
-#   firebase apphosting:secrets:set GEMINI_API_KEY
 #   firebase apphosting:secrets:set ADMIN_EMAILS
 runConfig:
   minInstances: 0
@@ -10,22 +9,22 @@ runConfig:
   memoryMiB: 1024
 env:
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
-    value: "__FIREBASE_API_KEY__"
+    value: "AIzaSyBMyOpwDz3ZP-j2xkBLFpo_0PKuClvLMic"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-    value: "__FIREBASE_AUTH_DOMAIN__"
+    value: "almaz-cleanliness-508507.firebaseapp.com"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
-    value: "__FIREBASE_PROJECT_ID__"
+    value: "almaz-cleanliness-508507"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
-    value: "__FIREBASE_STORAGE_BUCKET__"
+    value: "almaz-cleanliness-508507.firebasestorage.app"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-    value: "__FIREBASE_MESSAGING_SENDER_ID__"
+    value: "1033391731833"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
-    value: "__FIREBASE_APP_ID__"
+    value: "1:1033391731833:web:1f90c258de3d92962c90a8"
     availability: [BUILD, RUNTIME]
   - variable: AI_PROVIDER
     value: "google"
@@ -33,13 +32,16 @@ env:
   - variable: AI_MODEL
     value: "gemini-3.6-flash"
     availability: [RUNTIME]
-  # Gemini API (free tier). Untuk Vertex AI: ubah GOOGLE_GENAI_USE_VERTEXAI ke "true", hapus GEMINI_API_KEY,
-  # dan tambah GOOGLE_CLOUD_PROJECT + GOOGLE_CLOUD_LOCATION (ADC otomatis di App Hosting).
+  # Vertex AI lewat ADC service account App Hosting (butuh role Vertex AI User).
+  # Untuk Gemini API key: set GOOGLE_GENAI_USE_VERTEXAI "false" dan tambah secret GEMINI_API_KEY.
   - variable: GOOGLE_GENAI_USE_VERTEXAI
-    value: "false"
+    value: "true"
     availability: [RUNTIME]
-  - variable: GEMINI_API_KEY
-    secret: GEMINI_API_KEY
+  - variable: GOOGLE_CLOUD_PROJECT
+    value: "almaz-cleanliness-508507"
+    availability: [RUNTIME]
+  - variable: GOOGLE_CLOUD_LOCATION
+    value: "global"
     availability: [RUNTIME]
   - variable: ADMIN_EMAILS
     secret: ADMIN_EMAILS
