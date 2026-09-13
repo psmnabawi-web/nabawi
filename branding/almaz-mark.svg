@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000">
+  <!-- Almaz Fried Chicken mark (rekonstruksi vektor). Warna brand: #F26522 -->
+  <g fill="#F26522">
+    <!-- mahkota: 3 puncak berbola, lekukan cekung di antara puncak -->
+    <circle cx="255" cy="105" r="46"/>
+    <circle cx="500" cy="45" r="46"/>
+    <circle cx="745" cy="105" r="46"/>
+    <path d="M255 125 L330 330 L670 330 L745 125 L640 235 Q560 130 500 70 Q440 130 360 235 Z"/>
+    <path d="M320 330 Q500 300 680 330 L672 355 L328 355 Z"/>
+    <!-- pita -->
+    <rect x="315" y="378" width="370" height="64" rx="22"/>
+    <!-- mata + berlian -->
+    <circle cx="345" cy="520" r="36"/>
+    <circle cx="655" cy="520" r="36"/>
+    <path d="M440 478 L560 478 L582 512 L500 640 L418 512 Z"/>
+    <!-- badan / sayap: dua lobus bertemu di tengah -->
+    <path d="M225 955 L275 640 Q283 605 325 622 Q470 705 498 890 L498 955 Z"/>
+    <path d="M775 955 L725 640 Q717 605 675 622 Q530 705 502 890 L502 955 Z"/>
+  </g>
+</svg>

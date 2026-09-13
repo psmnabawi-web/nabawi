@@ -35,7 +35,7 @@ export async function exportAuditExcel(audit: Audit, items: AuditItem[]) {
     { header: 'Link Foto', key: 'photo', width: 40 },
   ];
   ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3A68' } };
+  ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF26522' } };
   ws.getRow(1).alignment = { vertical: 'middle', wrapText: true };
 
   for (const it of items) {
@@ -87,7 +87,7 @@ export async function exportAuditExcel(audit: Audit, items: AuditItem[]) {
     { header: 'Item Kritikal (≤2)', key: 'crit', width: 16 },
   ];
   sm.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  sm.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3A68' } };
+  sm.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF26522' } };
   const catRange = `'Form Audit'!$F$2:$F$${last}`;
   const scoreRange = `'Form Audit'!$I$2:$I$${last}`;
   let r = 2;
@@ -152,7 +152,7 @@ export async function exportAuditExcel(audit: Audit, items: AuditItem[]) {
     { header: 'Evidence', key: 'evidence', width: 30 },
   ];
   ap.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  ap.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3A68' } };
+  ap.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF26522' } };
   for (const it of items) {
     const score = effectiveScore(it);
     if (score === null || score > 3) continue;
@@ -198,7 +198,7 @@ export async function exportRecapExcel(audits: Audit[]) {
     ...cats.map((c) => ({ header: `% ${c.label}`, key: c.code, width: 16 })),
   ];
   ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-  ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3A68' } };
+  ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF26522' } };
   audits.forEach((a, idx) => {
     const r = idx + 2;
     const row: Record<string, unknown> = {

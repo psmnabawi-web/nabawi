@@ -7,6 +7,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useAuth } from '@/components/AuthProvider';
 import { Alert, Button, Input, Label } from '@/components/ui';
 import { firebaseAuth } from '@/lib/firebase/client';
+import { LogoMark, LogoWordmark } from '@/components/brand/Logo';
 
 function LoginForm() {
   const { user, loading } = useAuth();
@@ -76,7 +77,10 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface px-4 py-8">
       <div className="w-full max-w-sm rounded-2xl border border-line bg-white p-6 shadow-sm">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-brand text-lg font-black text-white">SC</div>
+          <div className="mx-auto mb-3 flex flex-col items-center gap-2">
+            <LogoMark size={72} className="rounded-2xl" />
+            <LogoWordmark />
+          </div>
           <h1 className="text-xl font-bold text-ink">Store Cleanliness Control</h1>
           <p className="mt-1 text-sm text-muted">Capture foto, AI menilai, skor langsung tersimpan.</p>
         </div>

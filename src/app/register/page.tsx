@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Alert, Button, Input, Label } from '@/components/ui';
 import { apiFetch } from '@/lib/api-client';
 import { firebaseAuth } from '@/lib/firebase/client';
+import { LogoMark } from '@/components/brand/Logo';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -39,7 +40,10 @@ export default function RegisterPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface px-4 py-8">
       <div className="w-full max-w-sm rounded-2xl border border-line bg-white p-6 shadow-sm">
-        <h1 className="mb-1 text-xl font-bold text-ink">Daftar Akun Crew</h1>
+        <div className="mb-3 flex items-center gap-3">
+          <LogoMark size={44} />
+          <h1 className="text-xl font-bold text-ink">Daftar Akun Crew</h1>
+        </div>
         <p className="mb-5 text-sm text-muted">Setelah daftar, pilih store Anda. Role manager/admin diatur oleh admin.</p>
         <form onSubmit={onSubmit} className="space-y-4">
           {error && <Alert>{error}</Alert>}

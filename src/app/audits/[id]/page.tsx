@@ -128,7 +128,7 @@ export default function AuditDetailPage() {
             <span>Progress capture</span>
             <span>{progressPct}%</span>
           </div>
-          <ProgressBar pct={progressPct} color="#1f3a68" />
+          <ProgressBar pct={progressPct} color="#F26522" />
         </div>
         {s.categories.length > 0 && (
           <div className="mt-4 grid gap-2 sm:grid-cols-2">

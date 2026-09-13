@@ -54,7 +54,7 @@ export function TrendLine({ points, target = 90 }: { points: { label: string; va
           </g>
         ))}
         <line x1={padL} x2={W - padR} y1={y(target)} y2={y(target)} stroke="#0b0b0b" strokeWidth={1} strokeDasharray="4 4" opacity={0.5} />
-        <path d={path} fill="none" stroke="#1f3a68" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        <path d={path} fill="none" stroke="#F26522" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
         {points.map((p, i) => (
           <g key={i} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} onTouchStart={() => setHover(i)}>
             <circle cx={x(i)} cy={y(p.value)} r={14} fill="transparent" />

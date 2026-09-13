@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { useAuth } from './AuthProvider';
 import { Alert, Spinner } from './ui';
 import { cn } from '@/lib/utils';
+import { LogoMark } from './brand/Logo';
 
 const NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: '▦', roles: ['crew', 'manager', 'admin'] },
@@ -50,9 +51,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-30 border-b border-line bg-white">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand text-sm font-black text-white">SC</span>
+            <LogoMark size={36} />
             <div className="leading-tight">
-              <div className="text-sm font-bold text-ink">Store Cleanliness</div>
+              <div className="text-sm font-black tracking-wide text-brand">ALMAZ <span className="font-semibold text-ink">Cleanliness</span></div>
               <div className="text-[11px] text-muted">{profile?.storeName ?? (role === 'admin' ? 'Semua store' : 'Store belum dipilih')}</div>
             </div>
           </Link>
