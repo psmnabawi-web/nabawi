@@ -7,9 +7,9 @@ import { buildUserText, SYSTEM_PROMPT, type AnalyzeInput, type RawAiOutput } fro
  * Provider Google:
  * - Gemini Developer API (AI Studio, ada free tier)  -> GEMINI_API_KEY
  * - Vertex AI (billing GCP, ADC / service account)   -> GOOGLE_GENAI_USE_VERTEXAI=true + GOOGLE_CLOUD_PROJECT + GOOGLE_CLOUD_LOCATION
- * Model default: gemini-2.5-flash (ganti via AI_MODEL).
+ * Model default: gemini-3.6-flash (ganti via AI_MODEL). gemini-2.5-* sudah ditutup untuk user baru sejak 2026.
  */
-export const GOOGLE_DEFAULT_MODEL = 'gemini-2.5-flash';
+export const GOOGLE_DEFAULT_MODEL = 'gemini-3.6-flash';
 
 // JSON Schema ditulis manual (subset yang didukung Gemini: type, enum, minimum, maximum, items, required, propertyOrdering).
 // score = 0 berarti foto tidak valid (Gemini structured output tidak menerima nullable secara konsisten).
@@ -97,12 +97,17 @@ export async function analyzeWithGoogle(input: AnalyzeInput, model: string): Pro
     } catch (err) {
       if (err instanceof HttpError) throw err;
       if (err instanceof ApiError) {
+        const msg = err.message ?? '';
+        const billingIssue = /credit|billing|prepayment|payment/i.test(msg);
+        if (err.status === 429 && billingIssue) {
+          throw new HttpError(402, `Kredit Gemini API habis atau billing belum aktif. Isi ulang / cek di https://ai.studio/projects. Pesan Google: ${msg}`);
+        }
         if (err.status === 429 && attempt < RETRY_DELAYS_MS.length) {
           lastErr = err;
           await sleep(RETRY_DELAYS_MS[attempt]);
           continue;
         }
-        if (err.status === 429) throw new HttpError(429, 'Kuota AI (free tier) sementara habis. Tunggu 1 menit lalu coba lagi, atau tingkatkan kuota di Google AI Studio.');
+        if (err.status === 429) throw new HttpError(429, `Kuota AI sementara habis (rate limit). Tunggu 1 menit lalu coba lagi. Pesan Google: ${msg}`);
         if (err.status === 401 || err.status === 403) throw new HttpError(500, 'Kredensial Google AI tidak valid atau API belum diaktifkan.');
         if (err.status === 404) throw new HttpError(500, `Model ${model} tidak ditemukan di provider Google. Cek AI_MODEL.`);
         throw new HttpError(502, `Layanan AI Google error (${err.status}): ${err.message}`);

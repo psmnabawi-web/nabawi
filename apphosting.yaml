@@ -31,7 +31,7 @@ env:
     value: "google"
     availability: [RUNTIME]
   - variable: AI_MODEL
-    value: "gemini-2.5-flash"
+    value: "gemini-3.6-flash"
     availability: [RUNTIME]
   # Gemini API (free tier). Untuk Vertex AI: ubah GOOGLE_GENAI_USE_VERTEXAI ke "true", hapus GEMINI_API_KEY,
   # dan tambah GOOGLE_CLOUD_PROJECT + GOOGLE_CLOUD_LOCATION (ADC otomatis di App Hosting).

@@ -10,7 +10,7 @@ export type { AnalyzeInput } from './prompt';
  * Pemilihan provider lewat env:
  *   AI_PROVIDER=google    (default) -> Gemini API (GEMINI_API_KEY, free tier) atau Vertex AI (GOOGLE_GENAI_USE_VERTEXAI=true)
  *   AI_PROVIDER=anthropic           -> Claude (ANTHROPIC_API_KEY)
- *   AI_MODEL=...                    -> override model (default gemini-2.5-flash / claude-opus-5)
+ *   AI_MODEL=...                    -> override model (default gemini-3.6-flash / claude-opus-5)
  */
 export function aiProvider(): 'google' | 'anthropic' {
   return (process.env.AI_PROVIDER ?? 'google').toLowerCase() === 'anthropic' ? 'anthropic' : 'google';
