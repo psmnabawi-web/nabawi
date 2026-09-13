@@ -20,6 +20,8 @@ export interface Store {
   name: string;
   city: string;
   active: boolean;
+  /** Indikator yang tidak berlaku di store ini (mis. tidak punya Gas Room). Tidak dimuat saat membuat audit. */
+  excludedIndicatorIds?: string[];
   createdAt: number;
   updatedAt: number;
 }

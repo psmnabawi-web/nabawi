@@ -22,7 +22,7 @@ const SAMPLE_STORES = [
   { id: 'afc-cks', code: 'AFC-CKS', name: 'Almaz Fried Chicken - Cikeas', city: 'Cikeas' },
   { id: 'afc-cld', code: 'AFC-CLD', name: 'Almaz Fried Chicken - Cilendek', city: 'Bogor' },
   { id: 'afc-cmg', code: 'AFC-CMG', name: 'Almaz Fried Chicken - Cimanggis', city: 'Depok' },
-  { id: 'afc-cnr', code: 'AFC-CNR', name: 'Almaz Fried Chicken - Cinere', city: 'Depok' },
+  { id: 'afc-cnr', code: 'AFC-CNR', name: 'Almaz Fried Chicken - Cinere', city: 'Depok', excludedIndicatorIds: ['IND-19', 'IND-22', 'IND-31', 'IND-49', 'IND-50', 'IND-52', 'IND-53', 'IND-54', 'IND-55'] },
   { id: 'afc-drm', code: 'AFC-DRM', name: 'Almaz Fried Chicken - Dramaga Bogor', city: 'Bogor' },
   { id: 'afc-mok', code: 'AFC-MOK', name: 'Almaz Fried Chicken - Mayor Oking Cibinong', city: 'Cibinong' },
   { id: 'afc-pdr', code: 'AFC-PDR', name: 'Almaz Fried Chicken - Pandu Raya', city: 'Bogor' },
@@ -36,7 +36,7 @@ async function main() {
   const now = Date.now();
   for (const s of SAMPLE_STORES) {
     const ref = db.collection('stores').doc(s.id);
-    if (!(await ref.get()).exists) batch.set(ref, { ...s, active: true, createdAt: now, updatedAt: now });
+    if (!(await ref.get()).exists) batch.set(ref, { excludedIndicatorIds: [], ...s, active: true, createdAt: now, updatedAt: now });
   }
   await batch.commit();
   console.log(`Seed selesai: ${DEFAULT_INDICATORS.length} indikator, ${SAMPLE_STORES.length} store contoh.`);

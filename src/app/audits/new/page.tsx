@@ -25,7 +25,9 @@ export default function NewAuditPage() {
 
   const isAdmin = profile?.role === 'admin';
   const storeId = isAdmin ? storeChoice : (profile?.storeId ?? storeChoice);
-  const activeCount = indicators.filter((i) => i.active).length;
+  const selectedStore = stores.find((s) => s.id === storeId);
+  const excluded = new Set(selectedStore?.excludedIndicatorIds ?? []);
+  const activeCount = indicators.filter((i) => i.active && !excluded.has(i.id)).length;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,7 +51,7 @@ export default function NewAuditPage() {
 
   return (
     <AppShell>
-      <PageHeader title="Mulai Audit Kebersihan" subtitle={`${activeCount} indikator akan dibuat untuk audit ini.`} />
+      <PageHeader title="Mulai Audit Kebersihan" subtitle={`${activeCount} indikator akan dibuat untuk audit ini${excluded.size ? ` (${excluded.size} area tidak berlaku di store ini)` : ''}.`} />
       <Card className="max-w-lg">
         <form onSubmit={submit} className="space-y-4">
           {error && (

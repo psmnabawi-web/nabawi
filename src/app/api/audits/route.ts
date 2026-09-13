@@ -44,7 +44,9 @@ export async function POST(req: Request) {
       );
     }
 
-    const indicators = await loadIndicators();
+    const excluded = new Set(store.excludedIndicatorIds ?? []);
+    const indicators = (await loadIndicators()).filter((i) => !excluded.has(i.id));
+    if (indicators.length === 0) throw new HttpError(400, 'Semua indikator dikecualikan untuk store ini. Cek pengaturan store di menu Admin.');
     const now = Date.now();
     const db = adminDb();
     const auditRef = db.collection('audits').doc();
@@ -99,7 +101,7 @@ export async function POST(req: Request) {
       action: 'CREATE_AUDIT',
       entity: 'audit',
       entityId: audit.id,
-      details: { storeId: store.id, date: body.date, shift: body.shift, items: items.length },
+      details: { storeId: store.id, date: body.date, shift: body.shift, items: items.length, excluded: excluded.size },
     });
 
     return NextResponse.json({ audit }, { status: 201 });
