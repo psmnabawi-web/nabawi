@@ -1,36 +1,45 @@
-# Firebase App Hosting (Next.js). Secrets dibuat dengan:
-#   firebase apphosting:secrets:set ANTHROPIC_API_KEY
+# Firebase App Hosting (Next.js).
+# Nilai NEXT_PUBLIC_* diisi otomatis oleh scripts/deploy.sh. Secret dibuat dengan:
+#   firebase apphosting:secrets:set GEMINI_API_KEY
 #   firebase apphosting:secrets:set ADMIN_EMAILS
 runConfig:
   minInstances: 0
-  maxInstances: 4
+  maxInstances: 2
   concurrency: 40
   cpu: 1
   memoryMiB: 1024
 env:
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
-    value: "GANTI_DENGAN_API_KEY"
+    value: "__FIREBASE_API_KEY__"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-    value: "PROJECT_ID.firebaseapp.com"
+    value: "__FIREBASE_AUTH_DOMAIN__"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
-    value: "PROJECT_ID"
+    value: "__FIREBASE_PROJECT_ID__"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
-    value: "PROJECT_ID.firebasestorage.app"
+    value: "__FIREBASE_STORAGE_BUCKET__"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-    value: "000000000000"
+    value: "__FIREBASE_MESSAGING_SENDER_ID__"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
-    value: "1:000000000000:web:xxxx"
+    value: "__FIREBASE_APP_ID__"
     availability: [BUILD, RUNTIME]
-  - variable: AI_MODEL
-    value: "claude-opus-5"
+  - variable: AI_PROVIDER
+    value: "google"
     availability: [RUNTIME]
-  - variable: ANTHROPIC_API_KEY
-    secret: ANTHROPIC_API_KEY
+  - variable: AI_MODEL
+    value: "gemini-2.5-flash"
+    availability: [RUNTIME]
+  # Gemini API (free tier). Untuk Vertex AI: ubah GOOGLE_GENAI_USE_VERTEXAI ke "true", hapus GEMINI_API_KEY,
+  # dan tambah GOOGLE_CLOUD_PROJECT + GOOGLE_CLOUD_LOCATION (ADC otomatis di App Hosting).
+  - variable: GOOGLE_GENAI_USE_VERTEXAI
+    value: "false"
+    availability: [RUNTIME]
+  - variable: GEMINI_API_KEY
+    secret: GEMINI_API_KEY
     availability: [RUNTIME]
   - variable: ADMIN_EMAILS
     secret: ADMIN_EMAILS
