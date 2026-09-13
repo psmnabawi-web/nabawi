@@ -1,0 +1,9 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Foto diunggah lewat server (Admin SDK) dan diakses lewat URL dengan download token.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
