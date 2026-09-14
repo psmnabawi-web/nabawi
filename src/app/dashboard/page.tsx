@@ -4,13 +4,13 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { useAuth } from '@/components/AuthProvider';
-import { CategoryBars, TrendLine } from '@/components/Charts';
+import { CategoryBars, StoreBars, TrendLine, type StoreBarDatum } from '@/components/Charts';
 import { GradeBadge } from '@/components/ScoreBadge';
 import { Alert, Card, EmptyState, LinkButton, PageHeader, Select, Spinner } from '@/components/ui';
 import { useAudits, useStores } from '@/lib/hooks';
 import { CATEGORY_ORDER } from '@/lib/indicators';
 import { GRADE_RULES, gradeFor, round1 } from '@/lib/scoring';
-import { daysAgoISO, fmtDate, scoreColor } from '@/lib/utils';
+import { daysAgoISO, fmtDate } from '@/lib/utils';
 
 const RANGES = [
   { value: 7, label: '7 hari' },
@@ -64,10 +64,18 @@ export default function DashboardPage() {
       s.crit += a.summary.criticalCount;
       byStore.set(a.storeId, s);
     }
-    const storeRank = [...byStore.values()].map((s) => ({ ...s, avg: round1(s.sum / s.n) })).sort((a, b) => a.avg - b.avg);
 
-    return { submitted, drafts, avgPct, critical, belowTarget, cat, trend, storeRank };
-  }, [audits, days]);
+    // grafik batang per store: semua store aktif, termasuk yang belum audit (pct null), urut skor tertinggi
+    const storeBars: StoreBarDatum[] = stores
+      .filter((st) => st.active)
+      .map((st) => {
+        const agg = byStore.get(st.id);
+        return { id: st.id, label: st.name.replace(/^Almaz Fried Chicken\s*-\s*/i, ''), pct: agg ? round1(agg.sum / agg.n) : null, audits: agg?.n ?? 0, critical: agg?.crit ?? 0 };
+      })
+      .sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1) || a.label.localeCompare(b.label));
+
+    return { submitted, drafts, avgPct, critical, belowTarget, cat, trend, storeBars };
+  }, [audits, days, stores]);
 
   const grade = gradeFor(data.avgPct);
   const gradeColor = GRADE_RULES.find((g) => g.grade === grade)?.color;
@@ -127,31 +135,18 @@ export default function DashboardPage() {
           </div>
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            {profile?.role === 'admin' && data.storeRank.length > 1 && (
+            {profile?.role === 'admin' && (
               <Card>
-                <h2 className="mb-3 text-sm font-bold text-ink">Ranking store (terendah di atas)</h2>
-                <table className="w-full text-sm">
-                  <thead className="text-left text-xs uppercase text-muted">
-                    <tr>
-                      <th className="py-1">Store</th>
-                      <th className="py-1 text-right">Audit</th>
-                      <th className="py-1 text-right">Rata-rata</th>
-                      <th className="py-1 text-right">Kritikal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.storeRank.map((s) => (
-                      <tr key={s.name} className="border-t border-line">
-                        <td className="py-1.5 font-semibold">{s.name}</td>
-                        <td className="py-1.5 text-right">{s.n}</td>
-                        <td className="py-1.5 text-right font-bold" style={{ color: scoreColor((s.avg / 100) * 5) }}>
-                          {s.avg.toLocaleString('id-ID')}%
-                        </td>
-                        <td className="py-1.5 text-right">{s.crit}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-sm font-bold text-ink">Skor per store</h2>
+                  <span className="text-[11px] text-muted">{data.storeBars.filter((s) => s.pct !== null).length}/{data.storeBars.length} store sudah audit</span>
+                </div>
+                <StoreBars data={data.storeBars} target={TARGET} onSelect={(id) => setStoreFilter(storeFilter === id ? 'all' : id)} />
+                {storeFilter !== 'all' && (
+                  <button type="button" className="mt-2 text-xs font-semibold text-brand underline" onClick={() => setStoreFilter('all')}>
+                    Tampilkan semua store
+                  </button>
+                )}
               </Card>
             )}
             <Card>

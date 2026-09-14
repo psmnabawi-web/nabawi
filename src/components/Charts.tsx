@@ -76,3 +76,68 @@ export function TrendLine({ points, target = 90 }: { points: { label: string; va
     </div>
   );
 }
+
+export interface StoreBarDatum {
+  id: string;
+  label: string;
+  pct: number | null; // rata-rata skor (%), null jika belum ada audit
+  audits: number;
+  critical: number;
+}
+
+/**
+ * Batang horizontal per store (mobile-friendly): panjang = rata-rata skor %, garis target, label nilai di ujung batang.
+ * Warna batang mengikuti grade skor (hijau/biru/kuning/merah) agar konsisten dengan seluruh app.
+ */
+export function StoreBars({ data, target = 90, onSelect }: { data: StoreBarDatum[]; target?: number; onSelect?: (id: string) => void }) {
+  const [hover, setHover] = useState<string | null>(null);
+  if (data.length === 0) return <p className="p-4 text-center text-sm text-muted">Belum ada store.</p>;
+  return (
+    <div>
+      <div className="relative">
+        <div className="pointer-events-none absolute bottom-0 top-0 border-l-2 border-dashed border-ink/50" style={{ left: `calc(9.5rem + (100% - 9.5rem - 3.25rem) * ${target / 100})` }} aria-hidden />
+        <div className="space-y-1.5">
+          {data.map((d) => {
+            const color = d.pct === null ? '#c9c8c2' : scoreColor((d.pct / 100) * 5);
+            const active = hover === d.id;
+            return (
+              <div
+                key={d.id}
+                className="flex items-center gap-2"
+                onMouseEnter={() => setHover(d.id)}
+                onMouseLeave={() => setHover(null)}
+                onClick={() => onSelect?.(d.id)}
+                role={onSelect ? 'button' : undefined}
+                style={{ cursor: onSelect ? 'pointer' : 'default' }}
+                title={d.pct === null ? `${d.label}: belum ada audit submitted` : `${d.label}: ${d.pct.toLocaleString('id-ID')}% · ${d.audits} audit · ${d.critical} kritikal`}
+              >
+                <div className="w-[9.5rem] shrink-0 truncate text-xs font-semibold text-ink" title={d.label}>
+                  {d.label}
+                </div>
+                <div className="relative h-5 flex-1 overflow-visible rounded bg-surface-2">
+                  <div className="h-full rounded transition-all" style={{ width: `${Math.max(d.pct === null ? 0 : Math.min(100, d.pct), 0)}%`, backgroundColor: color, opacity: active ? 1 : 0.9 }} />
+                </div>
+                <div className="w-[3.25rem] shrink-0 text-right text-xs font-bold tabular-nums" style={{ color: d.pct === null ? '#9a9994' : color }}>
+                  {d.pct === null ? '–' : `${d.pct.toLocaleString('id-ID', { maximumFractionDigits: 0 })}%`}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
+        <span>Garis putus-putus = target {target}%</span>
+        <span>Warna: hijau ≥90 · biru ≥80 · kuning ≥60 · merah &lt;60 · abu-abu belum ada audit</span>
+      </div>
+      {hover && (() => {
+        const d = data.find((x) => x.id === hover);
+        if (!d) return null;
+        return (
+          <div className="mt-2 rounded-lg border border-line bg-white px-3 py-1.5 text-xs shadow-sm">
+            <b>{d.label}</b>: {d.pct === null ? 'belum ada audit submitted di periode ini' : `${d.pct.toLocaleString('id-ID')}% · ${d.audits} audit · ${d.critical} temuan kritikal`}
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
