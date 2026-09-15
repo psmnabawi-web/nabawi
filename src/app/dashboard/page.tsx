@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { useAuth } from '@/components/AuthProvider';
-import { CategoryBars, StoreBars, TrendLine, type StoreBarDatum } from '@/components/Charts';
+import { CategoryBars, DateBars, StoreBars, TrendLine, type DateBarDatum, type StoreBarDatum } from '@/components/Charts';
 import { GradeBadge } from '@/components/ScoreBadge';
 import { Alert, Card, EmptyState, LinkButton, PageHeader, Select, Spinner } from '@/components/ui';
 import { useAudits, useStores } from '@/lib/hooks';
@@ -74,7 +74,27 @@ export default function DashboardPage() {
       })
       .sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1) || a.label.localeCompare(b.label));
 
-    return { submitted, drafts, avgPct, critical, belowTarget, cat, trend, storeBars };
+    // grafik per tanggal: rata-rata skor per hari. <= 31 hari tampil semua tanggal (kosong = tidak ada audit), lebih dari itu hanya tanggal yang ada audit.
+    const byDate = new Map<string, { sum: number; n: number; crit: number }>();
+    for (const a of submitted) {
+      const d = byDate.get(a.date) ?? { sum: 0, n: 0, crit: 0 };
+      d.sum += a.summary.pct ?? 0;
+      d.n += 1;
+      d.crit += a.summary.criticalCount;
+      byDate.set(a.date, d);
+    }
+    let dateKeys: string[];
+    if (days <= 31) {
+      dateKeys = Array.from({ length: days }, (_, i) => daysAgoISO(days - 1 - i));
+    } else {
+      dateKeys = [...byDate.keys()].sort();
+    }
+    const dateBars: DateBarDatum[] = dateKeys.map((date) => {
+      const d = byDate.get(date);
+      return { date, pct: d ? round1(d.sum / d.n) : null, audits: d?.n ?? 0, critical: d?.crit ?? 0 };
+    });
+
+    return { submitted, drafts, avgPct, critical, belowTarget, cat, trend, storeBars, dateBars };
   }, [audits, days, stores]);
 
   const grade = gradeFor(data.avgPct);
@@ -122,6 +142,14 @@ export default function DashboardPage() {
             <Tile label="Temuan kritikal" value={String(data.critical)} color={data.critical ? '#e34948' : '#008300'} sub="skor ≤ 2, wajib tindak lanjut" />
             <Tile label="Audit di bawah target" value={String(data.belowTarget)} color={data.belowTarget ? '#eda100' : '#008300'} sub={`dari ${data.submitted.length} audit`} />
           </div>
+
+          <Card className="mb-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-bold text-ink">Skor per tanggal</h2>
+              <span className="text-[11px] text-muted">rata-rata audit submitted per hari</span>
+            </div>
+            <DateBars data={data.dateBars} target={TARGET} />
+          </Card>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
