@@ -1,0 +1,31 @@
+{
+  "masterVersion": "2026-08-19.1",
+  "source": "Master Electric.xlsx",
+  "locked": true,
+  "stores": [
+    { "id": "store-710", "code": "#710", "name": "KRAMATWATU", "area": "BANTEN", "electricityModel": "prepaid", "latitude": -6.066439865145626, "longitude": 106.11641752660407, "coordinateText": "-6.066439865145626, 106.11641752660407", "tariffPerKwh": 1699.53, "active": true },
+    { "id": "store-923", "code": "#923", "name": "GRAHA RAYA", "area": "BANTEN", "electricityModel": "prepaid", "latitude": -6.237683299877547, "longitude": 106.6777976521354, "coordinateText": "-6.237683299877547, 106.6777976521354", "tariffPerKwh": 1444.7, "active": true },
+    { "id": "store-800", "code": "#800", "name": "METLAND PURI", "area": "BANTEN", "electricityModel": "postpaid", "latitude": -6.193308161691815, "longitude": 106.70973342263152, "coordinateText": "-6.193308161691815, 106.70973342263152", "tariffPerKwh": 1444.7, "active": true },
+    { "id": "store-922", "code": "#922", "name": "SEPATAN", "area": "BANTEN", "electricityModel": "prepaid", "latitude": -6.12068912286268, "longitude": 106.57724919886114, "coordinateText": "-6.12068912286268, 106.57724919886114", "tariffPerKwh": 1699.53, "active": true },
+    { "id": "store-315", "code": "#315", "name": "ZAMRUD", "area": "JAWA BARAT", "electricityModel": "prepaid", "latitude": -6.318308490951314, "longitude": 107.01908974226305, "coordinateText": "-6.318308490951314, 107.01908974226305", "tariffPerKwh": 1444.7, "active": true },
+    { "id": "store-920", "code": "#920", "name": "BERINGIN RAYA", "area": "BANTEN", "electricityModel": "prepaid", "latitude": -6.204930211767857, "longitude": 106.61492956231659, "coordinateText": "-6.204930211767857, 106.61492956231659", "tariffPerKwh": 1699.53, "active": true },
+    { "id": "store-914", "code": "#914", "name": "KOJA", "area": "DKI JAKARTA", "electricityModel": "postpaid", "latitude": -6.112780392341662, "longitude": 106.91174171245204, "coordinateText": "-6.112780392341662, 106.91174171245204", "tariffPerKwh": 1100, "active": true },
+    { "id": "store-852", "code": "#852", "name": "KEDOYA", "area": "DKI JAKARTA", "electricityModel": "prepaid", "latitude": -6.180831307455063, "longitude": 106.76171622999153, "coordinateText": "-6.180831307455063, 106.76171622999153", "tariffPerKwh": 1444.7, "active": true },
+    { "id": "store-938", "code": "#938", "name": "CIGANJUR JAGAKARSA", "area": "DKI JAKARTA", "electricityModel": "prepaid", "latitude": -6.331709553302577, "longitude": 106.80804194659109, "coordinateText": "-6.331709553302577, 106.80804194659109", "tariffPerKwh": 1699.53, "active": true },
+    { "id": "store-711", "code": "#711", "name": "CIKANDE", "area": "BANTEN", "electricityModel": "prepaid", "latitude": -6.218099921531188, "longitude": 106.34966260757912, "coordinateText": "-6.218099921531188, 106.34966260757912", "tariffPerKwh": 1699.53, "active": true },
+    { "id": "store-840", "code": "#840", "name": "JOMBANG", "area": "BANTEN", "electricityModel": "prepaid", "latitude": -6.286263881979337, "longitude": 106.70258327982613, "coordinateText": "-6.286263881979337, 106.70258327982613", "tariffPerKwh": 1699.53, "active": true }
+  ],
+  "meters": [
+    { "id": "meter-56245095734", "storeId": "store-710", "name": "Meter Utama", "serialNumber": "56245095734", "meterPower": 3500, "displayDigits": null, "decimalPlaces": null, "multiplier": 1, "maxDailyKwh": null, "active": true },
+    { "id": "meter-24124754995", "storeId": "store-923", "name": "Meter Utama", "serialNumber": "24124754995", "meterPower": 7700, "displayDigits": null, "decimalPlaces": null, "multiplier": 1, "maxDailyKwh": null, "active": true },
+    { "id": "meter-45340233090", "storeId": "store-800", "name": "Meter Utama", "serialNumber": "45340233090", "meterPower": 11000, "displayDigits": null, "decimalPlaces": null, "multiplier": 1, "maxDailyKwh": null, "active": true },
+    { "id": "meter-566601389442", "storeId": "store-922", "name": "Meter Utama", "serialNumber": "566601389442", "meterPower": 5500, "displayDigits": null, "decimalPlaces": null, "multiplier": 1, "maxDailyKwh": null, "active": true },
+    { "id": "meter-45025022562", "storeId": "store-315", "name": "Meter Utama", "serialNumber": "45025022562", "meterPower": 2200, "displayDigits": null, "decimalPlaces": null, "multiplier": 1, "maxDailyKwh": null, "active": true },
+    { "id": "meter-56706830082", "storeId": "store-920", "name": "Meter Utama", "serialNumber": "56706830082", "meterPower": 4400, "displayDigits": null, "decimalPlaces": null, "multiplier": 1, "maxDailyKwh": null, "active": true },
+    { "id": "meter-545302757149", "storeId": "store-914", "name": "Meter Utama", "serialNumber": "545302757149", "meterPower": 3500, "displayDigits": null, "decimalPlaces": null, "multiplier": 1, "maxDailyKwh": null, "active": true },
+    { "id": "meter-86805323730", "storeId": "store-852", "name": "Meter Utama", "serialNumber": "86805323730", "meterPower": 2200, "displayDigits": null, "decimalPlaces": null, "multiplier": 1, "maxDailyKwh": null, "active": true },
+    { "id": "meter-32190254410", "storeId": "store-938", "name": "Meter Utama", "serialNumber": "32190254410", "meterPower": 4400, "displayDigits": null, "decimalPlaces": null, "multiplier": 1, "maxDailyKwh": null, "active": true },
+    { "id": "meter-32006404001", "storeId": "store-711", "name": "Meter Utama", "serialNumber": "32006404001", "meterPower": 3500, "displayDigits": null, "decimalPlaces": null, "multiplier": 1, "maxDailyKwh": null, "active": true },
+    { "id": "meter-14529678659", "storeId": "store-840", "name": "Meter Utama", "serialNumber": "14529678659", "meterPower": 7700, "displayDigits": null, "decimalPlaces": null, "multiplier": 1, "maxDailyKwh": null, "active": true }
+  ]
+}

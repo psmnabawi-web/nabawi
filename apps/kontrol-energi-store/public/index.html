@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0a2342" />
+    <meta name="color-scheme" content="light" />
+    <meta name="description" content="Kontrol penggunaan listrik store dengan input angka meter manual terstandar." />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <title>Kontrol Energi Store</title>
+
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 64x64" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" sizes="180x180" />
+
+    <meta name="application-name" content="Kontrol Energi Store" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Kontrol Energi" />
+
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+    <link rel="stylesheet" href="/app.css?v=1.1.4" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="topbar-title"><div class="eyebrow">STORE OPERATION CONTROL</div><h1>Kontrol Energi</h1></div>
+        <div class="topbar-actions">
+          <div class="sync-status connecting" id="syncStatus" role="status" aria-live="polite" aria-label="Status sinkronisasi: Menghubungkan">
+            <span class="sync-dot" aria-hidden="true"></span>
+            <span data-sync-label>Menghubungkan</span>
+          </div>
+          <button class="icon-button" id="refreshButton" aria-label="Muat ulang sinkronisasi">↻</button>
+        </div>
+      </header>
+      <div class="content-shell" id="appContent">
+        <noscript>
+          <section class="empty-state"><div class="empty-icon">!</div><h2>JavaScript dimatikan</h2><p>Aktifkan JavaScript di browser HP agar pencatatan meter dapat dibuka.</p></section>
+        </noscript>
+        <section class="loading-state"><div class="spinner"></div><h2>Menyiapkan kontrol energi</h2><p>Data store dan pembacaan meter sedang dimuat.</p></section>
+      </div>
+      <nav class="bottom-nav" aria-label="Menu utama">
+        <button data-tab="dashboard" class="active"><span>▦</span><span>Ringkasan</span></button>
+        <button data-tab="stores"><span>▥</span><span>Per Store</span></button>
+        <button data-tab="capture"><span>＋</span><span>Input Meter</span></button>
+        <button data-tab="token"><span>⚡</span><span>Token</span></button>
+        <button data-tab="history"><span>↺</span><span>Riwayat</span></button>
+        <button data-tab="master"><span>▣</span><span>Master</span></button>
+      </nav>
+      <div class="toast" id="toast" hidden></div>
+    </main>
+    <script src="/firebase-config.js?v=1.1.4"></script>
+    <script type="module" src="/app.js?v=1.1.4"></script>
+  </body>
+</html>

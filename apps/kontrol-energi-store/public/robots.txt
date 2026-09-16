@@ -1,0 +1,3 @@
+# Aplikasi operasional internal. Tidak untuk diindeks mesin pencari.
+User-agent: *
+Disallow: /

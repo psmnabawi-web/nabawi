@@ -1,0 +1,528 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =====================================================================
+    // Kontrol Energi Store v1.1.4
+    //
+    // PERBAIKAN UTAMA v1.1.4
+    // Firestore membatasi 1.000 ekspresi per evaluasi request. Rules v1.1.3
+    // memanggil get() dokumen master belasan kali di dalam fungsi yang sendiri
+    // dipanggil berulang, sehingga SETIAP penyimpanan yang sah ditolak dengan
+    // "maximum of 1000 expressions to evaluate has been reached".
+    //
+    // Yang diubah di sini, tanpa mengurangi jaminan keamanan:
+    //   1. Hasil get() master diikat satu kali memakai `let`.
+    //   2. hasAll + hasOnly diganti hasOnly + size(), setara tetapi separuh biaya.
+    //   3. Validasi transisi saldo token dilakukan SEKALI, pada rule create
+    //      dokumen companion (reading / tokenPurchase). Rule update tokenStates
+    //      hanya memastikan companion tersebut benar-benar dibuat pada commit
+    //      yang sama. Kedua rule wajib lolos agar commit diterima, sehingga
+    //      saldo tetap tidak dapat berpindah tanpa pemeriksaan penuh.
+    // =====================================================================
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function registryPath() {
+      return /databases/$(database)/documents/masterRegistry/electric;
+    }
+
+    function storePath(storeId) {
+      return /databases/$(database)/documents/stores/$(storeId);
+    }
+
+    function meterPath(meterId) {
+      return /databases/$(database)/documents/meters/$(meterId);
+    }
+
+    function statePath(meterId) {
+      return /databases/$(database)/documents/tokenStates/$(meterId);
+    }
+
+    function utcPattern() {
+      return '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([.][0-9]{1,9})?Z$';
+    }
+
+    function datePattern() {
+      return '^[0-9]{4}-[0-9]{2}-[0-9]{2}$';
+    }
+
+    function maxInt() {
+      return 9007199254740991;
+    }
+
+    function photoFieldsAbsent() {
+      return !request.resource.data.keys().hasAny([
+        'photoUrl', 'photoBase64', 'image', 'thumbnail', 'blob', 'imageUrl'
+      ]);
+    }
+
+    // ==================================================== DOKUMEN PEMBACAAN
+
+    // Ke-35 field di bawah dibaca satu per satu oleh readingTypesOk,
+    // readingTokenBlockOk, dan readingMasterAndMathOk. Field yang hilang
+    // membuat evaluasi gagal, dan field asing membuat size() != 35. Jadi
+    // size() == 35 setara hasAll + hasOnly, termasuk menutup field foto,
+    // dengan biaya evaluasi jauh lebih kecil.
+    function readingFieldsExact() {
+      return request.resource.data.keys().size() == 35;
+    }
+
+    // Hanya field yang TIDAK dikunci di tempat lain yang diperiksa di sini.
+    // Yang sengaja tidak diulang karena sudah dipaksa nilainya:
+    //   storeCode/storeName/meterSerial/meterPower/tariffPerKwh/masterVersion
+    //     -> disamakan dengan dokumen master di readingMasterAndMathOk;
+    //   status/readingBasis/electricityModel
+    //     -> dipaksa nilainya per cabang di readingMasterAndMathOk;
+    //   tokenAddedKwh/tokenLinkDisposition/tokenPurchaseCount/
+    //   tokenPurchaseTotalKwhCenti/tokenPurchaseTotalAmountRp/
+    //   tokenRevisionStart/tokenRevisionEnd
+    //     -> disamakan dengan saldo server di readingTokenLinkOk.
+    // Perampingan ini wajib agar evaluasi muat dalam batas 1.000 ekspresi.
+    function readingTypesOk() {
+      let d = request.resource.data;
+      return d.readingDate.matches(datePattern())
+        && d.capturedAt is string
+        && d.capturedAt.size() <= 40
+        && d.capturedAt.matches(utcPattern())
+        && d.serverRecordedAt == request.time
+        && d.readingKwh is number
+        && d.readingKwh >= 0
+        && d.readingKwh <= 999999999999.99
+        && d.inputMode == 'manual'
+        && d.anomalyFlags is list
+        && d.anomalyFlags.size() <= 10
+        && d.tokenLinkSchemaVersion == 1
+        && d.tokenPurchaseTotalKwh >= d.tokenPurchaseTotalKwhCenti / 100.0 - 0.001
+        && d.tokenPurchaseTotalKwh <= d.tokenPurchaseTotalKwhCenti / 100.0 + 0.001
+        && d.reason.size() <= 1000
+        && d.recordedBy is string
+        && d.recordedBy.size() > 0
+        && d.recordedBy.size() <= 100
+        && d.createdByUid == request.auth.uid
+        && d.appVersion is string;
+    }
+
+    // Master, rumus pemakaian, batas harian, dan status anomali diperiksa dalam
+    // SATU fungsi agar tiap dokumen master hanya di-get sekali per request.
+    function readingMasterAndMathOk() {
+      let d = request.resource.data;
+      let registry = get(registryPath()).data;
+      let store = get(storePath(d.storeId)).data;
+      let meter = get(meterPath(d.meterId)).data;
+      let baseline = d.previousReadingKwh == null;
+      let expected = (baseline
+        ? 0
+        : (d.electricityModel == 'prepaid'
+          ? d.previousReadingKwh + d.tokenAddedKwh - d.readingKwh
+          : d.readingKwh - d.previousReadingKwh)) * meter.multiplier;
+      let limit = meter.maxDailyKwh is number && meter.maxDailyKwh > 0
+        ? meter.maxDailyKwh
+        : meter.meterPower / 1000.0 * 24.0;
+      let zeroUsage = !baseline && d.usageKwh == 0;
+      let aboveLimit = !baseline && d.normalized24hKwh > limit;
+      return registry.locked == true
+        && registry.masterVersion == d.masterVersion
+        && store.active == true
+        && store.locked == true
+        && store.managedBy == 'master-electric'
+        && store.code == d.storeCode
+        && store.name == d.storeName
+        && store.masterHash == registry.masterHash
+        && store.tariffPerKwh == d.tariffPerKwh
+        && store.electricityModel == d.electricityModel
+        && meter.active == true
+        && meter.locked == true
+        && meter.managedBy == 'master-electric'
+        && meter.storeId == d.storeId
+        && meter.serialNumber == d.meterSerial
+        && meter.masterHash == registry.masterHash
+        && meter.meterPower == d.meterPower
+        && ((d.electricityModel == 'prepaid' && d.readingBasis == 'remaining_balance')
+          || (d.electricityModel == 'postpaid' && d.readingBasis == 'cumulative_consumption'))
+        && (baseline
+          ? (d.usageKwh == null
+            && d.intervalHours == null
+            && d.normalized24hKwh == null
+            && d.estimatedCost == null
+            && d.tokenAddedKwh == 0
+            && d.status == 'valid'
+            && d.anomalyFlags.hasAll(['baseline_only'])
+            && !d.anomalyFlags.hasAny(['zero_usage', 'usage_above_limit']))
+          : (d.previousReadingKwh is number
+            && d.previousReadingKwh >= 0
+            && ((d.electricityModel == 'prepaid'
+                && d.readingKwh <= d.previousReadingKwh + d.tokenAddedKwh)
+              || (d.electricityModel == 'postpaid'
+                && d.tokenAddedKwh == 0
+                && d.readingKwh >= d.previousReadingKwh))
+            && d.usageKwh is number
+            && d.usageKwh >= expected - 0.011
+            && d.usageKwh <= expected + 0.011
+            && d.intervalHours is number
+            && d.intervalHours > 0
+            && d.normalized24hKwh is number
+            // 24.0 ditulis sebagai desimal dan dikalikan LEBIH DULU. Firestore
+            // rules memakai pembagian bilangan bulat bila kedua operand int,
+            // sehingga `usageKwh / intervalHours` pada pemakaian 12 kWh dengan
+            // interval tepat 24 jam menghasilkan 0 dan pembacaan yang sah
+            // ditolak. Mengalikan dulu dengan 24.0 memaksa aritmetika desimal.
+            && d.normalized24hKwh >= d.usageKwh * 24.0 / d.intervalHours - 0.011
+            && d.normalized24hKwh <= d.usageKwh * 24.0 / d.intervalHours + 0.011
+            && d.estimatedCost is number
+            && d.estimatedCost >= d.usageKwh * d.tariffPerKwh - 0.011
+            && d.estimatedCost <= d.usageKwh * d.tariffPerKwh + 0.011
+            && (zeroUsage || aboveLimit
+              ? (d.status == 'needs_review'
+                && d.reason.size() > 0
+                && (!zeroUsage || d.anomalyFlags.hasAll(['zero_usage']))
+                && (!aboveLimit || d.anomalyFlags.hasAll(['usage_above_limit'])))
+              : (d.status == 'valid'
+                && !d.anomalyFlags.hasAny(['zero_usage', 'usage_above_limit'])))));
+    }
+
+    // ======================================================== SALDO TOKEN
+
+    // Bentuk state SEBELUM transisi. Dokumen ini ditanam seeder admin dan setiap
+    // update sesudahnya sudah tervalidasi penuh, jadi cukup memastikan tipe
+    // angka yang dipakai aritmetika di bawah benar.
+    function stateBeforeOk(s, meterId) {
+      return s.meterId == meterId
+        && s.electricityModel == 'prepaid'
+        && s.revision is int
+        && s.revision >= 0
+        && s.pendingPurchaseCount is int
+        && s.pendingPurchaseCount >= 0
+        && s.pendingTokenKwhCenti is int
+        && s.pendingTokenKwhCenti >= 0
+        && s.pendingAmountRp is int
+        && s.pendingAmountRp >= 0
+        && s.lastConsumedRevision is int
+        && s.lastConsumedRevision + s.pendingPurchaseCount == s.revision
+        // Invarian ini membuat rentang revisi pada dokumen pembacaan
+        // (revisionEnd - revisionStart + 1 == purchaseCount) otomatis benar,
+        // sehingga tidak perlu diperiksa ulang di sisi pembacaan.
+        && s.pendingFromRevision == (s.pendingPurchaseCount == 0
+          ? null
+          : s.lastConsumedRevision + 1)
+        && s.lastAcceptedReadingId is string;
+    }
+
+    // Identitas store/meter pada state bersifat immutable selamanya. Ditambah
+    // size() == 21, seluruh field `after` terkunci nilainya oleh fungsi
+    // transisi sehingga tidak ada field liar yang bisa diselipkan.
+    function stateIdentityUnchanged(before, after) {
+      return after.keys().size() == 21
+        && after.updatedAt == request.time
+        && after.meterId == before.meterId
+        && after.storeId == before.storeId
+        && after.storeCode == before.storeCode
+        && after.storeName == before.storeName
+        && after.meterSerial == before.meterSerial
+        && after.electricityModel == before.electricityModel
+        && after.masterVersion == before.masterVersion;
+    }
+
+    function purchaseTransitionOk(before, after, p, purchaseId) {
+      return stateIdentityUnchanged(before, after)
+        && p.serverRecordedAt == request.time
+        && p.meterId == before.meterId
+        && p.storeId == before.storeId
+        && p.storeCode == before.storeCode
+        && p.storeName == before.storeName
+        && p.meterSerial == before.meterSerial
+        && p.masterVersion == before.masterVersion
+        && p.revision == before.revision + 1
+        && after.revision == before.revision + 1
+        && after.revision <= maxInt()
+        && after.pendingFromRevision == (before.pendingPurchaseCount == 0
+          ? after.revision
+          : before.pendingFromRevision)
+        && after.pendingPurchaseCount == before.pendingPurchaseCount + 1
+        && after.pendingTokenKwhCenti == before.pendingTokenKwhCenti + p.tokenKwhCenti
+        && after.pendingTokenKwhCenti <= maxInt()
+        && after.pendingAmountRp == before.pendingAmountRp + p.purchaseAmountRp
+        && after.pendingAmountRp <= maxInt()
+        && after.lastPurchaseId == purchaseId
+        && after.lastConsumedRevision == before.lastConsumedRevision
+        && after.lastAcceptedReadingId == before.lastAcceptedReadingId
+        && after.lastAcceptedReadingDate == before.lastAcceptedReadingDate
+        && after.lastAcceptedReadingKwhCenti == before.lastAcceptedReadingKwhCenti
+        && after.lastAcceptedCapturedAt == before.lastAcceptedCapturedAt
+        && after.lastEventType == 'purchase'
+        && after.lastEventId == purchaseId;
+    }
+
+    // Transisi saldo saat pembacaan harian prabayar diterima. Fungsi ini
+    // dievaluasi pada operasi update tokenStates, yang memiliki anggaran
+    // ekspresi sendiri, sehingga seluruh pemeriksaan dapat dilakukan lengkap.
+    function readingTransitionOk(before, after, r, readingId) {
+      return stateIdentityUnchanged(before, after)
+        && r.meterId == before.meterId
+        && r.storeId == before.storeId
+        && r.masterVersion == before.masterVersion
+        && r.electricityModel == 'prepaid'
+        && r.status == 'valid'
+        && r.serverRecordedAt == request.time
+        && r.tokenLinkDisposition == 'consumed'
+        && r.tokenPurchaseCount == before.pendingPurchaseCount
+        && r.tokenPurchaseTotalKwhCenti == before.pendingTokenKwhCenti
+        && r.tokenPurchaseTotalAmountRp == before.pendingAmountRp
+        && r.tokenRevisionStart == before.pendingFromRevision
+        && r.tokenRevisionEnd == (before.pendingPurchaseCount == 0 ? null : before.revision)
+        && readingId != before.lastAcceptedReadingId
+        && (before.lastAcceptedReadingId == ''
+          ? (r.previousReadingKwh == null && r.tokenAddedKwh == 0)
+          : (r.previousReadingKwh is number
+            && r.readingDate > before.lastAcceptedReadingDate
+            && r.capturedAt > before.lastAcceptedCapturedAt
+            && r.previousReadingKwh >= before.lastAcceptedReadingKwhCenti / 100.0 - 0.001
+            && r.previousReadingKwh <= before.lastAcceptedReadingKwhCenti / 100.0 + 0.001
+            && r.tokenAddedKwh >= before.pendingTokenKwhCenti / 100.0 - 0.001
+            && r.tokenAddedKwh <= before.pendingTokenKwhCenti / 100.0 + 0.001))
+        && after.revision == before.revision
+        && after.pendingFromRevision == null
+        && after.pendingPurchaseCount == 0
+        && after.pendingTokenKwhCenti == 0
+        && after.pendingAmountRp == 0
+        && after.lastPurchaseId == before.lastPurchaseId
+        && after.lastConsumedRevision == before.revision
+        && after.lastAcceptedReadingId == readingId
+        && after.lastAcceptedReadingDate == r.readingDate
+        && after.lastAcceptedReadingKwhCenti is int
+        && after.lastAcceptedReadingKwhCenti >= r.readingKwh * 100.0 - 0.001
+        && after.lastAcceptedReadingKwhCenti <= r.readingKwh * 100.0 + 0.001
+        && after.lastAcceptedCapturedAt == r.capturedAt
+        && after.lastEventType == 'reading'
+        && after.lastEventId == readingId;
+    }
+
+    // Kaitan dokumen pembacaan ke saldo token, versi ringan.
+    //
+    // Untuk pembacaan PRABAYAR berstatus valid, rule ini hanya memastikan saldo
+    // token benar-benar ikut ditulis pada commit yang sama dan menunjuk ke
+    // dokumen pembacaan ini. Kebenaran seluruh transisi saldo (revisi, saldo
+    // pending, baseline, urutan tanggal) divalidasi lengkap oleh rule update
+    // tokenStates, yang wajib lolos juga agar commit diterima dan memiliki
+    // anggaran 1.000 ekspresi tersendiri.
+    //
+    // Untuk status needs_review saldo TIDAK boleh bergerak, sehingga snapshot
+    // token diperiksa penuh di sini: tidak ada rule lain yang akan berjalan.
+    function readingTokenLinkOk(readingId) {
+      let d = request.resource.data;
+      let path = statePath(d.meterId);
+      let before = get(path).data;
+      return d.electricityModel == 'postpaid'
+        ? (d.tokenAddedKwh == 0
+          && d.tokenLinkDisposition == 'none'
+          && d.tokenPurchaseCount == 0
+          && d.tokenPurchaseTotalKwh == 0
+          && d.tokenPurchaseTotalKwhCenti == 0
+          && d.tokenPurchaseTotalAmountRp == 0
+          && d.tokenRevisionStart == null
+          && d.tokenRevisionEnd == null)
+        : (stateBeforeOk(before, d.meterId)
+          && before.masterVersion == d.masterVersion
+          && d.tokenPurchaseCount == before.pendingPurchaseCount
+          && d.tokenPurchaseTotalKwhCenti == before.pendingTokenKwhCenti
+          && d.tokenPurchaseTotalAmountRp == before.pendingAmountRp
+          && d.tokenRevisionStart == before.pendingFromRevision
+          && d.tokenRevisionEnd == (before.pendingPurchaseCount == 0 ? null : before.revision)
+          && (before.lastAcceptedReadingId == ''
+            ? (d.previousReadingKwh == null && d.tokenAddedKwh == 0)
+            : (d.previousReadingKwh is number
+              && d.readingDate > before.lastAcceptedReadingDate
+              && d.capturedAt > before.lastAcceptedCapturedAt
+              && d.previousReadingKwh >= before.lastAcceptedReadingKwhCenti / 100.0 - 0.001
+              && d.previousReadingKwh <= before.lastAcceptedReadingKwhCenti / 100.0 + 0.001
+              && d.tokenAddedKwh >= before.pendingTokenKwhCenti / 100.0 - 0.001
+              && d.tokenAddedKwh <= before.pendingTokenKwhCenti / 100.0 + 0.001))
+          && (d.status == 'needs_review'
+            ? (d.tokenLinkDisposition == 'provisional' && getAfter(path).data == before)
+            : (d.tokenLinkDisposition == 'consumed'
+              && getAfter(path).data.lastAcceptedReadingId == readingId)));
+    }
+
+    // ==================================================== PEMBELIAN TOKEN
+
+    function purchaseFieldsExact() {
+      return request.resource.data.keys().hasOnly([
+        'meterId', 'storeId', 'storeCode', 'storeName', 'meterSerial',
+        'purchaseDate', 'purchasedAt', 'serverRecordedAt', 'revision',
+        'tokenKwh', 'tokenKwhCenti', 'purchaseAmountRp',
+        'receiptReference', 'referenceKey', 'status', 'recordedBy',
+        'createdByUid', 'appVersion', 'masterVersion'
+      ]) && request.resource.data.keys().size() == 19;
+    }
+
+    function purchaseValuesOk(id) {
+      let d = request.resource.data;
+      return d.meterId is string
+        && d.meterId.size() > 0
+        && d.storeId is string
+        && d.storeId.size() > 0
+        && d.storeCode is string
+        && d.storeCode.size() > 0
+        && d.storeName is string
+        && d.storeName.size() > 0
+        && d.meterSerial is string
+        && d.meterSerial.size() > 0
+        && d.purchaseDate is string
+        && d.purchaseDate.matches(datePattern())
+        && d.purchasedAt is string
+        && d.purchasedAt.size() <= 40
+        && d.purchasedAt.matches(utcPattern())
+        && d.serverRecordedAt == request.time
+        && d.revision is int
+        && d.revision > 0
+        && d.revision <= maxInt()
+        && d.tokenKwh is number
+        && d.tokenKwh > 0
+        && d.tokenKwh <= 999999999999.99
+        && d.tokenKwhCenti is int
+        && d.tokenKwhCenti > 0
+        && d.tokenKwhCenti <= 99999999999999
+        && d.tokenKwh >= d.tokenKwhCenti / 100.0 - 0.001
+        && d.tokenKwh <= d.tokenKwhCenti / 100.0 + 0.001
+        && d.purchaseAmountRp is int
+        && d.purchaseAmountRp > 0
+        && d.purchaseAmountRp <= 999999999
+        && d.receiptReference is string
+        && d.receiptReference.size() > 0
+        && d.receiptReference.size() <= 200
+        && d.referenceKey is string
+        && d.referenceKey.matches('^[A-Z0-9]{4,80}$')
+        && !d.referenceKey.matches('^[0-9]{20}$')
+        && id == d.meterId + '_' + d.referenceKey
+        && d.status == 'recorded'
+        && d.recordedBy is string
+        && d.recordedBy.size() > 0
+        && d.recordedBy.size() <= 100
+        && d.createdByUid == request.auth.uid
+        && d.appVersion is string
+        && d.appVersion.size() > 0
+        && d.masterVersion is string
+        && d.masterVersion.size() > 0;
+    }
+
+    function purchaseMasterOk() {
+      let d = request.resource.data;
+      let registry = get(registryPath()).data;
+      let store = get(storePath(d.storeId)).data;
+      let meter = get(meterPath(d.meterId)).data;
+      return registry.locked == true
+        && registry.masterVersion == d.masterVersion
+        && registry.storeIds.hasAll([d.storeId])
+        && registry.meterIds.hasAll([d.meterId])
+        && store.active == true
+        && store.locked == true
+        && store.managedBy == 'master-electric'
+        && store.electricityModel == 'prepaid'
+        && store.code == d.storeCode
+        && store.name == d.storeName
+        && store.masterVersion == d.masterVersion
+        && store.masterHash == registry.masterHash
+        && meter.active == true
+        && meter.locked == true
+        && meter.managedBy == 'master-electric'
+        && meter.storeId == d.storeId
+        && meter.serialNumber == d.meterSerial
+        && meter.masterVersion == d.masterVersion
+        && meter.masterHash == registry.masterHash;
+    }
+
+    // Sama seperti pembacaan: cukup pastikan saldo ikut ditulis dan menunjuk ke
+    // struk ini. Transisi lengkap divalidasi rule update tokenStates.
+    function purchaseStateLinkOk(id) {
+      let d = request.resource.data;
+      let path = statePath(d.meterId);
+      return get(path).data.masterVersion == d.masterVersion
+        && getAfter(path).data.lastEventId == id
+        && getAfter(path).data.lastEventType == 'purchase';
+    }
+
+    // Satu-satunya jalur yang menggerakkan saldo token. Di sinilah seluruh
+    // transisi before -> after divalidasi terhadap dokumen companion yang harus
+    // BARU dibuat pada commit yang sama. Rule create dokumen companion wajib
+    // lolos juga, sehingga isi struk dan pembacaan tetap tervalidasi penuh
+    // terhadap master.
+    function stateUpdateOk(meterId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let purchaseDoc = /databases/$(database)/documents/tokenPurchases/$(after.lastEventId);
+      let readingDoc = /databases/$(database)/documents/readings/$(after.lastEventId);
+      return stateBeforeOk(before, meterId)
+        && after.lastEventId is string
+        && after.lastEventId.size() > 0
+        && (after.lastEventType == 'purchase'
+          ? (!exists(purchaseDoc)
+            && existsAfter(purchaseDoc)
+            && purchaseTransitionOk(before, after, getAfter(purchaseDoc).data, after.lastEventId))
+          : (after.lastEventType == 'reading'
+            && !exists(readingDoc)
+            && existsAfter(readingDoc)
+            && readingTransitionOk(before, after, getAfter(readingDoc).data, after.lastEventId)));
+    }
+
+    // ============================================================== MATCHES
+
+    // Registry master boleh dibaca aplikasi untuk verifikasi versi dan hash.
+    // Penulisan eksklusif milik seeder admin lewat REST dengan access token.
+    match /masterRegistry/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    match /stores/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    match /meters/{id} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    match /readings/{id} {
+      allow get: if signedIn();
+      allow list: if signedIn() && request.query.limit <= 200;
+      allow create: if signedIn()
+        && readingFieldsExact()
+        && id == request.resource.data.meterId + '_' + request.resource.data.readingDate
+        && readingTypesOk()
+        && readingMasterAndMathOk()
+        && readingTokenLinkOk(id);
+      allow update, delete: if false;
+    }
+
+    match /tokenPurchases/{id} {
+      allow get: if signedIn();
+      allow list: if signedIn() && request.query.limit <= 200;
+      allow create: if signedIn()
+        && purchaseFieldsExact()
+        && photoFieldsAbsent()
+        && purchaseValuesOk(id)
+        && purchaseMasterOk()
+        && purchaseStateLinkOk(id);
+      allow update, delete: if false;
+    }
+
+    match /tokenStates/{meterId} {
+      allow get: if signedIn();
+      allow list: if false;
+      // State ditanam seeder admin; aplikasi hanya boleh melakukan transisi
+      // atomik yang memiliki companion purchase atau reading baru.
+      allow create: if false;
+      allow update: if signedIn() && stateUpdateOk(meterId);
+      allow delete: if false;
+    }
+
+    // Tolak eksplisit seluruh koleksi lain agar penambahan koleksi baru tidak
+    // pernah terbuka tanpa aturan yang ditulis sengaja.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
