@@ -846,7 +846,15 @@ function startLiveData({ showLoader = false } = {}) {
         }
       }
 
-      if (firstSnapshot || hasDocumentChanges) {
+      if (firstSnapshot) {
+        // Pengecatan pertama selalu penuh, apa pun tabnya. Tanpa ini, membuka
+        // aplikasi langsung ke tab Token atau Master lewat shortcut layar HP
+        // (?tab=) hanya menampilkan layar memuat karena halaman tidak pernah
+        // dirender.
+        render();
+      } else if (hasDocumentChanges) {
+        // Pada pembaruan live berikutnya form yang sedang diisi crew tidak
+        // boleh dibangun ulang, jadi hanya tab non-form yang dirender penuh.
         if (state.tab === "capture") refreshCaptureAvailability();
         else if (["dashboard", "stores", "history"].includes(state.tab)) render();
       }
