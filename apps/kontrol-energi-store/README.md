@@ -80,29 +80,60 @@ karena kasus itulah yang gagal total pada v1.1.3.
 
 ## Cara Deploy
 
-Project sudah dikunci ke `electric-control-bba`. Blok deploy tidak menanyakan
-apa pun.
+Project sudah dikunci ke `electric-control-bba`. Tersedia dua jalur.
 
-1. Upload `Kontrol_Energi_Store_Firebase_v1.1.4.zip` ke Google Cloud Shell.
-2. Minta seluruh crew berhenti input sampai deploy selesai. Script memasang
-   rules v1.1.4 lebih dulu, menyinkronkan master dan state token, menunggu
-   indeks siap, baru menerbitkan Hosting.
-3. Jalankan satu baris berikut:
+### Jalur A - Google Cloud Shell (paling cepat untuk sekali jalan)
+
+1. Buka <https://console.cloud.google.com/> lalu klik ikon Cloud Shell.
+2. Upload `Kontrol_Energi_Store_Firebase_v1.1.4.zip`.
+3. Minta seluruh crew berhenti input sampai deploy selesai.
+4. Jalankan satu baris:
 
    ```bash
    unzip -p Kontrol_Energi_Store_Firebase_v1.1.4.zip DEPLOY_CLOUD_SHELL.txt | bash
    ```
 
-4. Opsional, jalankan sebelum langkah 3 bila ingin App Check aktif:
+Blok ini tidak menanyakan apa pun. Script memasang rules lebih dulu,
+menyinkronkan master dan state token, menunggu indeks siap, baru menerbitkan
+Hosting, lalu memverifikasi aset benar-benar tayang.
+
+### Jalur B - GitHub Actions (tanpa terminal, untuk deploy berikutnya)
+
+Persiapan sekali saja, lalu setiap deploy cukup satu klik dari tab Actions.
+
+1. Buat service account dan kunci JSON. Jalankan sekali di Cloud Shell:
 
    ```bash
-   export APPCHECK_SITE_KEY="site-key-reCAPTCHA-v3-anda"
+   PROJECT_ID=electric-control-bba
+   SA=kes-deployer
+   gcloud config set project "$PROJECT_ID"
+   gcloud iam service-accounts create "$SA" --display-name="Kontrol Energi deployer" || true
+   for ROLE in roles/firebase.admin roles/datastore.owner                roles/serviceusage.serviceUsageAdmin roles/iam.serviceAccountUser; do
+     gcloud projects add-iam-policy-binding "$PROJECT_ID"        --member="serviceAccount:$SA@$PROJECT_ID.iam.gserviceaccount.com"        --role="$ROLE" --condition=None >/dev/null
+   done
+   gcloud iam service-accounts keys create kes-deployer.json      --iam-account="$SA@$PROJECT_ID.iam.gserviceaccount.com"
+   echo "Unduh kes-deployer.json lewat menu titik tiga Cloud Shell Editor."
    ```
 
-5. Untuk deploy ke project lain, set `export KES_PROJECT_ID="project-id-lain"`.
+2. Di GitHub, buka Settings, Secrets and variables, Actions, lalu tambahkan
+   secret `KES_FIREBASE_SERVICE_ACCOUNT` berisi seluruh isi `kes-deployer.json`.
+   Opsional: `KES_PROJECT_ID` dan `KES_APPCHECK_SITE_KEY`.
+3. Hapus `kes-deployer.json` dari Cloud Shell setelah disalin.
+4. Buka tab Actions, pilih **Deploy Kontrol Energi Store**, klik **Run
+   workflow**, ketik `DEPLOY` pada kolom konfirmasi.
 
-Setelah deploy, minta crew menutup dan membuka kembali aplikasi. Service worker
-akan memuat ulang satu kali agar rumus dan master versi baru langsung dipakai.
+Workflow menjalankan 35 uji Firestore rules lebih dulu. Bila ada uji yang
+gagal, deploy dibatalkan dan produksi tidak tersentuh.
+
+### Opsi tambahan
+
+- App Check: `export APPCHECK_SITE_KEY="site-key-anda"` sebelum Jalur A, atau
+  isi secret `KES_APPCHECK_SITE_KEY` untuk Jalur B.
+- Project lain: `export KES_PROJECT_ID="project-id-lain"`.
+
+Setelah deploy, minta crew menutup dan membuka kembali aplikasi. Service
+worker akan memuat ulang satu kali agar rumus dan master versi baru langsung
+dipakai.
 
 ## Master Terkunci
 

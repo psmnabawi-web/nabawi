@@ -1,0 +1,104 @@
+# Deploy Kontrol Energi Store ke Firebase tanpa perlu membuka terminal.
+#
+# Persiapan sekali saja: tambahkan secret repository berikut.
+#   KES_FIREBASE_SERVICE_ACCOUNT  isi JSON service account (wajib)
+#   KES_PROJECT_ID                default electric-control-bba (opsional)
+#   KES_APPCHECK_SITE_KEY         site key reCAPTCHA v3 (opsional)
+#
+# Setelah itu deploy dijalankan dari tab Actions, tombol "Run workflow".
+name: Deploy Kontrol Energi Store
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Ketik DEPLOY untuk konfirmasi. Minta crew berhenti input dulu.'
+        required: true
+        default: ''
+      skip_tests:
+        description: 'Lewati uji rules (tidak disarankan)'
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: deploy-kontrol-energi
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/kontrol-energi-store
+    steps:
+      - name: Periksa konfirmasi
+        if: ${{ github.event.inputs.confirm != 'DEPLOY' }}
+        run: |
+          echo "Konfirmasi tidak sesuai. Ketik persis: DEPLOY"
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Gerbang mutu: rules yang gagal uji tidak boleh sampai ke produksi.
+      # Inilah yang akan menangkap cacat seperti batas 1.000 ekspresi pada
+      # v1.1.3, sebelum crew di lapangan terkena dampaknya.
+      - name: Uji Firestore rules
+        if: ${{ github.event.inputs.skip_tests != 'true' }}
+        run: |
+          npm install --no-audit --no-fund @firebase/rules-unit-testing firebase firebase-tools
+          npx firebase emulators:exec --only firestore --project demo-kes "node tests/rules.test.mjs"
+
+      - name: Cek secret service account
+        env:
+          SA_JSON: ${{ secrets.KES_FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "${SA_JSON:-}" ]; then
+            echo "Secret KES_FIREBASE_SERVICE_ACCOUNT belum diisi."
+            echo "Tambahkan di Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          echo "Secret tersedia."
+
+      - name: Login service account
+        env:
+          SA_JSON: ${{ secrets.KES_FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+          chmod 600 "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.KES_FIREBASE_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Pasang Firebase CLI
+        run: npm install -g firebase-tools@latest
+
+      - name: Deploy
+        env:
+          KES_PROJECT_ID: ${{ secrets.KES_PROJECT_ID || 'electric-control-bba' }}
+          APPCHECK_SITE_KEY: ${{ secrets.KES_APPCHECK_SITE_KEY }}
+          APPCHECK_PROVIDER: recaptcha-v3
+        run: bash scripts/deploy.sh
+
+      - name: Ringkasan
+        if: always()
+        env:
+          KES_PROJECT_ID: ${{ secrets.KES_PROJECT_ID || 'electric-control-bba' }}
+        run: |
+          {
+            echo "## Deploy Kontrol Energi Store"
+            echo ""
+            echo "- Project: \`$KES_PROJECT_ID\`"
+            echo "- Versi: 1.1.4"
+            echo "- URL: https://$KES_PROJECT_ID.web.app"
+            echo ""
+            echo "Setelah deploy berhasil, minta crew tutup-buka aplikasi sekali."
+          } >> "$GITHUB_STEP_SUMMARY"
