@@ -20,6 +20,10 @@ on:
         type: boolean
         required: false
         default: false
+      reset_data:
+        description: 'Ketik RESET untuk mengosongkan data lama lebih dulu. Dicadangkan otomatis. Kosongkan bila tidak ingin reset.'
+        required: false
+        default: ''
 
 concurrency:
   group: deploy-kontrol-energi
@@ -86,7 +90,18 @@ jobs:
           KES_PROJECT_ID: ${{ secrets.KES_PROJECT_ID || 'electric-control-bba' }}
           APPCHECK_SITE_KEY: ${{ secrets.KES_APPCHECK_SITE_KEY }}
           APPCHECK_PROVIDER: recaptcha-v3
+          KES_RESET_DATA: ${{ github.event.inputs.reset_data == 'RESET' && '1' || '' }}
+          KES_RESET_CONFIRM: ${{ github.event.inputs.reset_data }}
         run: bash scripts/deploy.sh
+
+      - name: Simpan cadangan data sebagai artifact
+        if: ${{ always() && github.event.inputs.reset_data == 'RESET' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cadangan-sebelum-reset
+          path: apps/kontrol-energi-store/kontrol-energi-backup-*.ndjson
+          if-no-files-found: ignore
+          retention-days: 90
 
       - name: Ringkasan
         if: always()

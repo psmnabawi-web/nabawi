@@ -1,14 +1,16 @@
 Kontrol Energi Store
-Version: 1.1.4
+Version: 1.1.5
 Build date: 2026-09-16
 Backend: Firebase Hosting + Firestore + Anonymous Authentication
 Input method: standardized manual entry only
 Photo/OCR: removed / not implemented
 Master source: Master Electric.xlsx / 11 stores / 11 meters
 Master access: locked read-only for application users
-Release update: perbaikan kritikal Firestore rules yang membuat seluruh
-penyimpanan pembacaan dan pembelian token ditolak server pada v1.1.3
-(batas 1.000 ekspresi terlampaui), perbaikan pembagian bilangan bulat pada
-perhitungan kWh per 24 jam, dukungan pemasangan aplikasi di layar HP (PWA),
-aktivasi Anonymous Authentication otomatis, dan Firebase Hosting API yang
-sebelumnya tidak pernah diaktifkan saat deploy.
+Release update: menambahkan reset data opsional yang mencadangkan seluruh isi
+enam koleksi ke berkas NDJSON sebelum mengosongkannya, memakai perintah resmi
+Firebase CLI dan konfirmasi wajib. Melanjutkan perbaikan v1.1.4: Firestore
+rules yang pada v1.1.3 menolak seluruh penyimpanan karena melampaui batas
+1.000 ekspresi, pembagian bilangan bulat pada perhitungan kWh per 24 jam,
+pengambilan access token yang tahan banting di Cloud Shell, dukungan
+pemasangan aplikasi di layar HP, dan Firebase Hosting API yang sebelumnya
+tidak pernah diaktifkan saat deploy.

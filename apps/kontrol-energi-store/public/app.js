@@ -33,7 +33,7 @@ function initialTabFromLocation() {
     return "dashboard";
   }
 }
-const APP_VERSION = "1.1.4";
+const APP_VERSION = "1.1.5";
 const KNOWN_TABS = ["dashboard", "stores", "capture", "token", "history", "master"];
 const state = {
   tab: initialTabFromLocation(),

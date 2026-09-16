@@ -1,10 +1,10 @@
 # ===================================================================
-# KONTROL ENERGI STORE v1.1.4 - SEKALI COPY-PASTE DI GOOGLE CLOUD SHELL
+# KONTROL ENERGI STORE v1.1.5 - SEKALI COPY-PASTE DI GOOGLE CLOUD SHELL
 #
 # Project sudah dikunci ke: electric-control-bba
 # Blok ini tidak menanyakan apa pun. Cukup paste lalu tunggu selesai.
 #
-# Perbaikan v1.1.4:
+# Perbaikan v1.1.5:
 #   - Firestore rules dirombak agar muat di batas 1.000 ekspresi. Pada v1.1.3
 #     SELURUH penyimpanan pembacaan dan pembelian token ditolak server.
 #   - Pembagian bilangan bulat pada rules diperbaiki (kWh per 24 jam).
@@ -15,13 +15,19 @@
 # Opsional, jalankan SEBELUM blok ini bila ingin App Check aktif:
 #   export APPCHECK_SITE_KEY="site-key-reCAPTCHA-v3-anda"
 #
+# RESET DATA (opsional, menghapus seluruh pembacaan dan pembelian token):
+#   export KES_RESET_DATA=1
+#   export KES_RESET_CONFIRM=RESET
+# Seluruh isi enam koleksi dicadangkan dulu ke berkas NDJSON di folder kerja
+# sebelum dikosongkan. Tanpa kedua variabel itu, data existing tidak disentuh.
+#
 # Kegagalan deploy tidak akan menutup terminal utama.
 # ===================================================================
 
 bash <<'DEPLOY_INNER' 2>&1 | tee kontrol-energi-deploy.log
 set -Eeuo pipefail
 
-APP_RELEASE="1.1.4"
+APP_RELEASE="1.1.5"
 PROJECT_ID="${KES_PROJECT_ID:-electric-control-bba}"
 APPCHECK_SITE_KEY="${APPCHECK_SITE_KEY:-}"
 APPCHECK_PROVIDER="${APPCHECK_PROVIDER:-recaptcha-v3}"
@@ -56,7 +62,8 @@ STEP="Memeriksa kelengkapan paket"
 echo "[2/13] Memeriksa kelengkapan dan konsistensi versi..."
 for required in public/master-electric.json public/app.js public/index.html \
   public/manifest.webmanifest public/sw.js public/icons/icon-512.png \
-  scripts/seed-master.sh firestore.rules firestore.indexes.json; do
+  scripts/seed-master.sh scripts/deploy.sh scripts/reset-data.sh \
+  scripts/lib-gcloud-auth.sh firestore.rules firestore.indexes.json; do
   if [ ! -f "$required" ]; then
     echo "Paket tidak lengkap, file hilang: $required"
     exit 27
@@ -69,13 +76,13 @@ if ! grep -q "^Version: ${APP_RELEASE}$" VERSION.txt \
   echo "Nomor versi paket tidak konsisten. Gunakan ZIP v$APP_RELEASE yang terbaru."
   exit 27
 fi
-# Rules v1.1.4 wajib membawa perbaikan batas ekspresi dan pembagian desimal.
+# Rules v1.1.5 wajib membawa perbaikan batas ekspresi dan pembagian desimal.
 if ! grep -q 'function stateUpdateOk(meterId)' firestore.rules \
   || ! grep -q 'd.usageKwh \* 24.0 / d.intervalHours' firestore.rules \
   || ! grep -q 'match /tokenPurchases/' firestore.rules \
   || ! grep -q 'match /tokenStates/' firestore.rules \
   || ! grep -q 'Menyiapkan state token 9 meter prabayar' scripts/seed-master.sh; then
-  echo "firestore.rules bukan versi v1.1.4 yang sudah diperbaiki. Paket tercampur."
+  echo "firestore.rules bukan versi v1.1.5 yang sudah diperbaiki. Paket tercampur."
   exit 27
 fi
 if [ -e public/ocr ]; then
@@ -87,6 +94,8 @@ STEP="Menjalankan inti deploy"
 echo "Melanjutkan ke proses deploy bersama (scripts/deploy.sh)..."
 export KES_PROJECT_ID="$PROJECT_ID"
 export APPCHECK_SITE_KEY APPCHECK_PROVIDER
+export KES_RESET_DATA="${KES_RESET_DATA:-}"
+export KES_RESET_CONFIRM="${KES_RESET_CONFIRM:-}"
 bash scripts/deploy.sh
 
 DEPLOY_INNER

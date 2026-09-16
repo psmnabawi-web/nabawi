@@ -1,4 +1,4 @@
-# Kontrol Energi Store v1.1.4
+# Kontrol Energi Store v1.1.5
 
 > Aplikasi statis terpisah (HTML/CSS/JS biasa + Firebase Hosting). Tidak
 > berhubungan dengan aplikasi Next.js di root repository ini dan tidak ikut
@@ -6,7 +6,7 @@
 
 Aplikasi web mobile-first untuk mencatat listrik prabayar dan pascabayar dengan rumus yang sesuai model setiap store.
 
-## Yang Diperbaiki di v1.1.4
+## Yang Diperbaiki di v1.1.5
 
 | # | Masalah pada v1.1.3 | Dampak | Perbaikan |
 |---|---|---|---|
@@ -85,12 +85,12 @@ Project sudah dikunci ke `electric-control-bba`. Tersedia dua jalur.
 ### Jalur A - Google Cloud Shell (paling cepat untuk sekali jalan)
 
 1. Buka <https://console.cloud.google.com/> lalu klik ikon Cloud Shell.
-2. Upload `Kontrol_Energi_Store_Firebase_v1.1.4.zip`.
+2. Upload `Kontrol_Energi_Store_Firebase_v1.1.5.zip`.
 3. Minta seluruh crew berhenti input sampai deploy selesai.
 4. Jalankan satu baris:
 
    ```bash
-   unzip -p Kontrol_Energi_Store_Firebase_v1.1.4.zip DEPLOY_CLOUD_SHELL.txt | bash
+   unzip -p Kontrol_Energi_Store_Firebase_v1.1.5.zip DEPLOY_CLOUD_SHELL.txt | bash
    ```
 
 Blok ini tidak menanyakan apa pun. Script memasang rules lebih dulu,
@@ -124,6 +124,31 @@ Persiapan sekali saja, lalu setiap deploy cukup satu klik dari tab Actions.
 
 Workflow menjalankan 35 uji Firestore rules lebih dulu. Bila ada uji yang
 gagal, deploy dibatalkan dan produksi tidak tersentuh.
+
+### Reset data sebelum deploy
+
+Mengosongkan `readings`, `tokenPurchases`, `tokenStates`, `stores`, `meters`,
+dan `masterRegistry`. Master dibangun ulang otomatis sesudahnya, jadi yang
+hilang permanen adalah data transaksi.
+
+Seluruh isi keenam koleksi diunduh lebih dulu ke satu berkas
+`kontrol-energi-backup-<waktu>.ndjson` di folder kerja. Simpan berkas itu
+sebelum menutup Cloud Shell. Pengosongan memakai perintah resmi
+`firebase firestore:delete` per nama koleksi, sehingga koleksi lain di project
+tidak tersentuh, dan hanya berjalan bila konfirmasi diberikan.
+
+Untuk Jalur A, jalankan sebelum blok deploy:
+
+```bash
+export KES_RESET_DATA=1
+export KES_RESET_CONFIRM=RESET
+```
+
+Untuk Jalur B, isi kolom **reset_data** dengan `RESET` saat menjalankan
+workflow. Berkas cadangan otomatis tersimpan sebagai artifact selama 90 hari.
+
+Tanpa kedua variabel atau tanpa kolom itu, data existing tidak disentuh sama
+sekali.
 
 ### Opsi tambahan
 

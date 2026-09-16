@@ -16,7 +16,7 @@
 #
 set -Eeuo pipefail
 
-APP_RELEASE="1.1.4"
+APP_RELEASE="1.1.5"
 PROJECT_ID="${KES_PROJECT_ID:-electric-control-bba}"
 APPCHECK_SITE_KEY="${APPCHECK_SITE_KEY:-}"
 APPCHECK_PROVIDER="${APPCHECK_PROVIDER:-recaptcha-v3}"
@@ -247,6 +247,18 @@ firebase deploy \
   --only firestore:rules \
   --project "$PROJECT_ID" \
   --non-interactive
+
+# Reset dijalankan SESUDAH rules baru terpasang dan SEBELUM master disemai,
+# sehingga seeder langsung membangun master dan saldo token dari nol.
+if [ "${KES_RESET_DATA:-}" = "1" ]; then
+  STEP="Mengosongkan data lama"
+  echo
+  echo "[9b/13] Reset data diminta. Mengosongkan koleksi aplikasi..."
+  bash scripts/reset-data.sh
+  STEP="Memasang rules dan menyinkronkan master"
+  echo
+fi
+
 bash scripts/seed-master.sh "$PROJECT_ID"
 
 STEP="Memasang indeks aplikasi"

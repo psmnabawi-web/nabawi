@@ -9,7 +9,7 @@
  *   tidak ada data transaksi yang tersimpan di cache perangkat.
  * - Cache dikunci ke nomor versi; versi lama dihapus saat aktivasi.
  */
-const APP_VERSION = "1.1.4";
+const APP_VERSION = "1.1.5";
 const CACHE_NAME = `kontrol-energi-shell-v${APP_VERSION}`;
 const OFFLINE_URL = "/index.html";
 
