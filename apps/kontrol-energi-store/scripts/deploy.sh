@@ -29,6 +29,9 @@ if [ ! -f public/app.js ] || [ ! -f scripts/seed-master.sh ]; then
   exit 26
 fi
 
+# shellcheck source=scripts/lib-gcloud-auth.sh
+. scripts/lib-gcloud-auth.sh
+
 STEP="Memeriksa alat deploy"
 echo "[3/13] Memeriksa Firebase CLI dan alat validasi..."
 if ! command -v firebase >/dev/null 2>&1; then
@@ -50,6 +53,19 @@ if ! gcloud projects describe "$PROJECT_ID" >/dev/null 2>&1; then
   echo "Pastikan akun yang login memiliki peran Owner atau Editor pada project tersebut."
   exit 22
 fi
+
+STEP="Memeriksa kredensial Google Cloud"
+echo "[4b/13] Memastikan access token tersedia SEBELUM mengubah apa pun..."
+# Pemeriksaan ini sengaja dilakukan di depan. Tanpa ini, deploy dapat berhasil
+# memasang rules lalu gagal saat menyinkronkan master, meninggalkan project
+# dalam keadaan setengah jalan.
+ACCESS_TOKEN="$(kes_access_token)"
+if [ -z "$ACCESS_TOKEN" ]; then
+  kes_auth_help "$PROJECT_ID"
+  exit 30
+fi
+export KES_ACCESS_TOKEN="$ACCESS_TOKEN"
+echo "Access token Google Cloud tersedia."
 
 STEP="Mengaktifkan layanan Google Cloud"
 echo "[5/13] Memastikan layanan aktif (termasuk Hosting)..."
@@ -75,6 +91,20 @@ if ! gcloud firestore databases describe --database='(default)' --project "$PROJ
     --project "$PROJECT_ID" \
     --quiet
 fi
+
+STEP="Memverifikasi kredensial terhadap project"
+echo "[6b/13] Memverifikasi access token berlaku untuk $PROJECT_ID..."
+if ! kes_token_works "$KES_ACCESS_TOKEN" "$PROJECT_ID"; then
+  unset KES_ACCESS_TOKEN
+  ACCESS_TOKEN="$(kes_access_token)"
+  if [ -z "$ACCESS_TOKEN" ] || ! kes_token_works "$ACCESS_TOKEN" "$PROJECT_ID"; then
+    echo "Access token ada tetapi ditolak project $PROJECT_ID."
+    kes_auth_help "$PROJECT_ID"
+    exit 30
+  fi
+  export KES_ACCESS_TOKEN="$ACCESS_TOKEN"
+fi
+echo "Kredensial terverifikasi untuk $PROJECT_ID."
 
 STEP="Membuat konfigurasi web"
 echo "[7/13] Membuat konfigurasi aplikasi web..."
@@ -123,7 +153,7 @@ fi
 STEP="Mengaktifkan login Anonymous"
 echo "[8/13] Mengaktifkan Anonymous Authentication secara otomatis..."
 API_KEY="$(printf '%s' "$SDK_CONFIG" | jq -r '.apiKey // empty')"
-ADMIN_TOKEN="$(gcloud auth print-access-token)"
+ADMIN_TOKEN="$(kes_access_token)"
 AUTH_ERROR=""
 
 enable_anonymous_provider() {
@@ -223,11 +253,16 @@ STEP="Memasang indeks aplikasi"
 echo "[10/13] Memastikan indeks riwayat token tersedia..."
 INDEX_LIST_API="https://firestore.googleapis.com/v1/projects/$PROJECT_ID/databases/(default)/collectionGroups/-/indexes"
 TOKEN_INDEX_CREATE_API="https://firestore.googleapis.com/v1/projects/$PROJECT_ID/databases/(default)/collectionGroups/tokenPurchases/indexes"
-INDEX_ACCESS_TOKEN="$(gcloud auth print-access-token)"
+# Token disegarkan di sini karena tahap menunggu indeks dapat berjalan
+# sampai sepuluh menit dan token lama bisa kedaluwarsa.
+unset KES_ACCESS_TOKEN
+INDEX_ACCESS_TOKEN="$(kes_access_token)"
 if [ -z "$INDEX_ACCESS_TOKEN" ]; then
   echo "Access token Google Cloud tidak tersedia untuk memasang indeks."
+  kes_auth_help "$PROJECT_ID"
   exit 31
 fi
+export KES_ACCESS_TOKEN="$INDEX_ACCESS_TOKEN"
 
 find_token_index() {
   local page_json=""

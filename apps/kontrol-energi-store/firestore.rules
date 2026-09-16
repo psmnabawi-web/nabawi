@@ -204,9 +204,9 @@ service cloud.firestore {
         // Invarian ini membuat rentang revisi pada dokumen pembacaan
         // (revisionEnd - revisionStart + 1 == purchaseCount) otomatis benar,
         // sehingga tidak perlu diperiksa ulang di sisi pembacaan.
-        && s.pendingFromRevision == (s.pendingPurchaseCount == 0
-          ? null
-          : s.lastConsumedRevision + 1)
+        && (s.pendingPurchaseCount == 0
+          ? s.pendingFromRevision == null
+          : s.pendingFromRevision == s.lastConsumedRevision + 1)
         && s.lastAcceptedReadingId is string;
     }
 
@@ -271,7 +271,9 @@ service cloud.firestore {
         && r.tokenPurchaseTotalKwhCenti == before.pendingTokenKwhCenti
         && r.tokenPurchaseTotalAmountRp == before.pendingAmountRp
         && r.tokenRevisionStart == before.pendingFromRevision
-        && r.tokenRevisionEnd == (before.pendingPurchaseCount == 0 ? null : before.revision)
+        && (before.pendingPurchaseCount == 0
+          ? r.tokenRevisionEnd == null
+          : r.tokenRevisionEnd == before.revision)
         && readingId != before.lastAcceptedReadingId
         && (before.lastAcceptedReadingId == ''
           ? (r.previousReadingKwh == null && r.tokenAddedKwh == 0)
@@ -329,7 +331,9 @@ service cloud.firestore {
           && d.tokenPurchaseTotalKwhCenti == before.pendingTokenKwhCenti
           && d.tokenPurchaseTotalAmountRp == before.pendingAmountRp
           && d.tokenRevisionStart == before.pendingFromRevision
-          && d.tokenRevisionEnd == (before.pendingPurchaseCount == 0 ? null : before.revision)
+          && (before.pendingPurchaseCount == 0
+            ? d.tokenRevisionEnd == null
+            : d.tokenRevisionEnd == before.revision)
           && (before.lastAcceptedReadingId == ''
             ? (d.previousReadingKwh == null && d.tokenAddedKwh == 0)
             : (d.previousReadingKwh is number

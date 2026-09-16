@@ -65,9 +65,19 @@ if ! validate_master; then
   exit 43
 fi
 
-ACCESS_TOKEN="$(gcloud auth print-access-token)"
+# Memakai helper bersama agar seeder tetap jalan pada Cloud Shell yang
+# kehilangan akun aktif gcloud. Bila deploy.sh sudah menyiapkan token, nilai
+# itulah yang dipakai lewat KES_ACCESS_TOKEN.
+if [ -f "$SCRIPT_DIR/lib-gcloud-auth.sh" ]; then
+  # shellcheck source=lib-gcloud-auth.sh
+  . "$SCRIPT_DIR/lib-gcloud-auth.sh"
+  ACCESS_TOKEN="$(kes_access_token)"
+else
+  ACCESS_TOKEN="$(gcloud auth print-access-token 2>/dev/null || true)"
+fi
 if [ -z "$ACCESS_TOKEN" ]; then
   echo "Access token Google Cloud tidak tersedia."
+  if command -v kes_auth_help >/dev/null 2>&1; then kes_auth_help "$PROJECT_ID"; fi
   exit 46
 fi
 
