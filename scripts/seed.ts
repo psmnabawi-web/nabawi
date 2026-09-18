@@ -28,6 +28,16 @@ const SAMPLE_STORES = [
   { id: 'afc-pdr', code: 'AFC-PDR', name: 'Almaz Fried Chicken - Pandu Raya', city: 'Bogor' },
   { id: 'afc-stl', code: 'AFC-STL', name: 'Almaz Fried Chicken - Sentul', city: 'Sentul' },
   { id: 'afc-wnh', code: 'AFC-WNH', name: 'Almaz Fried Chicken - Wanaherang', city: 'Gunung Putri' },
+  { id: 'afc-ctm', code: 'AFC-CTM', name: 'Almaz Fried Chicken - Citraland Medan', city: 'Medan' },
+  { id: 'afc-hrp', code: 'AFC-HRP', name: 'Almaz Fried Chicken - Harapan Raya PKU', city: 'Pekanbaru' },
+  { id: 'afc-jmb', code: 'AFC-JMB', name: 'Almaz Fried Chicken - Jambi', city: 'Jambi' },
+  { id: 'afc-kip', code: 'AFC-KIP', name: 'Almaz Fried Chicken - Kambang Iwak Palembang', city: 'Palembang' },
+  { id: 'afc-kmm', code: 'AFC-KMM', name: 'Almaz Fried Chicken - Kapten Muslim Medan', city: 'Medan' },
+  { id: 'afc-ktp', code: 'AFC-KTP', name: 'Almaz Fried Chicken - Kenten Palembang', city: 'Palembang' },
+  { id: 'afc-mrp', code: 'AFC-MRP', name: 'Almaz Fried Chicken - Marpoyan PKU', city: 'Pekanbaru' },
+  { id: 'afc-pnm', code: 'AFC-PNM', name: 'Almaz Fried Chicken - Panam PKU', city: 'Pekanbaru' },
+  { id: 'afc-ryp', code: 'AFC-RYP', name: 'Almaz Fried Chicken - Ryacudu Palembang', city: 'Palembang' },
+  { id: 'afc-adm', code: 'AFC-ADM', name: 'Almaz Fried Chicken - Adam Malik Medan', city: 'Medan' },
 ];
 
 async function main() {
