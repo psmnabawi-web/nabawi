@@ -28,6 +28,9 @@ export async function exportAuditExcel(audit: Audit, items: AuditItem[]) {
     { header: 'Temuan Audit', key: 'findings', width: 50 },
     { header: 'Rekomendasi', key: 'recommendation', width: 40 },
     { header: 'Skor AI', key: 'aiScore', width: 8 },
+    { header: 'Skor Awal (percobaan 1)', key: 'firstScore', width: 12 },
+    { header: 'Jumlah Foto Ulang', key: 'retries', width: 12 },
+    { header: 'Area Di-submit Oleh', key: 'lockedBy', width: 18 },
     { header: 'Koreksi Manager', key: 'override', width: 30 },
     { header: 'Status', key: 'status', width: 14 },
     { header: 'Difoto Oleh', key: 'by', width: 18 },
@@ -53,6 +56,9 @@ export async function exportAuditExcel(audit: Audit, items: AuditItem[]) {
       findings: it.ai ? [it.ai.findings, ...it.ai.issues.map((i) => `- ${i}`)].join('\n') : '',
       recommendation: it.ai?.recommendation ?? '',
       aiScore: it.ai?.score ?? null,
+      firstScore: it.firstAiScore ?? null,
+      retries: Math.max(0, (it.attempts ?? (it.ai ? 1 : 0)) - 1),
+      lockedBy: it.status === 'skipped' ? `Dilewati: ${it.skipNote ?? ''}` : it.locked ? `${it.lockedByName ?? ''}` : '',
       override: it.overrideScore !== null ? `${it.overrideScore} oleh ${it.overrideByName}: ${it.overrideNote}` : '',
       status: it.status,
       by: it.capturedByName ?? '',
@@ -64,7 +70,7 @@ export async function exportAuditExcel(audit: Audit, items: AuditItem[]) {
     row.getCell('at').numFmt = 'dd/mm/yyyy hh:mm';
   }
   const last = ws.rowCount;
-  ws.autoFilter = { from: 'A1', to: `Q${last}` };
+  ws.autoFilter = { from: 'A1', to: `T${last}` };
   ws.addConditionalFormatting({
     ref: `I2:I${last}`,
     rules: [
@@ -136,6 +142,10 @@ export async function exportAuditExcel(audit: Audit, items: AuditItem[]) {
   sm.getCell(`B${gradeRow + 5}`).value = audit.auditorName;
   sm.getCell(`A${gradeRow + 6}`).value = 'Status';
   sm.getCell(`B${gradeRow + 6}`).value = audit.status;
+  sm.getCell(`A${gradeRow + 7}`).value = 'Kondisi awal (rata-rata skor AI percobaan 1)';
+  sm.getCell(`B${gradeRow + 7}`).value = audit.summary.firstPassPct === null ? '-' : `${audit.summary.firstPassPct}%`;
+  sm.getCell(`A${gradeRow + 8}`).value = 'Total foto ulang';
+  sm.getCell(`B${gradeRow + 8}`).value = audit.summary.retryCount;
 
   // ---- Sheet 3: Action Plan (item kritikal) ----
   const ap = wb.addWorksheet('Action Plan');

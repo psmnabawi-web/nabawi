@@ -16,7 +16,10 @@ Indikator mengikuti **Form Audit Cleaning** (57 area, 6 kategori): Kitchen, Serv
 | Audit | Buat audit per store/tanggal/shift → 57 item. Capture foto per item, AI scoring otomatis, submit. Cegah duplikasi audit. |
 | AI Scoring | Google Gemini (default) atau Claude, structured JSON output, rubrik 1-5 seragam. Foto buram/salah objek ditolak (`photoValid=false`). Retry otomatis saat kena rate limit free tier. |
 | Koreksi manager | Manager/admin dapat override skor AI dengan alasan wajib → tercatat di audit trail. |
-| Scoring | % = rata-rata skor / 5. Grade A ≥90, B ≥80, C ≥70, D <70. Skor ≤2 = temuan kritikal. |
+| Alur crew | Area dikerjakan **berurutan**. Setelah foto dinilai AI, crew menekan **Submit Area** untuk mengunci dan membuka area berikutnya. Submit Area hanya bisa jika skor ≥ 75% (skor 4 atau 5); di bawah itu crew harus membersihkan lalu foto ulang. Semua area selesai → audit otomatis submitted. |
+| Kondisi awal | Skor AI percobaan pertama dan jumlah foto ulang per area disimpan (`firstAiScore`, `attempts`, `history`) dan tampil di ringkasan/Excel sebagai indikator kondisi awal store. |
+| Manager | Bisa membuka kunci area, melewati area (wajib alasan, tidak dihitung skor), mengoreksi skor, dan submit audit manual. |
+| Scoring | % = rata-rata skor / 5. Grade A ≥90, B ≥80, C ≥70, D <70. Skor ≤2 = temuan kritikal. Batas submit area `MIN_SUBMIT_PCT` di `src/lib/scoring.ts`. |
 | Dashboard | KPI (skor rata-rata, audit, kritikal, di bawah target), tren per audit, skor per kategori vs target, ranking store. |
 | Export Excel | Per audit (Form Audit + Summary berformula + Action Plan) dan rekap multi-audit. |
 | Admin | CRUD store, user & role (buat akun, reset password, nonaktifkan), indikator (edit/tambah/nonaktifkan/reset default), audit trail. |

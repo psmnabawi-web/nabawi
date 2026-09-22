@@ -6,7 +6,8 @@ import { requireProfile, jsonError, writeAuditLog, assertStoreAccess } from '@/l
 import { adminBucket } from '@/lib/firebase/admin';
 import type { AuditItem } from '@/lib/types';
 import { HttpError } from '@/lib/utils';
-import { loadAudit, recomputeSummary } from '@/lib/server/audits';
+import { findBlockingItem, loadAudit, recomputeSummary } from '@/lib/server/audits';
+import type { AttemptRecord } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -44,6 +45,11 @@ export async function POST(req: Request) {
     const itemSnap = await itemRef.get();
     if (!itemSnap.exists) throw new HttpError(404, 'Item audit tidak ditemukan.');
     const item = itemSnap.data() as AuditItem;
+    if (item.locked) throw new HttpError(400, 'Area ini sudah di-submit dan terkunci. Minta manager membuka kunci jika perlu foto ulang.');
+    if (item.status === 'skipped') throw new HttpError(400, 'Area ini dilewati oleh manager.');
+    const allItems = (await ref.collection('items').get()).docs.map((d) => d.data() as AuditItem);
+    const blocking = findBlockingItem(allItems, item);
+    if (blocking) throw new HttpError(409, `Selesaikan area #${blocking.no} ${blocking.area} terlebih dahulu (submit area sebelumnya).`);
 
     // 1) Simpan foto
     const buffer = Buffer.from(body.imageBase64, 'base64');
@@ -76,9 +82,16 @@ export async function POST(req: Request) {
       crewNote: body.crewNote ?? item.crewNote,
     });
 
-    // 3) Simpan hasil (override manager sebelumnya dihapus karena foto baru)
+    // 3) Simpan hasil (override manager sebelumnya dihapus karena foto baru). Catat riwayat percobaan.
     const now = Date.now();
+    const attempts = (item.attempts ?? (item.ai ? 1 : 0)) + 1;
+    const firstAiScore = item.firstAiScore !== undefined && item.firstAiScore !== null ? item.firstAiScore : ai.photoValid ? ai.score : (item.firstAiScore ?? null);
+    const record: AttemptRecord = { at: now, score: ai.photoValid ? ai.score : null, photoValid: ai.photoValid, photoUrl, byName: ctx.profile.name };
+    const history = [...(item.history ?? []), record].slice(-12);
     const update: Partial<AuditItem> = {
+      attempts,
+      firstAiScore,
+      history,
       status: ai.photoValid ? 'scored' : 'invalid',
       photoUrl,
       photoPath,
@@ -102,7 +115,7 @@ export async function POST(req: Request) {
       action: 'ANALYZE_ITEM',
       entity: 'auditItem',
       entityId: `${audit.id}/${item.id}`,
-      details: { area: item.area, score: ai.score, photoValid: ai.photoValid, confidence: ai.confidence, model: ai.model },
+      details: { area: item.area, score: ai.score, photoValid: ai.photoValid, confidence: ai.confidence, model: ai.model, attempt: attempts },
     });
 
     const fresh = await itemRef.get();

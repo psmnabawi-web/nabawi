@@ -11,10 +11,11 @@ import { apiFetch } from '@/lib/api-client';
 import { exportAuditExcel } from '@/lib/export-excel';
 import { useAudit } from '@/lib/hooks';
 import { CATEGORY_ORDER } from '@/lib/indicators';
+import { activeIndex, isDone, MIN_SUBMIT_PCT } from '@/lib/scoring';
 import { SHIFTS } from '@/lib/types';
 import { cn, fmtDate, fmtDateTime, scoreColor } from '@/lib/utils';
 
-type Filter = 'all' | 'pending' | 'critical' | 'invalid';
+type Filter = 'all' | 'pending' | 'done' | 'critical' | 'invalid';
 
 export default function AuditDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -29,10 +30,14 @@ export default function AuditDetailPage() {
   const role = profile?.role ?? 'crew';
   const editable = audit?.status === 'draft';
 
+  const activeIdx = useMemo(() => activeIndex(items), [items]);
+  const activeItem = activeIdx >= 0 ? items[activeIdx] : null;
+
   const visible = useMemo(() => {
     return items.filter((it) => {
       if (cat !== 'ALL' && it.categoryCode !== cat) return false;
-      if (filter === 'pending') return it.status === 'pending';
+      if (filter === 'pending') return !isDone(it);
+      if (filter === 'done') return isDone(it);
       if (filter === 'invalid') return it.status === 'invalid';
       if (filter === 'critical') return (it.finalScore ?? 99) <= 2;
       return true;
@@ -43,7 +48,7 @@ export default function AuditDetailPage() {
     if (!audit) return;
     setMsg(null);
     if (action === 'delete' && !confirm('Hapus audit ini beserta seluruh foto? Tindakan tidak dapat dibatalkan.')) return;
-    if (action === 'submit' && audit.summary.pendingCount > 0 && !confirm(`Masih ada ${audit.summary.pendingCount} area belum difoto. Submit sekarang?`)) return;
+    if (action === 'submit' && items.some((it) => !isDone(it)) && !confirm(`Masih ada ${items.filter((it) => !isDone(it)).length} area belum di-submit. Submit audit sekarang (khusus manager)?`)) return;
     setBusy(action);
     try {
       if (action === 'export') {
@@ -80,7 +85,8 @@ export default function AuditDetailPage() {
     );
   }
   const s = audit.summary;
-  const progressPct = s.itemCount ? Math.round(((s.itemCount - s.pendingCount) / s.itemCount) * 100) : 0;
+  const doneCount = items.filter(isDone).length;
+  const progressPct = items.length ? Math.round((doneCount / items.length) * 100) : 0;
 
   return (
     <AppShell>
@@ -93,9 +99,11 @@ export default function AuditDetailPage() {
               ⬇ Excel
             </Button>
             {editable ? (
-              <Button size="sm" loading={busy === 'submit'} onClick={() => act('submit')} disabled={s.scoredCount === 0}>
-                Submit Audit
-              </Button>
+              role !== 'crew' && (
+                <Button size="sm" loading={busy === 'submit'} onClick={() => act('submit')} disabled={s.scoredCount === 0}>
+                  Submit Audit
+                </Button>
+              )
             ) : (
               role !== 'crew' && (
                 <Button variant="secondary" size="sm" loading={busy === 'reopen'} onClick={() => act('reopen')}>
@@ -111,13 +119,18 @@ export default function AuditDetailPage() {
           </>
         }
       />
-      {msg && <Alert kind={msg.includes('berhasil') || msg.includes('dibuka') ? 'success' : 'error'} className="mb-3">{msg}</Alert>}
+      {msg && <Alert kind={msg.includes('berhasil') || msg.includes('dibuka') || msg.includes('otomatis') ? 'success' : 'error'} className="mb-3">{msg}</Alert>}
+      {editable && activeItem && (
+        <Alert kind="info" className="mb-3">
+          Kerjakan berurutan. Area aktif: <b>#{activeItem.no} {activeItem.area}</b>. Submit Area hanya bisa jika skor AI ≥ {MIN_SUBMIT_PCT}%; di bawah itu bersihkan dulu lalu foto ulang. Setelah semua area di-submit, audit otomatis tersubmit.
+        </Alert>
+      )}
 
       <Card className="mb-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <GradeBadge grade={s.grade} pct={s.pct} size="lg" />
           <div className="grid grid-cols-3 gap-3 text-center sm:gap-6">
-            <Stat label="Dinilai" value={`${s.scoredCount}/${s.itemCount}`} />
+            <Stat label="Area selesai" value={`${doneCount}/${items.length}`} />
             <Stat label="Rata-rata" value={s.avg?.toLocaleString('id-ID') ?? '-'} />
             <Stat label="Kritikal" value={String(s.criticalCount)} color={s.criticalCount ? '#e34948' : undefined} />
           </div>
@@ -125,7 +138,7 @@ export default function AuditDetailPage() {
         </div>
         <div className="mt-3">
           <div className="mb-1 flex justify-between text-xs text-muted">
-            <span>Progress capture</span>
+            <span>Progress area di-submit{s.retryCount ? ` · ${s.retryCount}x foto ulang` : ''}{s.firstPassPct !== null ? ` · kondisi awal ${s.firstPassPct}%` : ''}</span>
             <span>{progressPct}%</span>
           </div>
           <ProgressBar pct={progressPct} color="#F26522" />
@@ -161,7 +174,8 @@ export default function AuditDetailPage() {
         {(
           [
             ['all', `Semua (${items.length})`],
-            ['pending', `Belum difoto (${s.pendingCount})`],
+            ['pending', `Belum selesai (${items.length - doneCount})`],
+            ['done', `Selesai (${doneCount})`],
             ['critical', `Kritikal (${s.criticalCount})`],
             ['invalid', `Foto tidak valid (${s.invalidCount})`],
           ] as [Filter, string][]
@@ -176,9 +190,22 @@ export default function AuditDetailPage() {
 
       <div className="space-y-2">
         {visible.length === 0 && <p className="p-6 text-center text-sm text-muted">Tidak ada item untuk filter ini.</p>}
-        {visible.map((it) => (
-          <CaptureItem key={it.id} item={it} auditId={audit.id} editable={!!editable} role={role} />
-        ))}
+        {visible.map((it) => {
+          const idx = items.findIndex((x) => x.id === it.id);
+          return (
+            <CaptureItem
+              key={it.id}
+              item={it}
+              auditId={audit.id}
+              editable={!!editable}
+              role={role}
+              isActive={!!editable && idx === activeIdx}
+              isBlocked={activeIdx >= 0 && idx > activeIdx}
+              blockedBy={activeIdx >= 0 && idx > activeIdx ? items[activeIdx] : null}
+              onLocked={(auto) => setMsg(auto ? 'Semua area selesai. Audit otomatis tersubmit.' : null)}
+            />
+          );
+        })}
       </div>
     </AppShell>
   );

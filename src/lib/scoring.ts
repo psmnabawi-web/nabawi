@@ -10,6 +10,23 @@ import type { AuditItem, AuditSummary, CategoryScore, Grade } from './types';
  */
 export const MAX_SCORE = 5;
 export const CRITICAL_THRESHOLD = 2;
+/** Batas minimum agar area boleh di-submit crew: 75% dari skor maksimal -> skor 4 (80%) atau 5. */
+export const MIN_SUBMIT_PCT = 75;
+export const MIN_SUBMIT_SCORE = Math.ceil((MAX_SCORE * MIN_SUBMIT_PCT) / 100);
+
+export function meetsSubmitThreshold(score: number | null): boolean {
+  return score !== null && score >= MIN_SUBMIT_SCORE;
+}
+
+/** Item dianggap selesai (terkunci atau dilewati). */
+export function isDone(item: Pick<AuditItem, 'locked' | 'status'>): boolean {
+  return item.status === 'skipped' || item.locked === true;
+}
+
+/** Urutan kerja: area ke-i terbuka jika semua area sebelumnya selesai. Mengembalikan index area aktif (-1 jika semua selesai). */
+export function activeIndex(items: Pick<AuditItem, 'locked' | 'status'>[]): number {
+  return items.findIndex((it) => !isDone(it));
+}
 
 export const GRADE_RULES: { grade: Grade; minPct: number; label: string; color: string }[] = [
   { grade: 'A', minPct: 90, label: 'Excellent', color: '#008300' },
@@ -50,11 +67,30 @@ export function summarize(items: AuditItem[]): AuditSummary {
   let invalidCount = 0;
   let pendingCount = 0;
   let criticalCount = 0;
+  let lockedCount = 0;
+  let skippedCount = 0;
+  let retryCount = 0;
+  let firstPassCount = 0;
+  let firstSum = 0;
+  let firstN = 0;
   let sum = 0;
 
   for (const item of items) {
+    if (item.status === 'skipped') {
+      skippedCount += 1;
+      continue;
+    }
     const cat = byCode.get(item.categoryCode);
     if (cat) cat.total += 1;
+    if (item.locked) lockedCount += 1;
+    const attempts = item.attempts ?? (item.ai ? 1 : 0);
+    if (attempts > 1) retryCount += attempts - 1;
+    const first = item.firstAiScore ?? (item.ai?.photoValid ? item.ai.score : null);
+    if (first !== null && first !== undefined) {
+      firstN += 1;
+      firstSum += first;
+      if (meetsSubmitThreshold(first)) firstPassCount += 1;
+    }
     const score = effectiveScore(item);
     if (score !== null) {
       scoredCount += 1;
@@ -84,11 +120,16 @@ export function summarize(items: AuditItem[]): AuditSummary {
   const pct = scoredCount > 0 ? round1((sum / max) * 100) : null;
 
   return {
-    itemCount: items.length,
+    itemCount: items.length - skippedCount,
     scoredCount,
     invalidCount,
     pendingCount,
     criticalCount,
+    lockedCount,
+    skippedCount,
+    retryCount,
+    firstPassCount,
+    firstPassPct: firstN > 0 ? round1((firstSum / (firstN * MAX_SCORE)) * 100) : null,
     sum,
     max,
     avg,
@@ -105,6 +146,11 @@ export function emptySummary(): AuditSummary {
     invalidCount: 0,
     pendingCount: 0,
     criticalCount: 0,
+    lockedCount: 0,
+    skippedCount: 0,
+    retryCount: 0,
+    firstPassCount: 0,
+    firstPassPct: null,
     sum: 0,
     max: 0,
     avg: null,

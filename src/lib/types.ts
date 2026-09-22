@@ -28,7 +28,7 @@ export interface Store {
 
 export type Shift = 'PAGI' | 'SIANG' | 'MALAM';
 export type AuditStatus = 'draft' | 'submitted';
-export type ItemStatus = 'pending' | 'scored' | 'invalid' | 'override';
+export type ItemStatus = 'pending' | 'scored' | 'invalid' | 'override' | 'skipped';
 
 export interface AiResult {
   photoValid: boolean;
@@ -41,6 +41,14 @@ export interface AiResult {
   confidence: 'high' | 'medium' | 'low';
   model: string;
   analyzedAt: number;
+}
+
+export interface AttemptRecord {
+  at: number;
+  score: number | null;
+  photoValid: boolean;
+  photoUrl: string | null;
+  byName: string | null;
 }
 
 export interface AuditItem {
@@ -66,6 +74,19 @@ export interface AuditItem {
   overrideByUid: string | null;
   overrideByName: string | null;
   overrideAt: number | null;
+  /** Kunci per area: crew menekan "Submit Area" setelah skor >= batas. Area berikutnya baru terbuka setelah ini. */
+  locked?: boolean;
+  lockedAt?: number | null;
+  lockedByUid?: string | null;
+  lockedByName?: string | null;
+  /** Jumlah analisa AI yang sudah dilakukan (foto ulang menambah hitungan). */
+  attempts?: number;
+  /** Skor AI pada percobaan pertama: kondisi awal sebelum dibersihkan. */
+  firstAiScore?: number | null;
+  history?: AttemptRecord[];
+  /** Area dilewati oleh manager/admin (mis. renovasi). Tidak dihitung dalam skor. */
+  skipNote?: string | null;
+  skippedByName?: string | null;
   updatedAt: number;
 }
 
@@ -86,6 +107,14 @@ export interface AuditSummary {
   invalidCount: number;
   pendingCount: number;
   criticalCount: number;
+  lockedCount: number;
+  skippedCount: number;
+  /** Total foto ulang (attempts - 1) di seluruh area. */
+  retryCount: number;
+  /** Area yang lolos batas pada percobaan pertama. */
+  firstPassCount: number;
+  /** Rata-rata skor AI percobaan pertama (%), kondisi awal sebelum dibersihkan. */
+  firstPassPct: number | null;
   sum: number;
   max: number;
   avg: number | null;

@@ -28,6 +28,8 @@ export async function PATCH(req: Request, { params }: Params) {
       if (audit.status === 'submitted') throw new HttpError(400, 'Audit sudah disubmit.');
       const summary = await recomputeSummary(id);
       if (summary.scoredCount === 0) throw new HttpError(400, 'Belum ada item yang dinilai. Ambil foto minimal 1 area.');
+      const notDone = summary.itemCount - summary.lockedCount;
+      if (notDone > 0 && ctx.profile.role === 'crew') throw new HttpError(400, `Masih ${notDone} area belum di-submit. Selesaikan semua area dulu.`);
       await ref.set({ status: 'submitted', submittedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
       await writeAuditLog(ctx, {
         action: 'SUBMIT_AUDIT',
