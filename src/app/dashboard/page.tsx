@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
 import { useAuth } from '@/components/AuthProvider';
 import { CategoryBars, DateBars, StoreBars, TrendLine, type DateBarDatum, type StoreBarDatum } from '@/components/Charts';
+import { DailyCompliance } from '@/components/DailyCompliance';
 import { GradeBadge } from '@/components/ScoreBadge';
 import { Alert, Card, EmptyState, LinkButton, PageHeader, Select, Spinner } from '@/components/ui';
 import { useAudits, useStores } from '@/lib/hooks';
@@ -142,6 +143,12 @@ export default function DashboardPage() {
             <Tile label="Temuan kritikal" value={String(data.critical)} color={data.critical ? '#e34948' : '#008300'} sub="skor ≤ 2, wajib tindak lanjut" />
             <Tile label="Audit di bawah target" value={String(data.belowTarget)} color={data.belowTarget ? '#eda100' : '#008300'} sub={`dari ${data.submitted.length} audit`} />
           </div>
+
+          {profile?.role === 'admin' && (
+            <div className="mb-4">
+              <DailyCompliance stores={storeFilter === 'all' ? stores : stores.filter((s) => s.id === storeFilter)} audits={audits} />
+            </div>
+          )}
 
           <Card className="mb-4">
             <div className="mb-3 flex items-center justify-between">
