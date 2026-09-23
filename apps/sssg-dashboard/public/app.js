@@ -1052,34 +1052,60 @@
   }
   // ---------- Kirim ke WhatsApp: ringkasan pencapaian target per outlet ----------
   const waRp = (v) => v == null ? "-" : fmtRpS(v).replace(/ /g, " ");
-  function buildWaMessage() {
+  const waFull = (v) => v == null ? "-" : "Rp " + Math.round(v).toLocaleString("id-ID");
+  const waIco = (st) => st === "ok" ? "🟢" : st === "warn" ? "🟠" : st === "bad" ? "🔴" : "⚪";
+  function buildWaMessage(compact) {
     const B = computeTargetBoard(); if (!B || !B.rows.length) return null;
-    const key = null; const E = state.range ? computeExecRange(state.range.a, state.range.b, key) : computeExec(state.month, key);
-    const org = (C.OWNER && C.OWNER.org) || "Perusahaan"; const lfl = B.partial ? ` (s/d tgl ${B.N})` : "";
+    const E = state.range ? computeExecRange(state.range.a, state.range.b, null) : computeExec(state.month, null);
+    const org = (C.OWNER && C.OWNER.org) || "Perusahaan"; const A = C.ALERTS || {}; const warnAt = A.achWarn ?? 80;
+    const ytd = !state.range && state.month === "ytd"; const mi = state.range ? null : state.month;
+    const totalDays = B.partial ? B.N + B.remDays : null;
+    const periode = state.range ? `Periode: ${fmtRange(state.range.a, state.range.b)}` : ytd ? `Periode: Januari–${MONTH_NAMES[E && E.cur ? E.cur.last : 0].toLowerCase().replace(/^./, c => c.toUpperCase())} ${Y()} (year to date)` : `Periode: ${MONTH_NAMES[mi].toLowerCase().replace(/^./, c => c.toUpperCase())} ${Y()}${B.partial ? `, data sampai tanggal ${B.N} (hari ke-${B.N} dari ${totalDays})` : " (bulan penuh)"}`;
+    const below = B.rows.filter(r => r.status === "bad" || r.status === "warn"), ok = B.rows.filter(r => r.status === "ok"), na = B.rows.filter(r => r.status === "na");
     const L = [];
-    L.push(`📊 *PENCAPAIAN TARGET OUTLET*`); L.push(`${org} · ${B.pName}${lfl}`); L.push("");
+    L.push(compact ? `📊 *PENCAPAIAN TARGET OUTLET*` : `📊 *LAPORAN PENCAPAIAN TARGET OUTLET*`); L.push(org); L.push(periode); L.push("");
+    // ---- ringkasan perusahaan ----
     if (E && E.cur) {
-      const ach = E.ach, tgt = state.range ? E.cur.target : E.tgtTotal, tot = E.cur.total;
-      const ico = ach == null ? "⚪" : ach >= 1 ? "🟢" : ach * 100 >= ((C.ALERTS || {}).achWarn ?? 80) ? "🟠" : "🔴";
-      L.push(`${ico} *Total ${org}*: Rp ${waRp(tot)}${tgt ? ` dari target ${waRp(tgt)} (${(ach * 100).toFixed(0)}%)` : ""}${tgt && tot < tgt ? ` · kurang ${waRp(tgt - tot)}` : tgt ? ` · lebih ${waRp(tot - tgt)}` : ""}`);
-      if (B.partial && B.remDays > 0) { const gapFull = B.gapFullBelow; L.push(`⏱ Hari ke-${B.N} dari ${B.N + B.remDays} (${(B.N / (B.N + B.remDays) * 100).toFixed(0)}% waktu) · sisa ${B.remDays} hari${gapFull ? ` · butuh ${waRp(gapFull / B.remDays)}/hari` : ""}`); }
+      const tot = E.cur.total, tgt = state.range ? E.cur.target : E.tgtTotal, ach = E.ach; const fullT = state.range ? E.cur.targetAll : (E.cur.idxs || []).reduce((x, i) => x + (state.months[i] ? state.months[i].days.reduce((y, d) => y + dayTarget(d, null), 0) : 0), 0);
+      const st = ach == null ? "na" : ach >= 1 ? "ok" : ach * 100 >= warnAt ? "warn" : "bad";
+      if (compact) {
+        L.push(`${waIco(st)} *Total ${org}*: ${waRp(tot)}${tgt ? ` dari target ${waRp(tgt)} (${(ach * 100).toFixed(0)}%)` : ""}${tgt && tot < tgt ? ` · kurang ${waRp(tgt - tot)}` : tgt ? ` · lebih ${waRp(tot - tgt)}` : ""}`);
+        if (B.partial && B.remDays > 0 && fullT > tot) L.push(`⏱ Sisa ${B.remDays} hari · perlu ${waRp((fullT - tot) / B.remDays)}/hari untuk target bulan ${waRp(fullT)}`);
+      } else {
+        L.push(`*RINGKASAN ${org.toUpperCase()}*`);
+        L.push(`• Omset sampai ${B.partial ? "hari ini" : "akhir periode"}: ${waFull(tot)}`);
+        if (tgt) { L.push(`• Target sampai ${B.partial ? "hari ini" : "akhir periode"}: ${waFull(tgt)}`); L.push(`• Pencapaian: *${(ach * 100).toFixed(0)}%* ${tot < tgt ? `(kurang ${waFull(tgt - tot)})` : `(lebih ${waFull(tot - tgt)})`}`); }
+        if (fullT && fullT !== tgt) L.push(`• Target ${ytd ? "periode" : "bulan"} penuh: ${waFull(fullT)}`);
+        if (B.partial && B.remDays > 0) { const gapF = fullT - tot; L.push(gapF > 0 ? `• Sisa ${B.remDays} hari. Perlu *${waFull(gapF / B.remDays)} per hari* supaya target bulan tercapai (rata-rata saat ini ${waFull(E.cur.avg)} per hari)` : `• Sisa ${B.remDays} hari. Target bulan sudah terlampaui`); const tp = B.N / totalDays, pp = fullT ? tot / fullT : null; if (pp != null) L.push(`• Status: ${waIco(st)} ${pp >= tp ? "di depan jadwal" : "tertinggal dari jadwal"} (${(pp * 100).toFixed(0)}% target terkumpul pada ${(tp * 100).toFixed(0)}% waktu)`); }
+        else if (tgt) L.push(`• Status: ${waIco(st)} ${ach >= 1 ? "target tercapai" : "target tidak tercapai"}`);
+      }
       L.push("");
     }
-    const below = B.rows.filter(r => r.status === "bad" || r.status === "warn"), ok = B.rows.filter(r => r.status === "ok"), na = B.rows.filter(r => r.status === "na");
-    const line = (r, i) => { const ico = r.status === "ok" ? "🟢" : r.status === "warn" ? "🟠" : r.status === "bad" ? "🔴" : "⚪"; if (r.ach == null) return `${ico} ${r.label}: Rp ${waRp(r.actual)} (target belum diisi)`; const base = `${ico} *${r.label}* ${(r.ach * 100).toFixed(0)}% · ${waRp(r.actual)} / ${waRp(r.target)}`; return r.ach >= 1 ? `${base} · lebih ${waRp(r.actual - r.target)}` : `${base} · kurang ${waRp(r.gap)}${r.needPerDay ? ` · butuh ${waRp(r.needPerDay)}/hari` : ""}`; };
-    if (below.length) { L.push(`*Belum mencapai target (${below.length}):*`); below.forEach((r, i) => L.push(`${i + 1}. ${line(r)}`)); L.push(""); }
-    if (ok.length) { L.push(`*Sudah mencapai target (${ok.length}):*`); ok.forEach((r, i) => L.push(`${i + 1}. ${line(r)}`)); L.push(""); }
-    if (na.length) { na.forEach(r => L.push(line(r))); L.push(""); }
+    // ---- per outlet ----
+    const block = (r, i) => {
+      if (compact) { const base = `${i}. ${waIco(r.status)} *${r.label}* ${r.ach == null ? "" : (r.ach * 100).toFixed(0) + "%"}`; if (r.ach == null) return `${base}${waRp(r.actual)} (target belum diisi)`; return r.ach >= 1 ? `${base} · ${waRp(r.actual)} / ${waRp(r.target)} · lebih ${waRp(r.actual - r.target)}` : `${base} · ${waRp(r.actual)} / ${waRp(r.target)} · kurang ${waRp(r.gap)}${r.needPerDay ? ` · perlu ${waRp(r.needPerDay)}/hari` : ""}`; }
+      const o = [`${i}. ${waIco(r.status)} *${r.label}* — ${r.ach == null ? "tanpa target" : (r.ach * 100).toFixed(0) + "%"}`];
+      o.push(`   Omset: ${waFull(r.actual)}`);
+      if (r.ach != null) { o.push(`   Target${B.partial ? " s/d hari ini" : ""}: ${waFull(r.target)}`); if (r.ach >= 1) o.push(`   Lebih dari target: ${waFull(r.actual - r.target)} 👍`); else { o.push(`   Kekurangan: *${waFull(r.gap)}*`); if (r.needPerDay) o.push(`   Perlu: ${waFull(r.needPerDay)} per hari selama ${B.remDays} hari tersisa`); } }
+      else o.push(`   Target belum diisi di sheet`);
+      return o.join("\n");
+    };
+    if (below.length) { L.push(`*OUTLET BELUM MENCAPAI TARGET (${below.length} dari ${B.nTarget})*`); if (!compact) L.push(`Urutan dari yang paling tertinggal.`); below.forEach((r, i) => { L.push(block(r, i + 1)); if (!compact) L.push(""); }); if (compact) L.push(""); }
+    if (ok.length) { L.push(`*OUTLET SUDAH MENCAPAI TARGET (${ok.length} dari ${B.nTarget})*`); ok.forEach((r, i) => { L.push(block(r, i + 1)); if (!compact) L.push(""); }); if (compact) L.push(""); }
+    if (na.length) { L.push(`*OUTLET TANPA TARGET (${na.length})*`); na.forEach(r => L.push(`• ${r.label}: omset ${compact ? waRp(r.actual) : waFull(r.actual)}, target belum diisi di sheet`)); L.push(""); }
+    // ---- fokus ----
     const top = below.slice().sort((a, b) => b.gap - a.gap)[0];
-    if (top) L.push(`🎯 *Prioritas:* ${top.label}, kekurangan terbesar ${waRp(top.gap)} (${(top.gap / B.gapBelow * 100).toFixed(0)}% dari total kekurangan ${waRp(B.gapBelow)}).`);
+    if (top) { L.push(`🎯 *FOKUS UTAMA*`); L.push(compact ? `${top.label}: kekurangan terbesar ${waRp(top.gap)} (${(top.gap / B.gapBelow * 100).toFixed(0)}% dari total kekurangan ${waRp(B.gapBelow)})` : `${top.label} menyumbang kekurangan terbesar, ${waFull(top.gap)} atau ${(top.gap / B.gapBelow * 100).toFixed(0)}% dari total kekurangan semua outlet (${waFull(B.gapBelow)}). Menutup gap di outlet ini paling besar pengaruhnya ke total ${org}.`); }
     else if (B.nTarget) L.push(`🎉 Semua outlet mencapai target. Pertahankan!`);
-    L.push(""); L.push(`_Keterangan: % = omset ÷ target${B.partial ? " s/d hari berdata (like-for-like)" : ""}. Merah < ${(C.ALERTS || {}).achWarn ?? 80}%, oranye ${(C.ALERTS || {}).achWarn ?? 80}–99%, hijau ≥ 100%._`);
-    L.push(`_Dashboard: ${location.origin}${location.pathname}_`);
+    L.push("");
+    if (!compact) { L.push(`*CARA MEMBACA*`); L.push(`• Persen = omset dibagi target${B.partial ? " sampai tanggal yang sama, jadi adil walaupun bulan belum selesai" : ""}.`); L.push(`• 🔴 di bawah ${warnAt}% · 🟠 ${warnAt}–99% · 🟢 100% ke atas.`); if (B.partial) L.push(`• "Perlu per hari" = kekurangan ke target bulan penuh dibagi sisa hari.`); L.push(""); }
+    L.push(`Dashboard lengkap: ${location.origin}${location.pathname}`);
     return L.join("\n");
   }
+  function waFill() { const msg = buildWaMessage(state.waCompact); if (!msg) return false; $("waText").value = msg; $("waStatus").textContent = `${msg.length} karakter · pesan bisa diedit sebelum dikirim`; $("waText").scrollTop = 0; document.querySelectorAll("#waMode button").forEach(b => b.classList.toggle("on", (b.dataset.m === "compact") === !!state.waCompact)); return true; }
   function openWa() {
-    const msg = buildWaMessage(); if (!msg) { alert("Belum ada data target untuk periode ini."); return; }
-    $("waText").value = msg; $("waModal").classList.remove("hidden"); $("waStatus").textContent = `${msg.length} karakter · pesan bisa diedit sebelum dikirim`; $("waText").focus(); $("waText").scrollTop = 0; $("waText").setSelectionRange(0, 0);
+    if (!waFill()) { alert("Belum ada data target untuk periode ini."); return; }
+    $("waModal").classList.remove("hidden"); $("waText").focus(); $("waText").scrollTop = 0; $("waText").setSelectionRange(0, 0);
   }
   function closeWa() { $("waModal").classList.add("hidden"); }
   async function waCopy() { const t = $("waText").value; try { await navigator.clipboard.writeText(t); $("waStatus").textContent = "Tersalin. Buka grup WhatsApp lalu tempel (paste)."; } catch (e) { $("waText").select(); document.execCommand("copy"); $("waStatus").textContent = "Tersalin (mode lama). Tempel di grup WhatsApp."; } }
@@ -1449,7 +1475,7 @@
   $("selStore").addEventListener("change", e => { state.execKey = e.target.value || null; render(); });
   try { state.targetFilter = localStorage.getItem("sssg.tgFilter") || "all"; state.targetSort = localStorage.getItem("sssg.tgSort") || "pct"; } catch (e) { }
   document.querySelectorAll("#tgFilter button").forEach(b => b.addEventListener("click", () => { state.targetFilter = b.dataset.f; try { localStorage.setItem("sssg.tgFilter", b.dataset.f); } catch (e) { } renderTargetBoard(); }));
-  $("btnWa").addEventListener("click", openWa); $("waClose").addEventListener("click", closeWa); $("waCopy").addEventListener("click", waCopy); $("waOpen").addEventListener("click", waOpen);
+  $("btnWa").addEventListener("click", openWa); document.querySelectorAll("#waMode button").forEach(b => b.addEventListener("click", () => { state.waCompact = b.dataset.m === "compact"; waFill(); })); $("waClose").addEventListener("click", closeWa); $("waCopy").addEventListener("click", waCopy); $("waOpen").addEventListener("click", waOpen);
   $("waModal").addEventListener("click", e => { if (e.target === $("waModal")) closeWa(); }); document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("waModal").classList.contains("hidden")) closeWa(); });
   document.querySelectorAll("#tgSort button").forEach(b => b.addEventListener("click", () => { state.targetSort = b.dataset.s; try { localStorage.setItem("sssg.tgSort", b.dataset.s); } catch (e) { } renderTargetBoard(); }));
   $("btnBell").addEventListener("click", () => setView("alerts"));
