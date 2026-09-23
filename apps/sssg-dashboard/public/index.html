@@ -7,6 +7,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#0F6E44">
+<link rel="icon" href="favicon.ico" sizes="32x32">
+<link rel="icon" type="image/png" sizes="192x192" href="brand/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="brand/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="style.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
@@ -36,7 +41,7 @@
 </svg>
 
 <header class="topbar">
-  <div class="brandbox"><div class="logo-mark">IW</div><span id="orgName">Inti Warna</span></div>
+  <a class="brandbox" href="#exec" data-view="exec" title="Dashboard SSSG Inti Warna"><img class="logo-img" src="brand/logo-header.png" alt="Toko Cat Inti Warna"><span id="orgName" class="sr-only">Inti Warna</span></a>
   <nav class="topnav" id="nav"><div class="pillnav"><a href="#exec" data-view="exec" class="on">Ringkasan</a><a href="#rank" data-view="rank">Peringkat</a><a href="#trend" data-view="trend">Tren</a><a href="#visit" data-view="visit">Kunjungan</a><a href="#sssg" data-view="sssg">%SSSG</a><a href="#newout" data-view="newout">Outlet Baru</a><a href="#alerts" data-view="alerts">Peringatan</a><a href="#insight" data-view="insight">AI Insight</a><a href="#chat" data-view="chat">Chat AI</a></div></nav>
   <div class="top-right"><button id="btnBell" class="icon-btn" title="Peringatan"><svg><use href="#i-bell"/></svg><span class="badge hidden" id="bellBadge">0</span></button><button id="btnRefresh" class="icon-btn" title="Refresh data"><svg><use href="#i-refresh"/></svg></button><span id="avatar" class="hidden"></span><span class="hidden" id="whoName"></span><span class="hidden" id="whoOrg"></span></div>
 </header>
@@ -67,7 +72,7 @@
      <div id="view-exec" class="view">
       <section class="row-exec">
         <div class="hero card hero-big">
-          <div class="hero-brand"><span>Inti Warna</span><svg><use href="#i-wave"/></svg></div>
+          <div class="hero-brand"><span><img src="brand/icon-64.png" alt="" class="hero-mark">Inti Warna</span><svg><use href="#i-wave"/></svg></div>
           <div class="hero-head"><span id="exHeroLabel">Realisasi omset</span><span class="hero-badge" id="exHeroBadge">—</span></div>
           <div class="hero-val" id="exHeroVal">—</div>
           <div class="hero-sub" id="exHeroSub"></div>

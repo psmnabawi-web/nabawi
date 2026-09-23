@@ -301,3 +301,9 @@ button.link{background:none;border:0;padding:0;font:inherit}
 .lg{display:inline-flex;align-items:center;gap:6px;font-weight:600}.lg::before{content:"";width:10px;height:10px;border-radius:3px;background:var(--na)}.lg-bad::before{background:var(--bad)}.lg-warn::before{background:var(--warn)}.lg-good::before{background:var(--good)}
 @media(min-width:1100px){.tg-list{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px}}
 @media(max-width:760px){.tg-sub{white-space:normal}.tg-ctrl{width:100%}.tg-kpis{grid-template-columns:1fr 1fr}}
+
+/* logo Inti Warna */
+.brandbox{text-decoration:none;color:inherit}.logo-img{height:48px;width:auto;display:block}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.hero-brand span{display:inline-flex;align-items:center;gap:8px}.hero-mark{width:26px;height:26px;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box}
+@media(max-width:760px){.logo-img{height:38px}}
