@@ -182,7 +182,16 @@
     // fallback khusus tahun berjalan: sheet BASELINE (total bulanan per toko) & REKAP (level perusahaan) di spreadsheet utama
     jobs.push((async () => { try { state.baseline = await fetchSheet(C.BASELINE_SHEET, parseBaseline); } catch (e) { state.baseline = null; } })());
     jobs.push((async () => { try { state.rekap = await fetchSheet(C.REKAP_SHEET, parseRekap); } catch (e) { state.rekap = null; } })());
-    if (C.SALES && C.SALES.SHEET_ID) jobs.push((async () => { try { state.salesErr = null; state.sales = await fetchSheet(C.SALES.SHEET_NAME || "", parseSales, { sheetId: C.SALES.SHEET_ID }); if (!state.sales) state.salesErr = "tab tidak berisi tabel sales"; } catch (e) { console.warn("Sheet sales", e.message); state.sales = null; state.salesErr = e.message; } })());
+    // Sheet sales: baris 1 hampir kosong (hanya tanggal), baris 2 = header. Deteksi otomatis gviz salah dan membuang teks header
+    // di kolom angka, jadi paksa 2 baris header dulu, lalu coba variasi lain.
+    if (C.SALES && C.SALES.SHEET_ID) jobs.push((async () => {
+      state.sales = null; state.salesErr = null; const errs = [];
+      for (const headers of [2, 1, 3, 0]) {
+        try { const r = await fetchSheet(C.SALES.SHEET_NAME || "", parseSales, { sheetId: C.SALES.SHEET_ID, ...(headers ? { headers } : {}) }); if (r) { state.sales = r; state.salesErr = null; return; } errs.push(`headers=${headers}: kosong`); }
+        catch (e) { errs.push(`headers=${headers}: ${e.message}`); }
+      }
+      state.salesErr = errs.join(" · "); console.warn("Sheet sales", state.salesErr);
+    })());
     await Promise.all(jobs);
     state.years = years;
     state.yearList = Object.keys(years).map(Number).filter(y => years[y].some(Boolean)).sort((a, b) => b - a);
