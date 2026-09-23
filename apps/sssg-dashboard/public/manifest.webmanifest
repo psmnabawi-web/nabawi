@@ -1,6 +1,6 @@
 {
-  "name": "Dashboard SSSG Inti Warna",
-  "short_name": "SSSG IW",
+  "name": "Dashboard Inti Warna",
+  "short_name": "Dashboard IW",
   "start_url": "./#exec",
   "display": "standalone",
   "background_color": "#EEF0F3",
