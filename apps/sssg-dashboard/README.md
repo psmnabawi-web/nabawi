@@ -29,6 +29,15 @@ Kartu **Pencapaian target per outlet** tampil di halaman Ringkasan tanpa perlu m
 - Pencapaian = omset ÷ target **sampai hari berdata** (like-for-like) untuk bulan berjalan; target periode penuh untuk bulan lalu, YTD, dan rentang tanggal.
 - Klik outlet untuk membuka rinciannya. Ambang warna mengikuti `ALERTS.achWarn` di `config.js`.
 
+## Kirim ke grup WhatsApp
+Tombol **Kirim WA** di kartu "Pencapaian target per outlet" menyusun pesan WhatsApp dari periode yang sedang dipilih:
+total perusahaan, sisa hari dan kebutuhan per hari, daftar outlet belum/sudah mencapai target dengan emoji status,
+prioritas outlet dengan kekurangan Rp terbesar, dan tautan dashboard. Pesan bisa diedit, lalu **Salin pesan** (tempel di grup)
+atau **Buka WhatsApp** (pilih grup tujuan). Tidak memakai bot atau gateway, jadi tidak ada biaya dan tidak ada risiko blokir.
+
+Untuk blast **otomatis terjadwal** ke grup, diperlukan gateway WhatsApp pihak ketiga (mis. Fonnte/Wablas) karena API resmi
+WhatsApp tidak mengizinkan pengiriman ke grup; pemicunya bisa dari Apps Script time-driven trigger yang membaca sheet yang sama.
+
 ## Cara hitung
 - SSSG YoY = Omset toko bulan ini 2026 ÷ Omset toko bulan sama 2025 − 1 (hanya toko yang ada di kedua tahun).
 - Growth MoM = Omset bulan ini ÷ Omset bulan lalu − 1.

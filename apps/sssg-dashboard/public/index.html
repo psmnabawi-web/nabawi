@@ -36,7 +36,7 @@
   <symbol id="i-store" viewBox="0 0 24 24"><path d="M4 9l1.5-5h13L20 9M4 9v11h16V9M4 9h16M9 20v-6h6v6" stroke-linejoin="round"/></symbol>
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" stroke-linejoin="round"/><path d="M8 9h8M8 12h5" stroke-linecap="round"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24"><path d="M3 12l18-8-6 18-3-8z" stroke-linejoin="round"/><path d="M12 14l9-10" stroke-linecap="round"/></symbol>
-  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol><symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="i-wa" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 8.5c0 3.5 3 6.5 6.5 6.5l1-1.6-2-1-1 .9c-1.2-.5-2.3-1.6-2.8-2.8l.9-1-1-2z" fill="currentColor"/></symbol><symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol><symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </svg>
 
@@ -84,7 +84,7 @@
       </section>
       <section class="card" id="exTargetCard">
         <div class="card-head tg-head"><div><h3>Pencapaian target per outlet</h3><div class="muted" id="exTargetSum"></div></div>
-          <div class="tg-ctrl"><div class="seg sm" id="tgFilter" role="tablist"><button data-f="all" class="on" role="tab">Semua <i></i></button><button data-f="below" role="tab">Belum tercapai <i></i></button><button data-f="ok" role="tab">Tercapai <i></i></button></div><div class="seg sm" id="tgSort" title="Urutan daftar"><button data-s="pct" class="on">Urut %</button><button data-s="gap">Urut Rp kurang</button></div></div></div>
+          <div class="tg-ctrl"><div class="seg sm" id="tgFilter" role="tablist"><button data-f="all" class="on" role="tab">Semua <i></i></button><button data-f="below" role="tab">Belum tercapai <i></i></button><button data-f="ok" role="tab">Tercapai <i></i></button></div><div class="seg sm" id="tgSort" title="Urutan daftar"><button data-s="pct" class="on">Urut %</button><button data-s="gap">Urut Rp kurang</button></div><button class="btn-wa" id="btnWa" type="button" title="Susun pesan pencapaian outlet untuk grup WhatsApp"><svg><use href="#i-wa"/></svg>Kirim WA</button></div></div>
         <div class="tg-kpis" id="exTargetKpi"></div>
         <div class="tg-prio hidden" id="exTargetPrio"></div>
         <div class="tg-list" id="exTargetList"></div>
@@ -312,6 +312,14 @@
 
 <!-- Chat AI melayang: tersedia di semua halaman -->
 <button id="chatFab" class="chat-fab" type="button" title="Chat AI"><svg><use href="#i-chat"/></svg><span>Chat AI</span><i class="chat-dot hidden" id="chatDot"></i></button>
+
+<div id="waModal" class="wa-modal hidden" role="dialog" aria-label="Kirim ke WhatsApp">
+  <div class="wa-box">
+    <div class="chat-head"><div class="chat-head-t"><b>Kirim pencapaian ke grup WhatsApp</b><div class="muted">Pesan disusun otomatis dari periode yang sedang dipilih. Edit bila perlu, lalu salin atau buka WhatsApp dan pilih grup tujuan.</div></div><button class="chat-x" id="waClose" type="button" aria-label="Tutup">×</button></div>
+    <textarea id="waText" class="wa-text" spellcheck="false"></textarea>
+    <div class="wa-foot"><span class="muted" id="waStatus"></span><div class="wa-btns"><button class="btn-glass dark" id="waCopy" type="button">Salin pesan</button><button class="btn-wa" id="waOpen" type="button"><svg><use href="#i-wa"/></svg>Buka WhatsApp</button></div></div>
+  </div>
+</div>
 <div id="chatPanel" class="chat-panel hidden" role="dialog" aria-label="Chat AI">
   <div class="chat-head">
     <div class="chat-head-t"><b>Chat AI</b><div class="muted" id="chatSub">Brainstorm dengan AI · angka periode terpilih ikut dikirim</div></div>

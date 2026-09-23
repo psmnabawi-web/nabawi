@@ -1050,6 +1050,40 @@
     const withT = rows.filter(r => r.ach != null), below = withT.filter(r => r.ach < 1);
     return { rows, pName, partial, N, remDays, nTarget: withT.length, nBelow: below.length, gapBelow: below.reduce((x, r) => x + r.gap, 0), gapFullBelow: below.reduce((x, r) => x + (r.gapFull > 0 ? r.gapFull : 0), 0) };
   }
+  // ---------- Kirim ke WhatsApp: ringkasan pencapaian target per outlet ----------
+  const waRp = (v) => v == null ? "-" : fmtRpS(v).replace(/ /g, " ");
+  function buildWaMessage() {
+    const B = computeTargetBoard(); if (!B || !B.rows.length) return null;
+    const key = null; const E = state.range ? computeExecRange(state.range.a, state.range.b, key) : computeExec(state.month, key);
+    const org = (C.OWNER && C.OWNER.org) || "Perusahaan"; const lfl = B.partial ? ` (s/d tgl ${B.N})` : "";
+    const L = [];
+    L.push(`📊 *PENCAPAIAN TARGET OUTLET*`); L.push(`${org} · ${B.pName}${lfl}`); L.push("");
+    if (E && E.cur) {
+      const ach = E.ach, tgt = state.range ? E.cur.target : E.tgtTotal, tot = E.cur.total;
+      const ico = ach == null ? "⚪" : ach >= 1 ? "🟢" : ach * 100 >= ((C.ALERTS || {}).achWarn ?? 80) ? "🟠" : "🔴";
+      L.push(`${ico} *Total ${org}*: Rp ${waRp(tot)}${tgt ? ` dari target ${waRp(tgt)} (${(ach * 100).toFixed(0)}%)` : ""}${tgt && tot < tgt ? ` · kurang ${waRp(tgt - tot)}` : tgt ? ` · lebih ${waRp(tot - tgt)}` : ""}`);
+      if (B.partial && B.remDays > 0) { const gapFull = B.gapFullBelow; L.push(`⏱ Hari ke-${B.N} dari ${B.N + B.remDays} (${(B.N / (B.N + B.remDays) * 100).toFixed(0)}% waktu) · sisa ${B.remDays} hari${gapFull ? ` · butuh ${waRp(gapFull / B.remDays)}/hari` : ""}`); }
+      L.push("");
+    }
+    const below = B.rows.filter(r => r.status === "bad" || r.status === "warn"), ok = B.rows.filter(r => r.status === "ok"), na = B.rows.filter(r => r.status === "na");
+    const line = (r, i) => { const ico = r.status === "ok" ? "🟢" : r.status === "warn" ? "🟠" : r.status === "bad" ? "🔴" : "⚪"; if (r.ach == null) return `${ico} ${r.label}: Rp ${waRp(r.actual)} (target belum diisi)`; const base = `${ico} *${r.label}* ${(r.ach * 100).toFixed(0)}% · ${waRp(r.actual)} / ${waRp(r.target)}`; return r.ach >= 1 ? `${base} · lebih ${waRp(r.actual - r.target)}` : `${base} · kurang ${waRp(r.gap)}${r.needPerDay ? ` · butuh ${waRp(r.needPerDay)}/hari` : ""}`; };
+    if (below.length) { L.push(`*Belum mencapai target (${below.length}):*`); below.forEach((r, i) => L.push(`${i + 1}. ${line(r)}`)); L.push(""); }
+    if (ok.length) { L.push(`*Sudah mencapai target (${ok.length}):*`); ok.forEach((r, i) => L.push(`${i + 1}. ${line(r)}`)); L.push(""); }
+    if (na.length) { na.forEach(r => L.push(line(r))); L.push(""); }
+    const top = below.slice().sort((a, b) => b.gap - a.gap)[0];
+    if (top) L.push(`🎯 *Prioritas:* ${top.label}, kekurangan terbesar ${waRp(top.gap)} (${(top.gap / B.gapBelow * 100).toFixed(0)}% dari total kekurangan ${waRp(B.gapBelow)}).`);
+    else if (B.nTarget) L.push(`🎉 Semua outlet mencapai target. Pertahankan!`);
+    L.push(""); L.push(`_Keterangan: % = omset ÷ target${B.partial ? " s/d hari berdata (like-for-like)" : ""}. Merah < ${(C.ALERTS || {}).achWarn ?? 80}%, oranye ${(C.ALERTS || {}).achWarn ?? 80}–99%, hijau ≥ 100%._`);
+    L.push(`_Dashboard: ${location.origin}${location.pathname}_`);
+    return L.join("\n");
+  }
+  function openWa() {
+    const msg = buildWaMessage(); if (!msg) { alert("Belum ada data target untuk periode ini."); return; }
+    $("waText").value = msg; $("waModal").classList.remove("hidden"); $("waStatus").textContent = `${msg.length} karakter · pesan bisa diedit sebelum dikirim`; $("waText").focus(); $("waText").scrollTop = 0; $("waText").setSelectionRange(0, 0);
+  }
+  function closeWa() { $("waModal").classList.add("hidden"); }
+  async function waCopy() { const t = $("waText").value; try { await navigator.clipboard.writeText(t); $("waStatus").textContent = "Tersalin. Buka grup WhatsApp lalu tempel (paste)."; } catch (e) { $("waText").select(); document.execCommand("copy"); $("waStatus").textContent = "Tersalin (mode lama). Tempel di grup WhatsApp."; } }
+  function waOpen() { const t = $("waText").value; window.open("https://wa.me/?text=" + encodeURIComponent(t), "_blank", "noopener"); $("waStatus").textContent = "WhatsApp dibuka. Pilih grup tujuan lalu kirim."; }
   function renderTargetBoard() {
     const B = computeTargetBoard(); const list = $("exTargetList"), kpi = $("exTargetKpi"), prio = $("exTargetPrio");
     const empty = (msg) => { kpi.innerHTML = ""; prio.classList.add("hidden"); list.innerHTML = `<div class="tg-empty">${msg}</div>`; $("exTargetSum").textContent = ""; $("exTargetFoot").textContent = ""; };
@@ -1415,6 +1449,8 @@
   $("selStore").addEventListener("change", e => { state.execKey = e.target.value || null; render(); });
   try { state.targetFilter = localStorage.getItem("sssg.tgFilter") || "all"; state.targetSort = localStorage.getItem("sssg.tgSort") || "pct"; } catch (e) { }
   document.querySelectorAll("#tgFilter button").forEach(b => b.addEventListener("click", () => { state.targetFilter = b.dataset.f; try { localStorage.setItem("sssg.tgFilter", b.dataset.f); } catch (e) { } renderTargetBoard(); }));
+  $("btnWa").addEventListener("click", openWa); $("waClose").addEventListener("click", closeWa); $("waCopy").addEventListener("click", waCopy); $("waOpen").addEventListener("click", waOpen);
+  $("waModal").addEventListener("click", e => { if (e.target === $("waModal")) closeWa(); }); document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("waModal").classList.contains("hidden")) closeWa(); });
   document.querySelectorAll("#tgSort button").forEach(b => b.addEventListener("click", () => { state.targetSort = b.dataset.s; try { localStorage.setItem("sssg.tgSort", b.dataset.s); } catch (e) { } renderTargetBoard(); }));
   $("btnBell").addEventListener("click", () => setView("alerts"));
   $("rangeFrom").addEventListener("change", onRangeInput); $("rangeTo").addEventListener("change", onRangeInput);
