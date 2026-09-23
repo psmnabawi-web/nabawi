@@ -182,7 +182,7 @@
     // fallback khusus tahun berjalan: sheet BASELINE (total bulanan per toko) & REKAP (level perusahaan) di spreadsheet utama
     jobs.push((async () => { try { state.baseline = await fetchSheet(C.BASELINE_SHEET, parseBaseline); } catch (e) { state.baseline = null; } })());
     jobs.push((async () => { try { state.rekap = await fetchSheet(C.REKAP_SHEET, parseRekap); } catch (e) { state.rekap = null; } })());
-    if (C.SALES && C.SALES.SHEET_ID) jobs.push((async () => { try { state.sales = await fetchSheet(C.SALES.SHEET_NAME || "", parseSales, { sheetId: C.SALES.SHEET_ID }); } catch (e) { console.warn("Sheet sales", e.message); state.sales = null; } })());
+    if (C.SALES && C.SALES.SHEET_ID) jobs.push((async () => { try { state.salesErr = null; state.sales = await fetchSheet(C.SALES.SHEET_NAME || "", parseSales, { sheetId: C.SALES.SHEET_ID }); if (!state.sales) state.salesErr = "tab tidak berisi tabel sales"; } catch (e) { console.warn("Sheet sales", e.message); state.sales = null; state.salesErr = e.message; } })());
     await Promise.all(jobs);
     state.years = years;
     state.yearList = Object.keys(years).map(Number).filter(y => years[y].some(Boolean)).sort((a, b) => b - a);
@@ -1143,25 +1143,27 @@
   const MON3 = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MEI: 4, MAY: 4, JUN: 5, JUL: 6, AGU: 7, AUG: 7, AGS: 7, SEP: 8, SEPT: 8, OKT: 9, OCT: 9, NOV: 10, DES: 11, DEC: 11 };
   const parseSalesDate = (v) => { if (v == null) return null; const d = parseDate(v); if (d) return d; const m = String(v).trim().match(/^(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})$/); if (!m) return null; const k = m[2].toUpperCase(); const mi = k in MON3 ? MON3[k] : MONTH_NAMES.findIndex(n => norm(n) === k); return mi < 0 ? null : new Date(+m[3], mi, +m[1]); };
   function parseSales(rows) {
-    const hi = rows.findIndex(r => r && r.some(v => norm(v) === "NAMA") && r.some(v => /^TARGET\b/.test(norm(v))));
-    if (hi < 0) return null;
+    // Header bisa digabung gviz dengan baris tanggal di atasnya (mis. "23 Sep 2026 Total Price"), jadi cocokkan dengan "mengandung", bukan sama persis.
+    const hi = rows.findIndex(r => r && r.some(v => /\bNAMA\b/.test(norm(v))) && r.some(v => /\bTARGET\b/.test(norm(v))) && r.some(v => /TOTAL PRICE/.test(norm(v))));
+    if (hi < 0) throw new Error("baris header (Nama | Target | Total Price) tidak ditemukan di tab pertama");
     const H = rows[hi].map(norm);
-    const cName = H.indexOf("NAMA"), cTarget = H.findIndex(h => /^TARGET\b/.test(h) && !/HARI/.test(h)), cTotal = H.findIndex(h => h === "TOTAL PRICE"), cMtd = H.findIndex(h => h === "MONTH TO DATE");
-    if (cName < 0 || cTarget < 0 || cTotal < 0) return null;
-    let mi = -1, year = null; const m = H[cTarget].match(/^TARGET\s+([A-Z]+)/); if (m) mi = MONTH_NAMES.findIndex(n => norm(n) === m[1]);
-    const dayCols = [];
-    for (const r of [hi - 1, hi - 2, hi + 0]) { if (r < 0) continue; (rows[r] || []).forEach((v, c) => { if (c <= cMtd) return; const d = parseSalesDate(v); if (d) dayCols.push({ c, d: d.getDate(), mi: d.getMonth(), y: d.getFullYear() }); }); if (dayCols.length) break; }
-    if (dayCols.length) { const first = dayCols[0]; year = first.y; if (mi < 0) mi = first.mi; }
+    const cName = H.findIndex(h => /\bNAMA\b/.test(h)), cTarget = H.findIndex(h => /\bTARGET\b/.test(h) && !/HARI/.test(h)), cTotal = H.findIndex(h => /TOTAL PRICE/.test(h)), cMtd = H.findIndex(h => /MONTH TO DATE/.test(h));
+    if (cName < 0 || cTarget < 0 || cTotal < 0) throw new Error("kolom Nama/Target/Total Price tidak lengkap");
+    let mi = -1, year = null; const m = H[cTarget].match(/TARGET\s+([A-Z]+)/); if (m) mi = MONTH_NAMES.findIndex(n => norm(n) === m[1]);
+    const findDate = (v) => { if (v == null) return null; const d = parseDate(v); if (d) return d; const mm = String(v).match(/(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})/); return mm ? parseSalesDate(`${mm[1]} ${mm[2]} ${mm[3]}`) : null; };
+    const dayCols = []; const seen = new Set();
+    for (const r of [hi, hi - 1, hi - 2]) { if (r < 0) continue; (rows[r] || []).forEach((v, c) => { if (c <= Math.max(cTotal, cMtd)) return; const d = findDate(v); if (d) { const key = d.getDate() + "-" + d.getMonth(); if (!seen.has(key)) { seen.add(key); dayCols.push({ c, d: d.getDate(), mi: d.getMonth(), y: d.getFullYear() }); } } }); }
+    if (dayCols.length) { year = dayCols[0].y; if (mi < 0) mi = dayCols[0].mi; }
     if (mi < 0) mi = new Date().getMonth(); if (year == null) year = new Date().getFullYear();
     const out = []; let lastDay = 0;
     for (let r = hi + 1; r < rows.length; r++) {
-      const row = rows[r] || []; const name = String(row[cName] ?? "").trim(); if (!name) { if (out.length) break; else continue; }
+      const row = rows[r] || []; const name = String(row[cName] ?? "").trim(); if (!name || /^\d+$/.test(name)) { if (out.length && !name) break; else continue; }
       if (/^(total|jumlah|grand total)$/i.test(name)) break;
       const target = num(row[cTarget]) || 0, total = num(row[cTotal]) || 0; const days = {};
       for (const dc of dayCols) { if (dc.mi !== mi) continue; const v = num(row[dc.c]); if (v != null && v !== 0) { days[dc.d] = v; if (v > 0) lastDay = Math.max(lastDay, dc.d); } }
       out.push({ name: name.replace(/\s+/g, " "), target, total, mtdSheet: num(row[cMtd]), days });
     }
-    if (!out.length) return null;
+    if (!out.length) throw new Error("tidak ada baris sales di bawah header");
     const dim = daysIn(year, mi);
     return { mi, year, dim, lastDay: lastDay || dim, rows: out, fetchedAt: Date.now() };
   }
@@ -1176,7 +1178,7 @@
   }
   function renderSales() {
     const R = computeSales(); const list = $("salesList"), kpi = $("salesKpi"), prio = $("salesPrio");
-    if (!R) { $("salesSub").textContent = "Data sales belum terbaca."; kpi.innerHTML = ""; prio.classList.add("hidden"); list.innerHTML = `<div class="tg-empty">Spreadsheet pencapaian sales tidak terbaca. Pastikan dibagikan "Siapa saja yang memiliki link — Viewer" dan ID di <code>config.js</code> (SALES.SHEET_ID) benar.</div>`; $("salesFoot").textContent = ""; return; }
+    if (!R) { $("salesSub").textContent = "Data sales belum terbaca."; kpi.innerHTML = ""; prio.classList.add("hidden"); list.innerHTML = `<div class="tg-empty">Spreadsheet pencapaian sales tidak terbaca${state.salesErr ? `: <b>${String(state.salesErr).replace(/</g, "&lt;").slice(0, 300)}</b>` : ""}. Pastikan dibagikan "Siapa saja yang memiliki link — Viewer" dan ID di <code>config.js</code> (SALES.SHEET_ID) benar.</div>`; $("salesFoot").textContent = ""; return; }
     const warnAt = (C.ALERTS || {}).achWarn ?? 80; const lfl = R.partial ? ` · data s/d tgl ${R.N} (hari ke-${R.N} dari ${R.dim})` : " · bulan penuh";
     $("salesSub").innerHTML = `${R.pName}${lfl} · ${R.rows.length} sales · pencapaian = omset ÷ target ${R.partial ? "s/d hari berdata" : "bulan"}${R.same ? "" : ` · <b>catatan:</b> sheet sales hanya berisi ${R.pName}, tidak mengikuti periode yang dipilih di atas`}`;
     const k = (n, l, cl, sub) => `<div class="tg-kpi ${cl}"><b>${n}</b><span>${l}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
