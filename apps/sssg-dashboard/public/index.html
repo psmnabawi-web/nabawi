@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard SSSG — Inti Warna</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></symbol>
+  <symbol id="i-bars" viewBox="0 0 24 24"><rect x="4" y="10" width="4" height="10" rx="1.5"/><rect x="10" y="4" width="4" height="16" rx="1.5"/><rect x="16" y="13" width="4" height="7" rx="1.5"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13" stroke-linecap="round"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></symbol>
+  <symbol id="i-trend" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 7h6v6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01" stroke-linecap="round"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M9 6l-6 6 6 6M4 12h16" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6" stroke-linecap="round"/><path d="M20 4v5h-5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4" stroke-linecap="round"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v13M6 11l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 4v16M7 20l-3-3M7 20l3-3M17 20V4M17 4l-3 3M17 4l3 3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4" stroke-linecap="round"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h5M15 8l4 4-4 4M19 12H9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" stroke-linejoin="round"/><path d="M10 20a2 2 0 0 0 4 0" stroke-linecap="round"/></symbol>
+  <symbol id="i-wave" viewBox="0 0 24 24"><path d="M8.5 8.5a5 5 0 0 1 7 0M6 6a8.5 8.5 0 0 1 12 0M11 11a1.5 1.5 0 0 1 2 0" stroke-linecap="round"/></symbol>
+  <symbol id="i-store" viewBox="0 0 24 24"><path d="M4 9l1.5-5h13L20 9M4 9v11h16V9M4 9h16M9 20v-6h6v6" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" stroke-linejoin="round"/><path d="M8 9h8M8 12h5" stroke-linecap="round"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M3 12l18-8-6 18-3-8z" stroke-linejoin="round"/><path d="M12 14l9-10" stroke-linecap="round"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<header class="topbar">
+  <div class="brandbox"><div class="logo-mark">IW</div><span id="orgName">Inti Warna</span></div>
+  <nav class="topnav" id="nav"><div class="pillnav"><a href="#exec" data-view="exec" class="on">Ringkasan</a><a href="#rank" data-view="rank">Peringkat</a><a href="#trend" data-view="trend">Tren</a><a href="#visit" data-view="visit">Kunjungan</a><a href="#sssg" data-view="sssg">%SSSG</a><a href="#newout" data-view="newout">Outlet Baru</a><a href="#alerts" data-view="alerts">Peringatan</a><a href="#insight" data-view="insight">AI Insight</a><a href="#chat" data-view="chat">Chat AI</a></div></nav>
+  <div class="top-right"><button id="btnBell" class="icon-btn" title="Peringatan"><svg><use href="#i-bell"/></svg><span class="badge hidden" id="bellBadge">0</span></button><button id="btnRefresh" class="icon-btn" title="Refresh data"><svg><use href="#i-refresh"/></svg></button><span id="avatar" class="hidden"></span><span class="hidden" id="whoName"></span><span class="hidden" id="whoOrg"></span></div>
+</header>
+<div class="shell" id="shell">
+  <aside class="rail">
+    <div class="grp"><a href="#exec" data-view="exec" title="Ringkasan" class="on"><svg><use href="#i-grid"/></svg></a><a href="#rank" data-view="rank" title="Peringkat"><svg><use href="#i-list"/></svg></a><a href="#trend" data-view="trend" title="Tren"><svg><use href="#i-trend"/></svg></a><a href="#visit" data-view="visit" title="Kunjungan"><svg><use href="#i-bars"/></svg></a><a href="#sssg" data-view="sssg" title="%SSSG"><svg><use href="#i-table"/></svg></a><a href="#newout" data-view="newout" title="Outlet Baru"><svg><use href="#i-store"/></svg></a><a href="#alerts" data-view="alerts" title="Peringatan"><svg><use href="#i-info"/></svg></a><a href="#insight" data-view="insight" title="AI Insight"><svg><use href="#i-target"/></svg></a><a href="#chat" data-view="chat" title="Chat AI"><svg><use href="#i-chat"/></svg></a></div>
+    <div class="grp bottom" id="sheetLinks"></div>
+  </aside>
+
+  <div class="main" id="top">
+    <span id="greet" class="hidden"></span>
+    <div class="controls">
+      <label class="pill-select" id="yearPill"><span class="lbl">Tahun</span><select id="selYear" aria-label="Tahun"></select></label>
+      <label class="pill-select"><span class="lbl">Periode</span><select id="selMonth" aria-label="Periode"></select></label>
+      <label class="pill-select range hidden" id="rangePill" title="Rentang tanggal"><input type="date" id="rangeFrom" aria-label="Dari"><span class="muted">–</span><input type="date" id="rangeTo" aria-label="Sampai"><button type="button" id="rangeClear" class="x" title="Hapus rentang, kembali ke bulanan">×</button></label>
+      <label class="pill-select hidden" id="storePill"><span class="lbl">Outlet</span><select id="selStore" aria-label="Outlet"></select></label>
+      <div class="seg" id="seg" role="tablist">
+        <button class="on" data-mode="yoy" role="tab">SSSG YoY</button>
+        <button data-mode="mom" role="tab">Growth MoM</button>
+      </div>
+    </div>
+
+    <div id="status" class="status">Memuat data dari Google Sheet…</div>
+    <div id="banner" class="banner hidden"></div>
+
+    <main id="app" class="hidden">
+     <!-- 1. Ringkasan Eksekutif -->
+     <div id="view-exec" class="view">
+      <section class="row-exec">
+        <div class="hero card hero-big">
+          <div class="hero-brand"><span>Inti Warna</span><svg><use href="#i-wave"/></svg></div>
+          <div class="hero-head"><span id="exHeroLabel">Realisasi omset</span><span class="hero-badge" id="exHeroBadge">—</span></div>
+          <div class="hero-val" id="exHeroVal">—</div>
+          <div class="hero-sub" id="exHeroSub"></div>
+          <div class="prog"><div class="prog-bar"><i id="exProgBar"></i></div><div class="prog-txt" id="exProgTxt"></div></div>
+          <div class="hero-btns"><button id="btnRefreshEx" class="btn-white"><svg><use href="#i-refresh"/></svg>Refresh</button><a class="btn-glass" href="#alerts" data-view="alerts"><svg><use href="#i-info"/></svg>Peringatan</a></div>
+        </div>
+        <div class="tiles big" id="exTiles"></div>
+      </section>
+      <div class="tiles big three" id="exTiles2"></div>
+      <section class="card">
+        <div class="card-head"><div><h3>Realisasi harian vs target</h3><div class="muted" id="exDailySub"></div></div><div class="legend" id="exDailyLegend"></div></div>
+        <div class="chart-wrap tall"><canvas id="chartExDaily"></canvas></div>
+        <div class="howto" id="exDailyHow"></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><div><h3>Realisasi bulanan vs target</h3><div class="muted" id="exMonthlySub"></div></div><div class="legend" id="exMonthlyLegend"></div></div>
+        <div class="chart-wrap"><canvas id="chartExMonthly"></canvas></div>
+      </section>
+      <section class="row-mid">
+        <div class="card"><div class="card-head"><div><h3>Peringatan</h3><div class="muted" id="exAlertSum"></div></div><a class="link" href="#alerts" data-view="alerts">Lihat semua</a></div><div class="al-list" id="exAlertList"></div></div>
+        <div class="card"><div class="card-head"><h3>Insight utama</h3><a class="link" href="#insight" data-view="insight">Semua insight</a></div><div class="ins-list" id="exInsightList"></div></div>
+      </section>
+     </div>
+
+     <!-- 2. Peringkat Outlet -->
+     <div id="view-rank" class="view hidden">
+      <section class="card"><div class="card-head"><div><h3>Peringkat outlet berdasarkan omset</h3><div class="muted" id="rankSub"></div></div></div><div class="chart-wrap tall"><canvas id="chartRankRev"></canvas></div></section>
+      <section class="row-mid">
+        <div class="card"><div class="card-head"><div><h3>Growth per outlet</h3><div class="muted" id="rankGrowthSub"></div></div></div><div class="chart-wrap"><canvas id="chartRankGrowth"></canvas></div></div>
+        <div class="card"><div class="card-head"><h3>Kontribusi outlet</h3></div><div class="donut-wrap"><canvas id="chartContrib"></canvas></div><div class="contrib-list" id="contribList"></div></div>
+      </section>
+      <section class="card"><div class="card-head"><h3>Tabel peringkat</h3></div><div class="table-wrap"><table id="tblRank" class="tbl"></table></div></section>
+     </div>
+
+     <!-- 3. Analisis Tren -->
+     <div id="view-trend" class="view hidden">
+      <section class="card">
+        <div class="card-head"><div><h3>Realisasi harian</h3><div class="muted" id="trDailySub"></div></div><div class="ctrls"><div class="seg sm" id="trCmp"><button data-cmp="target" class="on">vs Target</button><button data-cmp="pm">vs Bulan lalu</button><button data-cmp="py">vs Tahun lalu</button></div><div class="chips" id="trChips"></div></div></div>
+        <div class="legend" id="trDailyLegend"></div>
+        <div class="chart-wrap tall"><canvas id="chartTrDaily"></canvas></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><div><h3>Realisasi bulanan</h3><div class="muted" id="trMonthlySub"></div></div><div class="legend" id="trMonthlyLegend"></div></div>
+        <div class="chart-wrap"><canvas id="chartTrMonthly"></canvas></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><div><h3>Pola hari — rata-rata omset per hari dalam seminggu</h3><div class="muted" id="trDowSub"></div></div></div>
+        <div class="chart-wrap"><canvas id="chartTrDow"></canvas></div>
+      </section>
+      <section class="card"><div class="card-head"><h3>Pola hari per outlet</h3><span class="muted">hijau = hari terkuat, merah = terlemah</span></div><div class="table-wrap"><table id="tblDow" class="tbl"></table></div></section>
+     </div>
+
+     <!-- 4. %SSSG -->
+     <div id="view-sssg" class="view hidden">
+      <section class="row-top" id="sec-top">
+        <div class="hero card">
+          <div class="hero-head"><span id="heroLabel">Growth perusahaan</span><span class="hero-badge" id="heroBadge">—</span></div>
+          <div class="hero-val" id="heroVal">—</div>
+          <div class="hero-sub" id="heroSub"></div>
+          <div class="hero-btns">
+            <button id="btnRefresh2" class="btn-white"><svg><use href="#i-refresh"/></svg>Refresh</button>
+            <button id="btnCsv" class="btn-glass"><svg><use href="#i-down"/></svg>Export CSV</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Ringkasan bulan</h3><span class="pill-muted" id="kpiSub"></span></div>
+          <div class="tiles" id="tiles"></div>
+        </div>
+        <div class="card score">
+          <div class="card-head"><h3>Pencapaian target</h3><span class="big" id="achBig">—</span></div>
+          <div class="mini-wrap"><canvas id="chartMini"></canvas></div>
+          <div class="legend"><span><i class="dot brand"></i>Omset harian</span><span><i class="dot ghost"></i>Hari tersisa</span><span class="muted" id="achSub"></span></div>
+        </div>
+      </section>
+
+      <section class="row-mid">
+        <div class="card" id="sec-omset">
+          <div class="card-head">
+            <div><h3>Omset per toko</h3><div class="legend"><span><i class="dot brand"></i><b id="legA"></b></span><span><i class="dot ghost"></i><b id="legB"></b></span><span class="muted" id="legNote"></span></div></div>
+            <span class="pill-muted" id="omsetSub"></span>
+          </div>
+          <div class="chart-wrap"><canvas id="chartOmset"></canvas></div>
+        </div>
+        <div class="card insight">
+          <div class="card-head"><h3>Sorotan</h3><span class="muted" id="insightMode"></span></div>
+          <div class="orb"></div>
+          <div class="insight-q" id="insightQ">Memuat…</div>
+          <div class="chips" id="insightChips"></div>
+          <label class="ask"><svg><use href="#i-search"/></svg><input id="storeFilter" placeholder="Cari toko di tabel…" autocomplete="off"><button id="btnClearFilter" class="btn-brand-sm" type="button">Reset</button></label>
+        </div>
+      </section>
+
+      <section class="row-bot">
+        <div class="card" id="sec-table">
+          <div class="card-head"><div><h3>Rincian per toko</h3><div class="muted" id="tableSub"></div></div><a class="link" href="#sec-matrix">Lihat matriks</a></div>
+          <div class="table-wrap"><table id="tblStore" class="tbl"></table></div>
+        </div>
+        <div class="card quick">
+          <div class="card-head"><h3 id="rankTitle">Peringkat growth</h3><button class="icon-btn sm" id="btnSwap" title="Tukar terbaik / terlemah"><svg><use href="#i-swap"/></svg></button></div>
+          <div class="rank-list" id="rankList"></div>
+          <div class="muted" id="rankFoot"></div>
+        </div>
+      </section>
+
+      <section class="card" id="sec-matrix">
+        <div class="card-head"><div><h3 id="matrixTitle">Matriks growth % per bulan per toko</h3><div class="muted">Hijau ≥ +5% · Kuning 0–5% · Merah &lt; 0% · "n/a" = tidak comparable / baseline belum ada</div></div></div>
+        <div class="table-wrap"><table id="tblMatrix" class="tbl matrix"></table></div>
+      </section>
+
+      <section class="card" id="sec-trend">
+        <div class="card-head"><h3>Tren growth % per bulan</h3><div class="chips" id="chips"></div></div>
+        <div class="chart-wrap tall"><canvas id="chartTrend"></canvas></div>
+      </section>
+
+      <section class="card notes" id="sec-notes">
+        <div class="card-head"><h3>Definisi &amp; aturan hitung</h3></div>
+        <ul>
+          <li><b>SSSG YoY</b> = (Omset toko bulan ini ÷ Omset toko bulan yang sama tahun sebelumnya) − 1. Hanya toko yang beroperasi di kedua tahun; toko yang belum/tidak ada di tahun pembanding dan Gudang dikeluarkan otomatis.</li>
+          <li><b>Growth MoM</b> = (Omset bulan ini ÷ Omset bulan lalu) − 1, toko dianggap aktif bila sudah berjualan paling lambat tanggal <span id="minDays"></span> pada bulan tersebut (toko yang buka pertengahan bulan tidak dibandingkan).</li>
+          <li><b>Bulan berjalan</b> dibandingkan secara <b>like-for-like</b>: hari 1–N bulan ini vs hari 1–N bulan pembanding (MoM: bulan lalu; YoY: bulan yang sama tahun sebelumnya, harian per toko).</li>
+          <li><b>Total growth perusahaan</b> memakai seluruh toko termasuk toko baru; <b>SSSG perusahaan</b> hanya toko comparable. Selisih keduanya = kontribusi toko baru.</li>
+          <li>Pembanding YoY dibaca <b>harian per toko</b> dari spreadsheet tahun sebelumnya (daftar <code>SHEETS</code> di config.js; tab JANUARI–DESEMBER, format sama). Khusus tahun berjalan, bila satu bulan pembanding tidak terbaca dipakai sheet <code id="baseName"></code> (total bulanan, diprorata) bila ada; bila tidak, level perusahaan dari REKAP.</li>
+        </ul>
+        <div class="muted" id="footInfo"></div>
+      </section>
+     </div>
+
+     <!-- 5. Outlet Baru -->
+     <div id="view-newout" class="view hidden">
+      <section class="card"><div class="card-head"><div><h3>Outlet baru</h3><div class="muted" id="newSub"></div></div></div><div class="tiles" id="newTiles"></div><div class="muted hidden" id="newEmpty" style="padding:10px 0">Tidak ada outlet yang dibuka dalam jendela waktu ini.</div></section>
+      <section class="card"><div class="card-head"><div><h3>Kurva ramp-up sejak pembukaan</h3><div class="muted" id="newChartSub"></div></div></div><div class="chart-wrap tall"><canvas id="chartNew"></canvas></div></section>
+      <section class="card"><div class="card-head"><h3>Kinerja per outlet baru</h3></div><div class="table-wrap"><table id="tblNew" class="tbl"></table></div></section>
+     </div>
+
+     <!-- 6. Peringatan Otomatis -->
+     <div id="view-alerts" class="view hidden">
+      <section class="card"><div class="card-head"><div><h3>Peringatan otomatis</h3><div class="muted" id="alertSub"></div></div></div><div class="tiles" id="alertTiles"></div></section>
+      <section class="card"><div id="alertList"></div><div class="muted" id="alertRules" style="margin-top:8px"></div></section>
+     </div>
+
+     <!-- 7. AI Insight -->
+     <div id="view-insight" class="view hidden">
+      <section class="card ai-box">
+        <div class="card-head"><div><h3>Narasi AI</h3><div class="muted" id="aiSub">Analisis naratif oleh model bahasa dari angka yang sudah dihitung dashboard · token disimpan hanya di browser ini</div></div><div class="ctrls"><button class="link" id="aiToggle" type="button">Pengaturan</button></div></div>
+        <div class="ai-settings hidden" id="aiSettings">
+          <label>Alamat API<input id="aiBase" type="url" placeholder="https://api.sylorapi.com/v1" autocomplete="off"></label>
+          <label>Token API<input id="aiKey" type="password" placeholder="sk-…" autocomplete="off"></label>
+          <label>Model<div class="row"><select id="aiModel"></select><button type="button" class="btn-brand-sm" id="aiLoadModels">Muat daftar model</button></div></label>
+          <div class="row"><button type="button" class="btn-brand-sm" id="aiSave">Simpan</button><button type="button" class="link" id="aiForget">Hapus token dari browser</button><span class="muted" id="aiSettingsNote"></span></div>
+        </div>
+        <div class="ai-actions"><button class="btn-brand" id="aiRun" type="button"><svg><use href="#i-target"/></svg>Buat narasi AI</button><button class="link hidden" id="aiCancel" type="button">Batalkan</button><span class="muted" id="aiStatus"></span></div>
+        <div class="ai-out hidden" id="aiOut"></div>
+      </section>
+      <section class="card insight-lead"><div class="card-head"><div><h3>Ringkasan insight</h3><div class="muted" id="insightSub"></div></div><span class="pill brand">berbasis aturan</span></div><div class="insight-summary" id="insightSummary"></div></section>
+      <section class="ins-grid" id="insightCards"></section>
+      <section class="card notes"><div class="card-head"><h3>Cara kerja</h3></div><ul><li>Insight dihitung langsung dari data omset, target, dan kunjungan di spreadsheet — setiap kalimat dapat ditelusuri ke angka di halaman lain.</li><li>Aturan yang dipakai: pendorong/penahan growth (Δ Rp vs tahun lalu), konsentrasi omset (2 outlet teratas), pola hari-dalam-minggu, hubungan kunjungan × konversi × basket size, ramp-up outlet baru, kebutuhan Rp/hari untuk mencapai target, dan tren negatif berturut-turut.</li><li><b>Narasi AI</b> bersifat opsional: memakai token API milik Anda yang disimpan hanya di browser ini (localStorage), dipanggil langsung dari browser ke API yang kompatibel OpenAI. Yang dikirim ke model hanya ringkasan angka yang sudah dihitung, bukan data mentah spreadsheet, dan model diinstruksikan tidak mengarang angka. Token tidak pernah ditanam di kode situs.</li></ul></section>
+     </div>
+
+     <!-- 8. Kunjungan -->
+     <div id="view-visit" class="view hidden">
+      <section class="row-top" id="sec-visit">
+        <div class="hero card visit">
+          <div class="hero-head"><span id="vHeroLabel">Kunjungan</span><span class="hero-badge" id="vHeroBadge">—</span></div>
+          <div class="hero-val" id="vHeroVal">—</div>
+          <div class="hero-sub" id="vHeroSub"></div>
+          <div class="hero-btns">
+            <button id="btnRefresh3" class="btn-white"><svg><use href="#i-refresh"/></svg>Refresh</button>
+            <button id="btnCsvVisit" class="btn-glass"><svg><use href="#i-down"/></svg>Export CSV</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Ringkasan kunjungan</h3><span class="pill-muted" id="vKpiSub"></span></div>
+          <div class="tiles" id="vTiles"></div>
+        </div>
+        <div class="card score">
+          <div class="card-head"><h3>Konversi belanja</h3><span class="big teal" id="vKonvBig">—</span></div>
+          <div class="mini-wrap"><canvas id="chartVisitMini"></canvas></div>
+          <div class="legend"><span><i class="dot teal"></i>Belanja</span><span><i class="dot ghost"></i>Gagal</span><span class="muted" id="vKonvSub"></span></div>
+        </div>
+      </section>
+
+      <section class="row-mid">
+        <div class="card" id="sec-visit-store">
+          <div class="card-head">
+            <div><h3>Kunjungan per toko</h3><div class="legend"><span><i class="dot brand"></i>Datang</span><span><i class="dot teal"></i>Belanja</span><span class="muted">angka di atas batang = konversi %</span></div></div>
+            <span class="pill-muted" id="vBarSub"></span>
+          </div>
+          <div class="chart-wrap"><canvas id="chartVisitBars"></canvas></div>
+        </div>
+        <div class="card insight">
+          <div class="card-head"><h3>Sorotan kunjungan</h3><span class="muted" id="vInsightMode"></span></div>
+          <div class="orb visit"></div>
+          <div class="insight-q" id="vInsightQ">Memuat…</div>
+          <div class="chips" id="vInsightChips"></div>
+        </div>
+      </section>
+
+      <section class="row-bot">
+        <div class="card" id="sec-visit-table">
+          <div class="card-head"><div><h3>Rincian kunjungan per toko</h3><div class="muted" id="vTableSub"></div></div></div>
+          <div class="table-wrap"><table id="tblVisit" class="tbl"></table></div>
+        </div>
+        <div class="card quick">
+          <div class="card-head"><h3 id="vRankTitle">Konversi tertinggi</h3><button class="icon-btn sm" id="btnSwapVisit" title="Tukar tertinggi / terendah"><svg><use href="#i-swap"/></svg></button></div>
+          <div class="rank-list" id="vRankList"></div>
+          <div class="muted" id="vRankFoot"></div>
+        </div>
+      </section>
+
+      <section class="card" id="sec-visit-trend">
+        <div class="card-head"><div><h3 id="vTrendTitle">Tren kunjungan harian</h3><div class="muted" id="vTrendSub"></div></div><div class="chips" id="vChips"></div></div>
+        <div class="chart-wrap tall"><canvas id="chartVisitTrend"></canvas></div>
+      </section>
+
+      <section class="card notes">
+        <div class="card-head"><h3>Definisi kunjungan</h3></div>
+        <ul>
+          <li><b>Datang</b> = pelanggan yang berkunjung; <b>Belanja</b> = yang bertransaksi; <b>Gagal</b> = datang tanpa belanja. <b>Konversi</b> = Belanja ÷ Datang.</li>
+          <li><b>Basket size</b> = Omset ÷ Belanja (rata-rata nilai transaksi), memakai omset harian toko yang sama.</li>
+          <li><b>Repeat order (RO)</b> dan <b>Pelanggan baru</b> = porsi dari transaksi Belanja; hanya tersedia bila sheet mencatat kolom RO dan BARU (mulai 2026).</li>
+          <li>Pembanding mengikuti mode di header: <b>SSSG YoY</b> = bulan yang sama tahun sebelumnya, <b>Growth MoM</b> = bulan lalu; bulan berjalan dibandingkan like-for-like tgl 1–N. Perubahan konversi ditulis dalam poin persentase (pts).</li>
+          <li>Sumber: blok <code>ABSEN KUNJUNGAN PER HARI</code> di tab bulanan yang sama dengan omset. Total dihitung dari per toko (kolom TOTAL di sheet tidak dipakai).</li>
+        </ul>
+      </section>
+     </div>
+    </main>
+  </div>
+</div>
+
+<!-- Chat AI melayang: tersedia di semua halaman -->
+<button id="chatFab" class="chat-fab" type="button" title="Chat AI"><svg><use href="#i-chat"/></svg><span>Chat AI</span><i class="chat-dot hidden" id="chatDot"></i></button>
+<div id="chatPanel" class="chat-panel hidden" role="dialog" aria-label="Chat AI">
+  <div class="chat-head">
+    <div class="chat-head-t"><b>Chat AI</b><div class="muted" id="chatSub">Brainstorm dengan AI · angka periode terpilih ikut dikirim</div></div>
+    <div class="chat-head-btns"><label class="chk" title="Kirim angka periode & outlet yang sedang dipilih sebagai konteks"><input type="checkbox" id="chatCtx" checked>Data periode</label><button class="link" id="chatClear" type="button">Hapus</button><a class="link" href="#insight" data-view="insight" title="Pengaturan model">Model</a><button class="chat-x" id="chatClose" type="button" aria-label="Tutup">×</button></div>
+  </div>
+  <div class="chat-log" id="chatLog"></div>
+  <div class="chat-chips" id="chatChips"></div>
+  <div class="chat-form"><textarea id="chatInput" rows="1" placeholder="Tanya atau ajak brainstorm… (Enter = kirim)"></textarea><button class="btn-brand" id="chatSend" type="button" title="Kirim"><svg><use href="#i-send"/></svg></button></div>
+  <div class="muted chat-status" id="chatStatus"><button class="link hidden" id="chatStop" type="button">Hentikan</button><span id="chatStatusText"></span></div>
+</div>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
