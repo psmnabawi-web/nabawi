@@ -3,7 +3,7 @@ import { z } from 'zod/v4';
 import { requireProfile, jsonError, writeAuditLog, assertStoreAccess, requireRole } from '@/lib/auth-server';
 import { adminBucket } from '@/lib/firebase/admin';
 import { effectiveScore, meetsSubmitThreshold, MIN_SUBMIT_PCT } from '@/lib/scoring';
-import { autoSubmitIfDone, findBlockingItem, loadAudit, recomputeSummary } from '@/lib/server/audits';
+import { autoSubmitIfDone, loadAudit, recomputeSummary } from '@/lib/server/audits';
 import type { AuditItem } from '@/lib/types';
 import { HttpError } from '@/lib/utils';
 
@@ -19,7 +19,7 @@ const PatchSchema = z.object({
 
 /**
  * PATCH /api/audits/:id/items/:itemId
- * - lock            : crew "Submit Area". Syarat: ada foto, skor >= batas (75%), area sebelumnya sudah selesai. Semua selesai -> audit auto-submit.
+ * - lock            : crew "Submit Area". Syarat: ada foto, skor >= batas (75%). Semua area selesai -> audit auto-submit.
  * - unlock          : manager/admin membuka kunci area agar bisa difoto ulang.
  * - skip / unskip   : manager/admin melewati area (mis. renovasi), wajib alasan. Tidak dihitung dalam skor.
  * - override / clear_override : manager/admin mengoreksi skor AI (wajib alasan).
@@ -51,9 +51,6 @@ export async function PATCH(req: Request, { params }: Params) {
       if (!meetsSubmitThreshold(score)) {
         throw new HttpError(422, `Skor area ${score === null ? 'belum ada' : `${score * 20}%`} di bawah batas ${MIN_SUBMIT_PCT}%. Bersihkan area sesuai rekomendasi lalu foto ulang.`);
       }
-      const allItems = (await ref.collection('items').get()).docs.map((d) => d.data() as AuditItem);
-      const blocking = findBlockingItem(allItems, item);
-      if (blocking) throw new HttpError(409, `Selesaikan area #${blocking.no} ${blocking.area} terlebih dahulu.`);
       await itemRef.set({ locked: true, lockedAt: now, lockedByUid: ctx.uid, lockedByName: ctx.profile.name, updatedAt: now }, { merge: true });
       await writeAuditLog(ctx, { action: 'LOCK_ITEM', entity: 'auditItem', entityId: `${id}/${itemId}`, details: { area: item.area, score, attempts: item.attempts ?? 1 } });
       autoSubmitted = await autoSubmitIfDone(id);

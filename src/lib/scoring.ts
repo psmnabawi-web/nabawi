@@ -23,9 +23,14 @@ export function isDone(item: Pick<AuditItem, 'locked' | 'status'>): boolean {
   return item.status === 'skipped' || item.locked === true;
 }
 
-/** Urutan kerja: area ke-i terbuka jika semua area sebelumnya selesai. Mengembalikan index area aktif (-1 jika semua selesai). */
-export function activeIndex(items: Pick<AuditItem, 'locked' | 'status'>[]): number {
-  return items.findIndex((it) => !isDone(it));
+/** Area sedang dikerjakan: sudah ada foto/hasil AI tetapi belum di-submit atau dilewati. */
+export function isInProgress(item: Pick<AuditItem, 'locked' | 'status' | 'photoUrl' | 'ai'>): boolean {
+  return !isDone(item) && (!!item.photoUrl || !!item.ai);
+}
+
+/** Aturan: urutan bebas, tetapi hanya satu area yang boleh dikerjakan pada satu waktu. */
+export function findInProgress<T extends Pick<AuditItem, 'id' | 'locked' | 'status' | 'photoUrl' | 'ai'>>(items: T[], exceptId?: string): T | null {
+  return items.find((it) => it.id !== exceptId && isInProgress(it)) ?? null;
 }
 
 export const GRADE_RULES: { grade: Grade; minPct: number; label: string; color: string }[] = [

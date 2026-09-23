@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     if (item.status === 'skipped') throw new HttpError(400, 'Area ini dilewati oleh manager.');
     const allItems = (await ref.collection('items').get()).docs.map((d) => d.data() as AuditItem);
     const blocking = findBlockingItem(allItems, item);
-    if (blocking) throw new HttpError(409, `Selesaikan area #${blocking.no} ${blocking.area} terlebih dahulu (submit area sebelumnya).`);
+    if (blocking) throw new HttpError(409, `Area #${blocking.no} ${blocking.area} masih dikerjakan. Selesaikan (Submit Area) atau hapus fotonya dulu sebelum memulai area lain.`);
 
     // 1) Simpan foto
     const buffer = Buffer.from(body.imageBase64, 'base64');

@@ -11,7 +11,7 @@ import { apiFetch } from '@/lib/api-client';
 import { exportAuditExcel } from '@/lib/export-excel';
 import { useAudit } from '@/lib/hooks';
 import { CATEGORY_ORDER } from '@/lib/indicators';
-import { activeIndex, isDone, MIN_SUBMIT_PCT } from '@/lib/scoring';
+import { findInProgress, isDone, MIN_SUBMIT_PCT } from '@/lib/scoring';
 import { SHIFTS } from '@/lib/types';
 import { cn, fmtDate, fmtDateTime, scoreColor } from '@/lib/utils';
 
@@ -30,8 +30,7 @@ export default function AuditDetailPage() {
   const role = profile?.role ?? 'crew';
   const editable = audit?.status === 'draft';
 
-  const activeIdx = useMemo(() => activeIndex(items), [items]);
-  const activeItem = activeIdx >= 0 ? items[activeIdx] : null;
+  const activeItem = useMemo(() => findInProgress(items), [items]);
 
   const visible = useMemo(() => {
     return items.filter((it) => {
@@ -120,9 +119,14 @@ export default function AuditDetailPage() {
         }
       />
       {msg && <Alert kind={msg.includes('berhasil') || msg.includes('dibuka') || msg.includes('otomatis') ? 'success' : 'error'} className="mb-3">{msg}</Alert>}
+      {editable && !activeItem && items.some((it) => !isDone(it)) && (
+        <Alert kind="info" className="mb-3">
+          Pilih area mana saja untuk difoto. Satu area harus selesai (Submit Area, skor ≥ {MIN_SUBMIT_PCT}%) sebelum memulai area lain. Setelah semua area selesai, audit otomatis tersubmit.
+        </Alert>
+      )}
       {editable && activeItem && (
         <Alert kind="info" className="mb-3">
-          Kerjakan berurutan. Area aktif: <b>#{activeItem.no} {activeItem.area}</b>. Submit Area hanya bisa jika skor AI ≥ {MIN_SUBMIT_PCT}%; di bawah itu bersihkan dulu lalu foto ulang. Setelah semua area di-submit, audit otomatis tersubmit.
+          Area yang sedang dikerjakan: <b>#{activeItem.no} {activeItem.area}</b>. Selesaikan dulu (Submit Area) sebelum memulai area lain. Submit Area hanya bisa jika skor AI ≥ {MIN_SUBMIT_PCT}%; di bawah itu bersihkan lalu foto ulang.
         </Alert>
       )}
 
@@ -191,7 +195,6 @@ export default function AuditDetailPage() {
       <div className="space-y-2">
         {visible.length === 0 && <p className="p-6 text-center text-sm text-muted">Tidak ada item untuk filter ini.</p>}
         {visible.map((it) => {
-          const idx = items.findIndex((x) => x.id === it.id);
           return (
             <CaptureItem
               key={it.id}
@@ -199,9 +202,9 @@ export default function AuditDetailPage() {
               auditId={audit.id}
               editable={!!editable}
               role={role}
-              isActive={!!editable && idx === activeIdx}
-              isBlocked={activeIdx >= 0 && idx > activeIdx}
-              blockedBy={activeIdx >= 0 && idx > activeIdx ? items[activeIdx] : null}
+              isActive={!!editable && activeItem?.id === it.id}
+              isBlocked={!!activeItem && activeItem.id !== it.id && !isDone(it)}
+              blockedBy={activeItem && activeItem.id !== it.id ? activeItem : null}
               onLocked={(auto) => setMsg(auto ? 'Semua area selesai. Audit otomatis tersubmit.' : null)}
             />
           );

@@ -14,9 +14,9 @@ interface Props {
   auditId: string;
   editable: boolean; // audit masih draft
   role: Role;
-  /** Area ini yang sedang dikerjakan (semua area sebelumnya selesai). */
+  /** Area ini yang sedang dikerjakan (sudah difoto, belum di-submit). */
   isActive: boolean;
-  /** Area belum boleh dikerjakan karena area sebelumnya belum di-submit. */
+  /** Area lain masih dikerjakan; area ini belum boleh difoto. */
   isBlocked: boolean;
   blockedBy?: AuditItem | null;
   onLocked?: (autoSubmitted: boolean) => void;
@@ -164,7 +164,7 @@ export function CaptureItem({ item, auditId, editable, role, isActive, isBlocked
           )}
           {isBlocked && !locked && !skipped && blockedBy && (
             <Alert kind="warning">
-              Area ini terkunci. Selesaikan dan submit area <b>#{blockedBy.no} {blockedBy.area}</b> terlebih dahulu.
+              Area <b>#{blockedBy.no} {blockedBy.area}</b> masih dikerjakan. Selesaikan (Submit Area) atau hapus fotonya dulu sebelum memulai area ini.
             </Alert>
           )}
           {error && <Alert>{error}</Alert>}

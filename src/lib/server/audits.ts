@@ -1,7 +1,7 @@
 import 'server-only';
 import { adminDb } from '../firebase/admin';
 import { DEFAULT_INDICATORS, type Indicator } from '../indicators';
-import { summarize } from '../scoring';
+import { findInProgress, summarize } from '../scoring';
 import type { Audit, AuditItem } from '../types';
 import { HttpError } from '../utils';
 
@@ -41,12 +41,7 @@ export async function autoSubmitIfDone(id: string): Promise<boolean> {
   return true;
 }
 
-/** Area sebelum item ini (urut no) harus sudah selesai. Mengembalikan area yang masih menggantung, atau null jika boleh. */
+/** Hanya satu area boleh dikerjakan pada satu waktu. Mengembalikan area lain yang masih menggantung, atau null jika boleh. */
 export function findBlockingItem(items: AuditItem[], target: AuditItem): AuditItem | null {
-  const sorted = [...items].sort((a, b) => a.no - b.no);
-  for (const it of sorted) {
-    if (it.id === target.id) return null;
-    if (!(it.status === 'skipped' || it.locked === true)) return it;
-  }
-  return null;
+  return findInProgress(items, target.id);
 }
