@@ -314,3 +314,16 @@ button.link{background:none;border:0;padding:0;font:inherit}
 .hf span{display:block;font-size:11.5px;opacity:.9;font-weight:600;line-height:1.2}.hf b{display:block;font-size:18px;font-weight:800;letter-spacing:-.01em;margin-top:3px;white-space:nowrap;line-height:1.15}.hf small{display:block;font-size:11px;opacity:.85;margin-top:2px;line-height:1.25}
 .hf.bad{background:rgba(185,28,28,.28);border-color:rgba(255,255,255,.28)}.hf.good{background:rgba(255,255,255,.22)}
 @media(max-width:420px){.hero-facts{grid-template-columns:1fr 1fr}.hf b{font-size:16px}.hf:last-child:nth-child(odd){grid-column:1/-1}}
+
+/* proporsi Ringkasan: hero kiri, kanan = 4 kartu pembanding + 3 kartu kunjungan mengisi tinggi yang sama */
+.row-exec{align-items:stretch}
+.ex-right{display:flex;flex-direction:column;gap:14px;min-width:0}
+.ex-right .tiles{flex:1}
+.ex-right .tiles.big .tile{padding:18px 20px 16px;justify-content:center}
+.ex-right .tiles.big .t-val{font-size:30px}
+.ex-right .tiles.big.three{grid-template-columns:repeat(3,1fr);flex:0 0 auto}
+.ex-right .tiles.big.three .tile{padding:14px 18px}.ex-right .tiles.big.three .t-val{font-size:22px}
+.hero-big .hero-val{font-size:44px}
+.hero-facts{margin-top:10px}.hf{padding:9px 11px}.hf b{font-size:17px}
+.hero-btns{padding-top:12px}
+@media(max-width:980px){.ex-right .tiles.big.three{grid-template-columns:1fr}}
