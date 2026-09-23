@@ -946,12 +946,29 @@
     const pattern = dayPattern(cur.days.filter(o => o.has).map(o => ({ v: o.v, dow: o.dow, store: {} })));
     return { a, b, cur, prev: prev.nDays ? { ...prev, a: pa, b: pb } : null, last: last.nDays ? { ...last, a: la, b: lb } : null, mom: prev.nDays ? cur.total / prev.total - 1 : null, yoy: last.nDays ? cur.total / last.total - 1 : null, ach: cur.target ? cur.total / cur.target : null, pattern };
   }
+  // hero: badge status, kotak fakta, bar progres dengan penanda waktu berjalan
+  const achCls = (a) => a == null ? "" : a >= 1 ? "good" : a * 100 >= ((C.ALERTS || {}).achWarn ?? 80) ? "warn" : "bad";
+  function renderHeroFacts(o) {
+    // o: { ach, tgtNow, actual, fullT, remDays, timePct, progPct, unitLabel, partialTxt, hasTarget }
+    const badge = $("exHeroBadge"); badge.className = "hero-badge " + achCls(o.ach); badge.textContent = o.ach == null ? "target belum diisi" : `${(o.ach * 100).toFixed(0)}% dari target`;
+    const gap = o.hasTarget ? o.tgtNow - o.actual : null; const fullGap = o.fullT ? o.fullT - o.actual : null; const need = o.remDays > 0 && fullGap > 0 ? fullGap / o.remDays : null;
+    const f = (l, v, sub, cl) => `<div class="hf ${cl || ""}"><span>${l}</span><b>${v}</b>${sub ? `<small>${sub}</small>` : ""}</div>`;
+    $("exHeroFacts").innerHTML = !o.hasTarget ? "" : [
+      f(`Target ${o.partialTxt || o.unitLabel}`, fmtRpS(o.tgtNow), o.fullT && o.fullT !== o.tgtNow ? `target ${o.unitLabel} ${fmtRpS(o.fullT)}` : ""),
+      gap > 0 ? f("Kekurangan", fmtRpS(gap), o.partialTxt ? "dari target s/d hari ini" : "belum tercapai", "bad") : f("Lebih dari target", "+" + fmtRpS(-gap), o.partialTxt ? "di atas target s/d hari ini" : "target terlampaui", "good"),
+      need != null ? f(`Butuh per hari`, fmtRpS(need), `${o.remDays} hari tersisa agar target ${o.unitLabel} tercapai`, need > (o.avg || 0) * 1.3 ? "bad" : "") : o.remDays > 0 ? f("Sisa hari", `${o.remDays} hari`, "target sudah terlampaui", "good") : f("Rata-rata/hari", fmtRpS(o.avg), `${o.nDays} hari berdata`),
+    ].join("");
+    const bar = $("exProgBar"); bar.style.width = (Math.min(1, o.progPct) * 100).toFixed(1) + "%"; bar.className = o.ach == null ? "" : o.ach < .8 ? "bad" : o.ach < 1 ? "low" : "";
+    const tm = $("exProgTime"); if (o.timePct != null && o.timePct < 1) { tm.classList.remove("hidden"); tm.style.left = (o.timePct * 100).toFixed(1) + "%"; } else tm.classList.add("hidden");
+    $("exProgLbl").innerHTML = o.hasTarget ? `<span>Progres target ${o.unitLabel}</span><span>${(o.progPct * 100).toFixed(0)}%${o.timePct != null && o.timePct < 1 ? ` · garis putih = waktu berjalan ${(o.timePct * 100).toFixed(0)}%` : ""}</span>` : "";
+    $("exProgTxt").innerHTML = !o.hasTarget ? "Target belum diisi di sheet (kolom TARGET di samping kolom outlet)." : o.timePct != null && o.timePct < 1 ? (o.progPct >= o.timePct ? `Realisasi <b>di depan</b> jadwal: ${(o.progPct * 100).toFixed(0)}% target sudah masuk pada ${(o.timePct * 100).toFixed(0)}% waktu.` : `Realisasi <b>tertinggal</b> dari jadwal: baru ${(o.progPct * 100).toFixed(0)}% target pada ${(o.timePct * 100).toFixed(0)}% waktu${need != null ? `, perlu ${fmtRpS(need)}/hari (rata-rata sekarang ${fmtRpS(o.avg)}/hari)` : ""}.`) : o.ach >= 1 ? `Target ${o.unitLabel} <b>tercapai</b> ${(o.ach * 100).toFixed(0)}%.` : `Target ${o.unitLabel} <b>tidak tercapai</b>: ${(o.ach * 100).toFixed(0)}% dari ${fmtRpS(o.tgtNow)}.`;
+  }
   function renderExecRange(R, key, ent) {
     const c = R.cur, name = fmtRange(R.a, R.b);
-    $("exHeroLabel").textContent = `Realisasi omset ${key ? ent + " · " : ""}${name}`; $("exHeroVal").textContent = fmtRpS(c.total); $("exHeroBadge").textContent = R.ach == null ? "—" : `${(R.ach * 100).toFixed(0)}% dari target`;
+    $("exHeroLabel").textContent = `Realisasi omset ${key ? ent + " · " : ""}${name}`; $("exHeroVal").textContent = fmtRpS(c.total);
     $("exHeroSub").textContent = `${fmtRp(c.total)} · rata-rata ${fmtRpS(c.avg)} per hari (${c.nDays} dari ${c.days.length} hari berdata)`;
-    const prog = c.targetAll ? Math.min(1, c.total / c.targetAll) : 0; $("exProgBar").style.width = (prog * 100).toFixed(1) + "%"; $("exProgBar").className = R.ach != null && R.ach < .8 ? "low" : "";
-    $("exProgTxt").innerHTML = c.targetAll ? `<b>${(prog * 100).toFixed(0)}%</b> dari target rentang ${fmtRpS(c.targetAll)}${c.nDays < c.days.length ? ` · target s/d hari berdata ${fmtRpS(c.target)} → tercapai <b>${R.ach == null ? "—" : (R.ach * 100).toFixed(0) + "%"}</b>` : ""}` : "target belum diisi di sheet";
+    const remR = c.days.length - c.nDays, partialR = c.nDays < c.days.length && R.b >= new Date(new Date().setHours(0, 0, 0, 0) - 864e5);
+    renderHeroFacts({ ach: R.ach, tgtNow: c.target, actual: c.total, fullT: c.targetAll, remDays: partialR ? remR : 0, timePct: partialR ? c.nDays / c.days.length : null, progPct: c.targetAll ? c.total / c.targetAll : 0, unitLabel: "rentang", partialTxt: partialR ? "s/d hari berdata" : "", hasTarget: !!c.target, avg: c.avg, nDays: c.nDays });
     const tile = (l, v, p, s, cl) => `<div class="tile ${cl || ""}"><div class="t-label">${l}</div><div class="t-row"><div class="t-val">${v}</div>${p || ""}</div><div class="t-sub">${s}</div></div>`;
     $("exTiles").innerHTML = [
       tile("Dibanding periode sebelumnya", fmtPct(R.mom), "", R.prev ? `${fmtRpS(c.total)} vs ${fmtRpS(R.prev.total)} (${fmtRange(R.prev.a, R.prev.b)})` : "data periode sebelumnya belum ada", R.mom == null ? "" : R.mom >= 0 ? "up" : "down"),
@@ -1070,10 +1087,9 @@
     // target bulan penuh (Σ target harian seluruh bulan) & target s/d hari ini
     const idxs = c.idxs; const fullT = idxs.reduce((x, i) => x + (state.months[i] ? state.months[i].days.reduce((y, d) => y + dayTarget(d, key), 0) : 0), 0); const tgtNow = E.tgtTotal;
     $("exHeroLabel").textContent = `Realisasi omset ${key ? ent + " · " : ""}${ytd ? "Jan–" + MONTH_SHORT[c.last] + " " + Y() : pName}${c.partial ? ` (s/d tgl ${c.N})` : ""}`; $("exHeroVal").textContent = fmtRpS(c.total);
-    $("exHeroBadge").textContent = E.ach == null ? "—" : `${(E.ach * 100).toFixed(0)}% dari target`;
     $("exHeroSub").textContent = `${fmtRp(c.total)} · rata-rata ${fmtRpS(c.avg)} per hari (${c.nDays} hari)`;
-    const prog = fullT ? Math.min(1, c.total / fullT) : 0; $("exProgBar").style.width = (prog * 100).toFixed(1) + "%"; $("exProgBar").className = E.ach != null && E.ach < .8 ? "low" : "";
-    $("exProgTxt").innerHTML = fullT ? `<b>${(prog * 100).toFixed(0)}%</b> dari target ${ytd ? "periode" : "bulan"} ${fmtRpS(fullT)}${c.partial && !ytd ? ` · hari ke-${c.N} dari ${daysIn(Y(), mi)} (${(c.N / daysIn(Y(), mi) * 100).toFixed(0)}% waktu) · target s/d hari ini ${fmtRpS(tgtNow)} → tercapai <b>${E.ach == null ? "—" : (E.ach * 100).toFixed(0) + "%"}</b>` : ""}` : "target belum diisi di sheet";
+    const dim = ytd ? null : daysIn(Y(), mi); const remDays = c.partial && !ytd ? dim - c.N : 0;
+    renderHeroFacts({ ach: E.ach, tgtNow, actual: c.total, fullT, remDays, timePct: c.partial && !ytd ? c.N / dim : null, progPct: fullT ? c.total / fullT : 0, unitLabel: ytd ? "YTD" : "bulan", partialTxt: c.partial ? "s/d hari ini" : "", hasTarget: !!tgtNow || !!fullT, avg: c.avg, nDays: c.nDays });
     const tile = (l, v, p, s, cl) => `<div class="tile ${cl || ""}"><div class="t-label">${l}</div><div class="t-row"><div class="t-val">${v}</div>${p || ""}</div><div class="t-sub">${s}</div></div>`;
     $("exTiles").innerHTML = [
       tile("Dibanding bulan lalu", fmtPct(E.mom), "", E.pm ? `${fmtRpS(c.total)} vs ${fmtRpS(E.pm.total)}${c.partial ? " (tgl 1–" + c.N + ")" : ""}` : ytd ? `${E.momLabel} vs bulan sebelumnya` : "tidak ada bulan lalu", E.mom == null ? "" : E.mom >= 0 ? "up" : "down"),

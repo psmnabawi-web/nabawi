@@ -75,18 +75,18 @@ main,.view{display:flex;flex-direction:column;gap:18px}
 .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 85% 15%,rgba(255,255,255,.18),transparent 40%),radial-gradient(circle at 10% 100%,rgba(255,255,255,.1),transparent 45%)}
 .hero>*{position:relative}
 .hero.visit{background:linear-gradient(150deg,#2FA37A 0%,#1D7F5C 55%,#145C43 100%)}
-.hero-head{display:flex;justify-content:space-between;align-items:center;font-size:13px;opacity:.95}
-.hero-badge{min-width:30px;height:30px;padding:0 10px;border-radius:999px;background:rgba(255,255,255,.2);display:grid;place-items:center;font-size:12px;font-weight:700}
+.hero-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;opacity:.95}
+.hero-badge{min-width:30px;height:32px;padding:0 12px;border-radius:999px;background:rgba(255,255,255,.22);display:grid;place-items:center;font-size:13px;font-weight:800;white-space:nowrap}.hero-badge.bad{background:#FEE2E2;color:#B91C1C}.hero-badge.warn{background:#FEF3C7;color:#92400E}.hero-badge.good{background:#DCFCE7;color:#15803D}
 .hero-val{font-size:42px;font-weight:800;letter-spacing:-.02em;line-height:1.1}.hero-big .hero-val{font-size:46px}
-.hero-sub{font-size:12.5px;opacity:.9;min-height:18px}
+.hero-sub{font-size:13.5px;opacity:.95;min-height:18px;font-weight:500}
 .hero-btns{display:flex;gap:10px;margin-top:auto;padding-top:14px;flex-wrap:wrap}
 .btn-white,.btn-glass{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:10px 16px;font-weight:700;font-size:13px;text-decoration:none}
 .btn-white svg,.btn-glass svg{width:15px;height:15px}
 .btn-white{background:#fff;color:var(--brand-2);box-shadow:0 6px 14px rgba(0,0,0,.15)}
 .btn-glass{background:rgba(255,255,255,.16);color:#fff;border:1px solid rgba(255,255,255,.3)}
 .btn-white:hover{transform:translateY(-1px)}.btn-glass:hover{background:rgba(255,255,255,.26)}.btn-white:disabled{opacity:.6;cursor:wait}
-.prog{margin-top:10px}.prog-bar{height:10px;border-radius:999px;background:rgba(255,255,255,.22);overflow:hidden}.prog-bar i{display:block;height:100%;border-radius:999px;background:#fff;width:0;transition:width .5s}.prog-bar i.low{background:#FFD08A}
-.prog-txt{font-size:12.5px;margin-top:6px;opacity:.95}.prog-txt b{font-weight:800}
+.prog{margin-top:12px}.prog-lbl{display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;margin-bottom:6px}.prog-lbl span{opacity:.9;font-weight:600}.prog-bar{position:relative;height:12px;border-radius:999px;background:rgba(255,255,255,.22);overflow:visible}.prog-bar i{display:block;height:100%;border-radius:999px;background:#fff;width:0;transition:width .5s}.prog-bar i.low{background:#FFD08A}.prog-bar i.bad{background:#FCA5A5}.prog-bar em{position:absolute;top:-5px;bottom:-5px;width:3px;background:#fff;border-radius:2px;box-shadow:0 0 0 2px rgba(0,0,0,.18)}
+.prog-txt{font-size:13px;margin-top:8px;opacity:.95;line-height:1.45}.prog-txt b{font-weight:800}
 
 /* tile KPI */
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
@@ -307,3 +307,10 @@ button.link{background:none;border:0;padding:0;font:inherit}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .hero-brand span{display:inline-flex;align-items:center;gap:8px}.hero-mark{width:26px;height:26px;background:#fff;border-radius:8px;padding:3px;box-sizing:border-box}
 @media(max-width:760px){.logo-img{height:38px}}
+
+/* hero: kotak fakta */
+.hero-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.hf{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);border-radius:14px;padding:10px 12px;min-width:0}
+.hf span{display:block;font-size:11.5px;opacity:.9;font-weight:600;line-height:1.2}.hf b{display:block;font-size:18px;font-weight:800;letter-spacing:-.01em;margin-top:3px;white-space:nowrap;line-height:1.15}.hf small{display:block;font-size:11px;opacity:.85;margin-top:2px;line-height:1.25}
+.hf.bad{background:rgba(185,28,28,.28);border-color:rgba(255,255,255,.28)}.hf.good{background:rgba(255,255,255,.22)}
+@media(max-width:420px){.hero-facts{grid-template-columns:1fr 1fr}.hf b{font-size:16px}.hf:last-child:nth-child(odd){grid-column:1/-1}}
