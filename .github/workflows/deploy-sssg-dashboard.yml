@@ -31,9 +31,12 @@ jobs:
             echo "Secret SSSG_FIREBASE_TOKEN belum diisi (Settings > Secrets and variables > Actions)."
             exit 1
           fi
+          npx -y firebase-tools@latest hosting:sites:create dashboard-inti-warna --project sssg-dashboard-2026 --non-interactive || echo "site dashboard-inti-warna sudah ada, lanjut"
           npx -y firebase-tools@latest deploy --only hosting --project sssg-dashboard-2026 --non-interactive
       - name: Verifikasi tayang
         run: |
           sleep 5
-          curl -sSf -o /dev/null https://sssg-dashboard-2026.web.app/favicon.ico && echo "favicon OK"
-          curl -sS https://sssg-dashboard-2026.web.app/app.js | grep -q renderTargetBoard && echo "app.js versi baru OK"
+          for H in dashboard-inti-warna.web.app sssg-dashboard-2026.web.app; do
+            curl -sSf -o /dev/null "https://$H/favicon.ico" && echo "$H favicon OK"
+            curl -sS "https://$H/app.js" | grep -q renderTargetBoard && echo "$H app.js versi baru OK"
+          done

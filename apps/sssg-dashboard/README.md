@@ -10,7 +10,7 @@ Prasyarat: Node.js 18+ dan akun Google yang punya akses Firebase.
 cd sssg-dashboard
 bash deploy.sh
 ```
-Hasil: https://sssg-dashboard-2026.web.app (project Firebase `sssg-dashboard-2026`, akun nabawim@gmail.com; ganti lewat `PROJECT_ID=... bash deploy.sh`).
+Hasil: https://dashboard-inti-warna.web.app (alamat utama) dan https://sssg-dashboard-2026.web.app (alamat lama, tetap aktif). Keduanya site Hosting di project Firebase `sssg-dashboard-2026`, akun nabawim@gmail.com..
 
 ## Syarat data
 1. Spreadsheet dibagikan **Siapa saja yang memiliki link → Viewer** (Bagikan → Akses umum).
