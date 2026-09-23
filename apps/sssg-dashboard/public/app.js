@@ -1107,19 +1107,27 @@
     const E = state.range ? computeExecRange(state.range.a, state.range.b, null) : computeExec(state.month, null);
     const org = (C.OWNER && C.OWNER.org) || "Perusahaan"; const warnAt = (C.ALERTS || {}).achWarn ?? 80;
     const ytd = !state.range && state.month === "ytd"; const mi = state.range ? null : state.month; const totalDays = B.partial ? B.N + B.remDays : null;
-    const periode = state.range ? fmtRange(state.range.a, state.range.b) : ytd ? `Januari–${MONTH_SHORT[E && E.cur ? E.cur.last : 0]} ${Y()} (YTD)` : `${MONTH_NAMES[mi].toLowerCase().replace(/^./, c => c.toUpperCase())} ${Y()}${B.partial ? `, sampai tanggal ${B.N} (hari ke-${B.N} dari ${totalDays})` : ""}`;
+    const bulan = ytd ? "periode" : "bulan";
+    const periode = state.range ? fmtRange(state.range.a, state.range.b) : ytd ? `Januari–${MONTH_SHORT[E && E.cur ? E.cur.last : 0]} ${Y()} (YTD)` : `${MONTH_NAMES[mi].toLowerCase().replace(/^./, c => c.toUpperCase())} ${Y()}${B.partial ? `, data sampai tanggal ${B.N}` : " (bulan penuh)"}`;
     const below = B.rows.filter(r => r.status === "bad" || r.status === "warn"), ok = B.rows.filter(r => r.status === "ok"), na = B.rows.filter(r => r.status === "na");
+    const x = (v) => v.toLocaleString("id-ID", { maximumFractionDigits: 1 });
     const L = [`📊 *PENCAPAIAN TARGET OUTLET*`, `${org} · ${periode}`, ""];
-    if (E && E.ach != null) { const st = E.ach >= 1 ? "ok" : E.ach * 100 >= warnAt ? "warn" : "bad"; L.push(`Total ${org}: ${waIco(st)} *${(E.ach * 100).toFixed(0)}%*`); L.push(""); }
-    const row = (r, i) => `${i}. ${waIco(r.status)} ${r.label} — *${(r.ach * 100).toFixed(0)}%*`;
-    if (below.length) { L.push(`*Belum mencapai target (${below.length}):*`); below.forEach((r, i) => L.push(row(r, i + 1))); L.push(""); }
-    if (ok.length) { L.push(`*Sudah mencapai target (${ok.length}):* 👏`); ok.forEach((r, i) => L.push(row(r, i + 1))); L.push(""); }
-    if (na.length) { na.forEach(r => L.push(`⚪ ${r.label} — target belum diisi`)); L.push(""); }
-    if (B.partial && B.remDays > 0) L.push(below.length ? `⏱ Sisa ${B.remDays} hari. Ayo kejar target! 💪` : `⏱ Sisa ${B.remDays} hari. Pertahankan! 💪`);
-    L.push(`🔴 di bawah ${warnAt}% · 🟠 ${warnAt}–99% · 🟢 100% ke atas`);
+    if (B.partial) L.push(`⏱ Waktu berjalan: hari ke-${B.N} dari ${totalDays} (${(B.N / totalDays * 100).toFixed(0)}% ${bulan} sudah lewat).`);
+    if (E && E.ach != null) { const st = E.ach >= 1 ? "ok" : E.ach * 100 >= warnAt ? "warn" : "bad"; L.push(`🏢 Pencapaian ${org} keseluruhan: ${waIco(st)} *${(E.ach * 100).toFixed(0)}%* dari target${B.partial ? " sampai hari ini" : ""}.`); }
+    L.push("");
+    L.push(`*Cara membaca:* angka % = seberapa besar target${B.partial ? " sampai hari ini" : ""} yang sudah tercapai. 100% berarti tepat sesuai target.`);
+    L.push(`🔴 di bawah ${warnAt}% = jauh tertinggal · 🟠 ${warnAt}–99% = hampir tercapai · 🟢 100% ke atas = tercapai`);
+    L.push("");
+    const perDay = (r) => { if (!B.partial || !r.needPerDay || !r.actual || !B.N) return ""; const avg = r.actual / B.N; const k = r.needPerDay / avg; return k <= 1.05 ? ` Dengan ritme sekarang target ${bulan} masih bisa terkejar, jaga konsistensi.` : ` Untuk mengejar target ${bulan}, omset harian ${B.remDays} hari ke depan harus sekitar *${x(k)}×* rata-rata harian sekarang${k >= 2 ? " (butuh usaha ekstra)" : ""}.`; };
+    const blk = (r, i) => { const pct = r.ach * 100; if (r.ach >= 1) return `${i}. ${waIco(r.status)} *${r.label}* — ${pct.toFixed(0)}%\n   Sudah ${(pct - 100).toFixed(0)}% di atas target${B.partial ? " sampai hari ini" : ""}. Pertahankan ritme sampai akhir ${bulan}. 👏`; return `${i}. ${waIco(r.status)} *${r.label}* — ${pct.toFixed(0)}%\n   Baru ${pct.toFixed(0)}% dari target${B.partial ? " sampai hari ini" : ""}, masih kurang ${(100 - pct).toFixed(0)}%.${perDay(r)}`; };
+    if (below.length) { L.push(`*BELUM MENCAPAI TARGET (${below.length} outlet)*`); L.push(`Urutan dari yang paling tertinggal.`); below.forEach((r, i) => { L.push(blk(r, i + 1)); L.push(""); }); }
+    if (ok.length) { L.push(`*SUDAH MENCAPAI TARGET (${ok.length} outlet)* 👏`); ok.forEach((r, i) => { L.push(blk(r, i + 1)); L.push(""); }); }
+    if (na.length) { na.forEach(r => L.push(`⚪ *${r.label}* — target belum diisi di sistem, mohon hubungi admin agar pencapaiannya bisa dihitung.`)); L.push(""); }
+    if (B.partial && B.remDays > 0) L.push(below.length ? `⏱ Sisa *${B.remDays} hari*. Setiap hari tanpa kejar-target membuat gap makin besar. Fokus harian: tambah kunjungan, follow-up pelanggan, dan closing. 💪` : `⏱ Sisa *${B.remDays} hari*. Semua outlet sudah di jalur target, pertahankan sampai akhir ${bulan}! 💪`);
+    else L.push(below.length ? `Periode sudah berakhir. Outlet yang belum tercapai: evaluasi penyebabnya dan susun rencana kejar untuk ${bulan} berikutnya.` : `Periode sudah berakhir dengan semua outlet mencapai target. Kerja bagus! 👏`);
     return L.join("\n");
   }
-  function waFill() { const m = state.waMode || "detail"; const msg = m === "pct" ? buildWaPercent() : buildWaMessage(m === "compact"); if (!msg) return false; $("waText").value = msg; $("waStatus").textContent = `${msg.length} karakter · pesan bisa diedit sebelum dikirim`; $("waText").scrollTop = 0; document.querySelectorAll("#waMode button").forEach(b => b.classList.toggle("on", b.dataset.m === m)); $("waHint").textContent = m === "pct" ? "Untuk Grup Leader: hanya persentase pencapaian per outlet, tanpa angka rupiah." : m === "compact" ? "Versi singkat satu baris per outlet, angka disingkat (jt/M)." : "Untuk BOD/manajemen: omset, target, kekurangan, dan kebutuhan per hari setiap outlet, angka rupiah penuh."; return true; }
+  function waFill() { const m = state.waMode || "detail"; const msg = m === "pct" ? buildWaPercent() : buildWaMessage(m === "compact"); if (!msg) return false; $("waText").value = msg; $("waStatus").textContent = `${msg.length} karakter · pesan bisa diedit sebelum dikirim`; $("waText").scrollTop = 0; document.querySelectorAll("#waMode button").forEach(b => b.classList.toggle("on", b.dataset.m === m)); $("waHint").textContent = m === "pct" ? "Untuk Grup Leader: pencapaian per outlet dalam persen dengan penjelasan singkat, tanpa angka rupiah." : m === "compact" ? "Versi singkat satu baris per outlet, angka disingkat (jt/M)." : "Untuk BOD/manajemen: omset, target, kekurangan, dan kebutuhan per hari setiap outlet, angka rupiah penuh."; return true; }
   function openWa() {
     if (!waFill()) { alert("Belum ada data target untuk periode ini."); return; }
     $("waModal").classList.remove("hidden"); $("waText").focus(); $("waText").scrollTop = 0; $("waText").setSelectionRange(0, 0);
