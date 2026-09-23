@@ -1,0 +1,39 @@
+name: Deploy SSSG Dashboard
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/adoring-dijkstra-78ese7", "main"]
+    paths:
+      - "apps/sssg-dashboard/public/**"
+      - "apps/sssg-dashboard/firebase.json"
+      - ".github/workflows/deploy-sssg-dashboard.yml"
+
+concurrency:
+  group: deploy-sssg-dashboard
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Deploy Hosting ke sssg-dashboard-2026
+        working-directory: apps/sssg-dashboard
+        env:
+          FIREBASE_TOKEN: ${{ secrets.SSSG_FIREBASE_TOKEN }}
+        run: |
+          if [ -z "$FIREBASE_TOKEN" ]; then
+            echo "Secret SSSG_FIREBASE_TOKEN belum diisi (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          npx -y firebase-tools@latest deploy --only hosting --project sssg-dashboard-2026 --non-interactive
+      - name: Verifikasi tayang
+        run: |
+          sleep 5
+          curl -sSf -o /dev/null https://sssg-dashboard-2026.web.app/favicon.ico && echo "favicon OK"
+          curl -sS https://sssg-dashboard-2026.web.app/app.js | grep -q renderTargetBoard && echo "app.js versi baru OK"
