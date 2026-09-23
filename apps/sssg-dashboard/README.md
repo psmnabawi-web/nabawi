@@ -29,6 +29,13 @@ Kartu **Pencapaian target per outlet** tampil di halaman Ringkasan tanpa perlu m
 - Pencapaian = omset ÷ target **sampai hari berdata** (like-for-like) untuk bulan berjalan; target periode penuh untuk bulan lalu, YTD, dan rentang tanggal.
 - Klik outlet untuk membuka rinciannya. Ambang warna mengikuti `ALERTS.achWarn` di `config.js`.
 
+## Pencapaian sales (halaman Sales)
+Membaca spreadsheet terpisah "Pencapaian sales" (`SALES.SHEET_ID` di `config.js`, tab pertama bila `SHEET_NAME` kosong).
+Format: satu baris per sales, kolom `Nama | Target <bulan> | target per hari | Total Price | Month to Date | omset per tanggal`.
+Pencapaian = omset ÷ target sampai hari berdata (target bulan ÷ jumlah hari × hari berdata), ditampilkan juga % terhadap target bulan.
+Halaman menampilkan KPI tim, sales terbaik, kekurangan terbesar, daftar peringkat (filter dan urutan), dan tombol Kirim WA.
+Bagian sales otomatis ikut dalam ketiga versi pesan WhatsApp bila bulan sheet sama dengan periode yang dipilih.
+
 ## Kirim ke grup WhatsApp
 Tombol **Kirim WA** di kartu "Pencapaian target per outlet" menyusun pesan WhatsApp dari periode yang sedang dipilih:
 total perusahaan, sisa hari dan kebutuhan per hari, daftar outlet belum/sudah mencapai target dengan emoji status,

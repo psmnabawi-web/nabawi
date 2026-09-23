@@ -54,7 +54,7 @@
     // Tanpa headers=0: bila dipaksa 0, gviz menganggap baris header sebagai data, menebak tipe kolom (date/number),
     // lalu MEMBUANG teks header di kolom itu ("TGL","TOTAL","AKTUAL IW" -> null). Deteksi otomatis menaruhnya di cols[].label.
     // opt.headers=N memaksa N baris pertama jadi label — dipakai bila deteksi otomatis gagal (mis. tab OKTOBER 2025).
-    const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json${opt.headers ? "&headers=" + opt.headers : ""}&sheet=${encodeURIComponent(n)}`;
+    const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json${opt.headers ? "&headers=" + opt.headers : ""}${n ? "&sheet=" + encodeURIComponent(n) : ""}`;
     const r = await fetch(url);
     const txt = await r.text();
     const j = JSON.parse(txt.substring(txt.indexOf("{"), txt.lastIndexOf("}") + 1));
@@ -70,7 +70,7 @@
   // divalidasi lewat accept(rows) — mis. parseMonth harus menghasilkan hari di bulan yang benar — bukan cuma status OK.
   async function fetchSheet(name, accept, opt = {}) {
     let lastErr = null;
-    for (const n of [...new Set([name, name + " ", name.trim()])]) {
+    for (const n of (name ? [...new Set([name, name + " ", name.trim()])] : [""])) {
       try {
         let rows = await fetchSheetExact(n, opt); let out = accept ? accept(rows) : rows; if (out) return out;
         // Ada baris bertanggal tapi header "TGL" hilang → deteksi header otomatis gviz gagal; paksa headers=1..3.
@@ -182,6 +182,7 @@
     // fallback khusus tahun berjalan: sheet BASELINE (total bulanan per toko) & REKAP (level perusahaan) di spreadsheet utama
     jobs.push((async () => { try { state.baseline = await fetchSheet(C.BASELINE_SHEET, parseBaseline); } catch (e) { state.baseline = null; } })());
     jobs.push((async () => { try { state.rekap = await fetchSheet(C.REKAP_SHEET, parseRekap); } catch (e) { state.rekap = null; } })());
+    if (C.SALES && C.SALES.SHEET_ID) jobs.push((async () => { try { state.sales = await fetchSheet(C.SALES.SHEET_NAME || "", parseSales, { sheetId: C.SALES.SHEET_ID }); } catch (e) { console.warn("Sheet sales", e.message); state.sales = null; } })());
     await Promise.all(jobs);
     state.years = years;
     state.yearList = Object.keys(years).map(Number).filter(y => years[y].some(Boolean)).sort((a, b) => b - a);
@@ -1093,6 +1094,7 @@
     if (below.length) { L.push(`*OUTLET BELUM MENCAPAI TARGET (${below.length} dari ${B.nTarget})*`); if (!compact) L.push(`Urutan dari yang paling tertinggal.`); below.forEach((r, i) => { L.push(block(r, i + 1)); if (!compact) L.push(""); }); if (compact) L.push(""); }
     if (ok.length) { L.push(`*OUTLET SUDAH MENCAPAI TARGET (${ok.length} dari ${B.nTarget})*`); ok.forEach((r, i) => { L.push(block(r, i + 1)); if (!compact) L.push(""); }); if (compact) L.push(""); }
     if (na.length) { L.push(`*OUTLET TANPA TARGET (${na.length})*`); na.forEach(r => L.push(`• ${r.label}: omset ${compact ? waRp(r.actual) : waFull(r.actual)}, target belum diisi di sheet`)); L.push(""); }
+    L.push(...waSalesLines(compact ? "compact" : "detail"));
     // ---- fokus ----
     const top = below.slice().sort((a, b) => b.gap - a.gap)[0];
     if (top) { L.push(`🎯 *FOKUS UTAMA*`); L.push(compact ? `${top.label}: kekurangan terbesar ${waRp(top.gap)} (${(top.gap / B.gapBelow * 100).toFixed(0)}% dari total kekurangan ${waRp(B.gapBelow)})` : `${top.label} menyumbang kekurangan terbesar, ${waFull(top.gap)} atau ${(top.gap / B.gapBelow * 100).toFixed(0)}% dari total kekurangan semua outlet (${waFull(B.gapBelow)}). Menutup gap di outlet ini paling besar pengaruhnya ke total ${org}.`); }
@@ -1123,6 +1125,7 @@
     if (below.length) { L.push(`*BELUM MENCAPAI TARGET (${below.length} outlet)*`); L.push(`Urutan dari yang paling tertinggal.`); below.forEach((r, i) => { L.push(blk(r, i + 1)); L.push(""); }); }
     if (ok.length) { L.push(`*SUDAH MENCAPAI TARGET (${ok.length} outlet)* 👏`); ok.forEach((r, i) => { L.push(blk(r, i + 1)); L.push(""); }); }
     if (na.length) { na.forEach(r => L.push(`⚪ *${r.label}* — target belum diisi di sistem, mohon hubungi admin agar pencapaiannya bisa dihitung.`)); L.push(""); }
+    L.push(...waSalesLines("pct"));
     if (B.partial && B.remDays > 0) L.push(below.length ? `⏱ Sisa *${B.remDays} hari*. Setiap hari tanpa kejar-target membuat gap makin besar. Fokus harian: tambah kunjungan, follow-up pelanggan, dan closing. 💪` : `⏱ Sisa *${B.remDays} hari*. Semua outlet sudah di jalur target, pertahankan sampai akhir ${bulan}! 💪`);
     else L.push(below.length ? `Periode sudah berakhir. Outlet yang belum tercapai: evaluasi penyebabnya dan susun rencana kejar untuk ${bulan} berikutnya.` : `Periode sudah berakhir dengan semua outlet mencapai target. Kerja bagus! 👏`);
     return L.join("\n");
@@ -1135,6 +1138,101 @@
   function closeWa() { $("waModal").classList.add("hidden"); }
   async function waCopy() { const t = $("waText").value; try { await navigator.clipboard.writeText(t); $("waStatus").textContent = "Tersalin. Buka grup WhatsApp lalu tempel (paste)."; } catch (e) { $("waText").select(); document.execCommand("copy"); $("waStatus").textContent = "Tersalin (mode lama). Tempel di grup WhatsApp."; } }
   function waOpen() { const t = $("waText").value; window.open("https://wa.me/?text=" + encodeURIComponent(t), "_blank", "noopener"); $("waStatus").textContent = "WhatsApp dibuka. Pilih grup tujuan lalu kirim."; }
+
+  // ---------- Pencapaian sales (spreadsheet terpisah) ----------
+  const MON3 = { JAN: 0, FEB: 1, MAR: 2, APR: 3, MEI: 4, MAY: 4, JUN: 5, JUL: 6, AGU: 7, AUG: 7, AGS: 7, SEP: 8, SEPT: 8, OKT: 9, OCT: 9, NOV: 10, DES: 11, DEC: 11 };
+  const parseSalesDate = (v) => { if (v == null) return null; const d = parseDate(v); if (d) return d; const m = String(v).trim().match(/^(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})$/); if (!m) return null; const k = m[2].toUpperCase(); const mi = k in MON3 ? MON3[k] : MONTH_NAMES.findIndex(n => norm(n) === k); return mi < 0 ? null : new Date(+m[3], mi, +m[1]); };
+  function parseSales(rows) {
+    const hi = rows.findIndex(r => r && r.some(v => norm(v) === "NAMA") && r.some(v => /^TARGET\b/.test(norm(v))));
+    if (hi < 0) return null;
+    const H = rows[hi].map(norm);
+    const cName = H.indexOf("NAMA"), cTarget = H.findIndex(h => /^TARGET\b/.test(h) && !/HARI/.test(h)), cTotal = H.findIndex(h => h === "TOTAL PRICE"), cMtd = H.findIndex(h => h === "MONTH TO DATE");
+    if (cName < 0 || cTarget < 0 || cTotal < 0) return null;
+    let mi = -1, year = null; const m = H[cTarget].match(/^TARGET\s+([A-Z]+)/); if (m) mi = MONTH_NAMES.findIndex(n => norm(n) === m[1]);
+    const dayCols = [];
+    for (const r of [hi - 1, hi - 2, hi + 0]) { if (r < 0) continue; (rows[r] || []).forEach((v, c) => { if (c <= cMtd) return; const d = parseSalesDate(v); if (d) dayCols.push({ c, d: d.getDate(), mi: d.getMonth(), y: d.getFullYear() }); }); if (dayCols.length) break; }
+    if (dayCols.length) { const first = dayCols[0]; year = first.y; if (mi < 0) mi = first.mi; }
+    if (mi < 0) mi = new Date().getMonth(); if (year == null) year = new Date().getFullYear();
+    const out = []; let lastDay = 0;
+    for (let r = hi + 1; r < rows.length; r++) {
+      const row = rows[r] || []; const name = String(row[cName] ?? "").trim(); if (!name) { if (out.length) break; else continue; }
+      if (/^(total|jumlah|grand total)$/i.test(name)) break;
+      const target = num(row[cTarget]) || 0, total = num(row[cTotal]) || 0; const days = {};
+      for (const dc of dayCols) { if (dc.mi !== mi) continue; const v = num(row[dc.c]); if (v != null && v !== 0) { days[dc.d] = v; if (v > 0) lastDay = Math.max(lastDay, dc.d); } }
+      out.push({ name: name.replace(/\s+/g, " "), target, total, mtdSheet: num(row[cMtd]), days });
+    }
+    if (!out.length) return null;
+    const dim = daysIn(year, mi);
+    return { mi, year, dim, lastDay: lastDay || dim, rows: out, fetchedAt: Date.now() };
+  }
+  function computeSales() {
+    const S = state.sales; if (!S) return null; const A = { achWarn: 80, achCrit: 60, ...(C.ALERTS || {}) };
+    const N = S.lastDay, dim = S.dim, partial = N < dim, rem = partial ? dim - N : 0;
+    const rows = S.rows.map(r => { const dailyT = r.target ? r.target / dim : 0, tgtNow = dailyT * N; const ach = tgtNow ? r.total / tgtNow : null, achMonth = r.target ? r.total / r.target : null; const gap = tgtNow ? tgtNow - r.total : null, gapFull = r.target ? r.target - r.total : null; const nAct = Object.values(r.days).filter(v => v > 0).length; return { ...r, dailyT, tgtNow, ach, achMonth, gap, gapFull, needPerDay: rem > 0 && gapFull > 0 ? gapFull / rem : null, avgDay: N ? r.total / N : null, activeDays: nAct, status: ach == null ? "na" : ach >= 1 ? "ok" : ach * 100 >= A.achWarn ? "warn" : "bad" }; });
+    const withT = rows.filter(r => r.ach != null); const below = withT.filter(r => r.ach < 1), ok = withT.filter(r => r.ach >= 1), na = rows.filter(r => r.ach == null);
+    const tTarget = withT.reduce((x, r) => x + r.target, 0), tTotal = rows.reduce((x, r) => x + r.total, 0), tNow = withT.reduce((x, r) => x + r.tgtNow, 0), tTotalT = withT.reduce((x, r) => x + r.total, 0);
+    const same = !state.range && state.month !== "ytd" && state.month === S.mi && Y() === S.year;
+    return { S, N, dim, partial, rem, rows, below, ok, na, same, pName: `${MONTH_NAMES[S.mi].toLowerCase().replace(/^./, c => c.toUpperCase())} ${S.year}`, tot: { target: tTarget, total: tTotal, tgtNow: tNow, ach: tNow ? tTotalT / tNow : null, achMonth: tTarget ? tTotalT / tTarget : null, gap: tNow - tTotalT, gapFull: tTarget - tTotalT, needPerDay: rem > 0 && tTarget - tTotalT > 0 ? (tTarget - tTotalT) / rem : null, avgDay: N ? tTotalT / N : null }, gapBelow: below.reduce((x, r) => x + r.gap, 0) };
+  }
+  function renderSales() {
+    const R = computeSales(); const list = $("salesList"), kpi = $("salesKpi"), prio = $("salesPrio");
+    if (!R) { $("salesSub").textContent = "Data sales belum terbaca."; kpi.innerHTML = ""; prio.classList.add("hidden"); list.innerHTML = `<div class="tg-empty">Spreadsheet pencapaian sales tidak terbaca. Pastikan dibagikan "Siapa saja yang memiliki link — Viewer" dan ID di <code>config.js</code> (SALES.SHEET_ID) benar.</div>`; $("salesFoot").textContent = ""; return; }
+    const warnAt = (C.ALERTS || {}).achWarn ?? 80; const lfl = R.partial ? ` · data s/d tgl ${R.N} (hari ke-${R.N} dari ${R.dim})` : " · bulan penuh";
+    $("salesSub").innerHTML = `${R.pName}${lfl} · ${R.rows.length} sales · pencapaian = omset ÷ target ${R.partial ? "s/d hari berdata" : "bulan"}${R.same ? "" : ` · <b>catatan:</b> sheet sales hanya berisi ${R.pName}, tidak mengikuti periode yang dipilih di atas`}`;
+    const k = (n, l, cl, sub) => `<div class="tg-kpi ${cl}"><b>${n}</b><span>${l}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
+    kpi.innerHTML = k(R.tot.ach == null ? "—" : (R.tot.ach * 100).toFixed(0) + "%", "pencapaian tim sales", R.tot.ach == null ? "muted" : R.tot.ach >= 1 ? "good" : R.tot.ach * 100 >= warnAt ? "warn" : "bad", `${fmtRpS(R.tot.total)} dari target ${R.partial ? "s/d hari ini " : ""}${fmtRpS(R.tot.tgtNow)}${R.tot.achMonth != null ? ` · ${(R.tot.achMonth * 100).toFixed(0)}% dari target bulan ${fmtRpS(R.tot.target)}` : ""}`)
+      + k(R.below.length, "belum mencapai target", R.below.length ? "bad" : "muted", `dari ${R.below.length + R.ok.length} sales bertarget`)
+      + k(R.ok.length, "sudah mencapai target", R.ok.length ? "good" : "muted", R.ok.length ? `lebih ${fmtRpS(R.ok.reduce((x, r) => x + (r.total - r.tgtNow), 0))}` : "")
+      + k(fmtRpS(R.gapBelow), "total kekurangan", R.below.length ? "bad" : "muted", R.partial && R.tot.needPerDay ? `perlu ${fmtRpS(R.tot.needPerDay)}/hari tim × ${R.rem} hari tersisa` : "")
+      + (R.na.length ? k(R.na.length, "tanpa target", "muted", "isi kolom Target di sheet") : "");
+    const top = R.below.slice().sort((a, b) => b.gap - a.gap)[0]; const best = R.rows.filter(r => r.ach != null).sort((a, b) => b.ach - a.ach)[0];
+    if (best || top) { prio.classList.remove("hidden"); prio.innerHTML = `<svg><use href="#i-target"/></svg><div>${best ? `<b>Terbaik: ${best.name}</b> ${(best.ach * 100).toFixed(0)}% (${fmtRpS(best.total)}).` : ""}${top ? ` <b>Kekurangan terbesar: ${top.name}</b> ${fmtRpS(top.gap)} (${(top.gap / R.gapBelow * 100).toFixed(0)}% dari total kekurangan)${top.needPerDay ? `, perlu ${fmtRpS(top.needPerDay)}/hari` : ""}.` : ""}</div>`; } else prio.classList.add("hidden");
+    const f = state.salesFilter || "all", srt = state.salesSort || "best";
+    document.querySelectorAll("#slFilter button").forEach(b => { b.classList.toggle("on", b.dataset.f === f); const n = b.dataset.f === "all" ? R.rows.length : b.dataset.f === "below" ? R.below.length : R.ok.length; b.querySelector("i").textContent = n; });
+    document.querySelectorAll("#slSort button").forEach(b => b.classList.toggle("on", b.dataset.s === srt));
+    let rows = f === "below" ? R.below : f === "ok" ? R.ok : R.rows.slice();
+    const order = { bad: 0, warn: 1, ok: 2, na: 3 };
+    if (srt === "best") rows = rows.slice().sort((a, b) => (b.ach ?? -1) - (a.ach ?? -1) || b.total - a.total);
+    else if (srt === "worst") rows = rows.slice().sort((a, b) => order[a.status] - order[b.status] || (a.ach ?? 9) - (b.ach ?? 9));
+    else if (srt === "gap") rows = rows.slice().sort((a, b) => (b.gap ?? -Infinity) - (a.gap ?? -Infinity));
+    else rows = rows.slice().sort((a, b) => b.total - a.total);
+    const maxPct = Math.max(1.2, ...rows.map(r => r.ach || 0));
+    list.innerHTML = rows.length ? rows.map((r, i) => { const w = r.ach == null ? 0 : Math.min(100, r.ach / maxPct * 100), mark = 100 / maxPct; const pct = r.ach == null ? "—" : (r.ach * 100).toFixed(0) + "%";
+      const sub = r.ach == null ? `${fmtRpS(r.total)} · target belum diisi` : r.ach >= 1 ? `${fmtRpS(r.total)} dari ${fmtRpS(r.tgtNow)} · <span class="good">lebih ${fmtRpS(r.total - r.tgtNow)}</span> · ${(r.achMonth * 100).toFixed(0)}% target bulan` : `${fmtRpS(r.total)} dari ${fmtRpS(r.tgtNow)} · <span class="${r.status}">kurang ${fmtRpS(r.gap)}</span>${r.needPerDay ? ` · perlu <b>${fmtRpS(r.needPerDay)}/hari</b> × ${R.rem} hari` : ""} · ${(r.achMonth * 100).toFixed(0)}% target bulan`;
+      return `<div class="tg tg-${r.status}"><span class="tg-rank">${i + 1}</span><span class="tg-body"><span class="tg-top"><b>${r.name}</b><span class="tg-pct">${pct}</span></span><span class="tg-bar"><i style="width:${w.toFixed(1)}%"></i><em style="left:${mark.toFixed(1)}%"></em></span><span class="tg-sub">${sub}</span></span></div>`; }).join("") : `<div class="tg-empty">Tidak ada sales pada filter ini.</div>`;
+    $("salesFoot").innerHTML = `<span class="lg lg-bad">&lt; ${warnAt}%</span><span class="lg lg-warn">${warnAt}–99%</span><span class="lg lg-good">≥ 100%</span><span class="lg lg-na">tanpa target</span><span>garis tipis = 100% target · target s/d hari ini = target bulan ÷ ${R.dim} hari × ${R.N} hari berdata · "% target bulan" = omset ÷ target bulan penuh (angka Month to Date di sheet) · sumber: Google Sheet pencapaian sales</span>`;
+  }
+  // bagian sales untuk pesan WhatsApp (mode: detail | compact | pct)
+  function waSalesLines(mode) {
+    const R = computeSales(); if (!R || !R.same) return [];
+    const L = []; const warnAt = (C.ALERTS || {}).achWarn ?? 80;
+    const rows = R.rows.filter(r => r.ach != null).sort((a, b) => b.ach - a.ach);
+    const st = R.tot.ach == null ? "na" : R.tot.ach >= 1 ? "ok" : R.tot.ach * 100 >= warnAt ? "warn" : "bad";
+    if (mode === "pct") {
+      L.push(`*PENCAPAIAN SALES (${rows.length} orang)*`);
+      L.push(`Tim sales keseluruhan: ${waIco(st)} *${R.tot.ach == null ? "-" : (R.tot.ach * 100).toFixed(0) + "%"}* dari target${R.partial ? " sampai hari ini" : ""}. ${R.ok.length} sales sudah mencapai target, ${R.below.length} belum.`);
+      L.push(`Urutan dari pencapaian tertinggi.`);
+      rows.forEach((r, i) => L.push(`${i + 1}. ${waIco(r.status)} ${r.name} — *${(r.ach * 100).toFixed(0)}%*`));
+      R.na.forEach(r => L.push(`⚪ ${r.name} — target belum diisi`));
+      if (rows.length) { const b = rows[0]; L.push(""); L.push(`🏆 Sales terbaik ${R.pName}: *${b.name}* (${(b.ach * 100).toFixed(0)}%). ${R.below.length ? "Yang masih di bawah target: fokus kunjungan dan closing setiap hari." : "Semua sales di jalur target!"}`); }
+    } else if (mode === "compact") {
+      L.push(`*PENCAPAIAN SALES (${rows.length} orang)*`);
+      L.push(`${waIco(st)} Tim: ${waRp(R.tot.total)} / ${waRp(R.tot.tgtNow)} (${R.tot.ach == null ? "-" : (R.tot.ach * 100).toFixed(0) + "%"}) · ${R.ok.length} tercapai, ${R.below.length} belum`);
+      rows.forEach((r, i) => L.push(`${i + 1}. ${waIco(r.status)} *${r.name}* ${(r.ach * 100).toFixed(0)}% · ${waRp(r.total)} / ${waRp(r.tgtNow)}${r.ach < 1 ? ` · kurang ${waRp(r.gap)}` : ""}`));
+      R.na.forEach(r => L.push(`⚪ ${r.name} — ${waRp(r.total)} (target belum diisi)`));
+    } else {
+      L.push(`*PENCAPAIAN SALES (${rows.length} orang)*`);
+      L.push(`• Omset tim sales${R.partial ? " sampai hari ini" : ""}: ${waFull(R.tot.total)}`);
+      L.push(`• Target${R.partial ? " sampai hari ini" : ""}: ${waFull(R.tot.tgtNow)} (target bulan ${waFull(R.tot.target)})`);
+      L.push(`• Pencapaian tim: ${waIco(st)} *${R.tot.ach == null ? "-" : (R.tot.ach * 100).toFixed(0) + "%"}* · ${R.ok.length} sales tercapai, ${R.below.length} belum${R.tot.gap > 0 ? ` · kekurangan ${waFull(R.tot.gap)}` : ""}`);
+      if (R.partial && R.tot.needPerDay) L.push(`• Sisa ${R.rem} hari, tim perlu ${waFull(R.tot.needPerDay)} per hari untuk target bulan`);
+      L.push(`Urutan dari pencapaian tertinggi.`);
+      rows.forEach((r, i) => L.push(`${i + 1}. ${waIco(r.status)} *${r.name}* — ${(r.ach * 100).toFixed(0)}%\n   Omset ${waFull(r.total)} dari target ${waFull(r.tgtNow)}${r.ach >= 1 ? ` · lebih ${waFull(r.total - r.tgtNow)}` : ` · kurang ${waFull(r.gap)}${r.needPerDay ? ` · perlu ${waFull(r.needPerDay)}/hari` : ""}`}`));
+      R.na.forEach(r => L.push(`⚪ *${r.name}* — omset ${waFull(r.total)}, target belum diisi`));
+    }
+    L.push("");
+    return L;
+  }
   function renderTargetBoard() {
     const B = computeTargetBoard(); const list = $("exTargetList"), kpi = $("exTargetKpi"), prio = $("exTargetPrio");
     const empty = (msg) => { kpi.innerHTML = ""; prio.classList.add("hidden"); list.innerHTML = `<div class="tg-empty">${msg}</div>`; $("exTargetSum").textContent = ""; $("exTargetFoot").textContent = ""; };
@@ -1467,7 +1565,7 @@
   }
 
   // ---------- view switch & render ----------
-  const VIEWS = { exec: renderExec, rank: renderRank, trend: renderTrend, sssg: renderSssg, newout: renderNewOut, alerts: renderAlerts, insight: renderInsight, visit: renderVisits };
+  const VIEWS = { exec: renderExec, rank: renderRank, trend: renderTrend, sssg: renderSssg, newout: renderNewOut, alerts: renderAlerts, insight: renderInsight, visit: renderVisits, sales: renderSales };
   function setView(v) {
     if (!VIEWS[v]) v = "exec"; state.view = v;
     document.querySelectorAll(".view").forEach(el => el.classList.toggle("hidden", el.id !== "view-" + v));
@@ -1502,6 +1600,10 @@
   document.querySelectorAll("#tgFilter button").forEach(b => b.addEventListener("click", () => { state.targetFilter = b.dataset.f; try { localStorage.setItem("sssg.tgFilter", b.dataset.f); } catch (e) { } renderTargetBoard(); }));
   $("btnWa").addEventListener("click", openWa); document.querySelectorAll("#waMode button").forEach(b => b.addEventListener("click", () => { state.waMode = b.dataset.m; try { localStorage.setItem("sssg.waMode", b.dataset.m); } catch (e) { } waFill(); })); try { state.waMode = localStorage.getItem("sssg.waMode") || "detail"; } catch (e) { } $("waClose").addEventListener("click", closeWa); $("waCopy").addEventListener("click", waCopy); $("waOpen").addEventListener("click", waOpen);
   $("waModal").addEventListener("click", e => { if (e.target === $("waModal")) closeWa(); }); document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("waModal").classList.contains("hidden")) closeWa(); });
+  try { state.salesFilter = localStorage.getItem("sssg.slFilter") || "all"; state.salesSort = localStorage.getItem("sssg.slSort") || "best"; } catch (e) { }
+  document.querySelectorAll("#slFilter button").forEach(b => b.addEventListener("click", () => { state.salesFilter = b.dataset.f; try { localStorage.setItem("sssg.slFilter", b.dataset.f); } catch (e) { } renderSales(); }));
+  document.querySelectorAll("#slSort button").forEach(b => b.addEventListener("click", () => { state.salesSort = b.dataset.s; try { localStorage.setItem("sssg.slSort", b.dataset.s); } catch (e) { } renderSales(); }));
+  $("btnWaSales").addEventListener("click", openWa);
   document.querySelectorAll("#tgSort button").forEach(b => b.addEventListener("click", () => { state.targetSort = b.dataset.s; try { localStorage.setItem("sssg.tgSort", b.dataset.s); } catch (e) { } renderTargetBoard(); }));
   $("btnBell").addEventListener("click", () => setView("alerts"));
   $("rangeFrom").addEventListener("change", onRangeInput); $("rangeTo").addEventListener("change", onRangeInput);

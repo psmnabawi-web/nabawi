@@ -339,3 +339,4 @@ button.link{background:none;border:0;padding:0;font:inherit}
 .wa-mode{display:flex;align-items:center;gap:10px}
 .wa-hint{margin-top:-6px;font-size:12px}
 @media(max-width:760px){.wa-mode{flex-wrap:wrap}.wa-mode .seg{flex-wrap:wrap}}
+#view-sales .tg{cursor:default}#view-sales .tg:hover{transform:none}

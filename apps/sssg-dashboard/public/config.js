@@ -76,4 +76,8 @@ window.SSSG_CONFIG = {
 
   // Ambang warna konversi kunjungan (%): belanja ÷ datang
   THRESHOLD_KONVERSI: { good: 80, warn: 60 },
+
+  // Pencapaian SALES: spreadsheet "Pencapaian sales" (satu baris per sales: Nama | Target <bulan> | ... | Total Price | Month to Date | omset per tanggal).
+  // SHEET_NAME kosong = tab pertama. Spreadsheet harus dibagikan "Siapa saja yang memiliki link — Viewer".
+  SALES: { SHEET_ID: "1ehWqWy-5mx8HcvbzAXPOfxExLxgsyFyy6OruhzGtpsQ", SHEET_NAME: "", TITLE: "Pencapaian Sales" },
 };
