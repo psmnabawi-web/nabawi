@@ -1102,7 +1102,24 @@
     L.push(`Dashboard lengkap: ${location.origin}${location.pathname}`);
     return L.join("\n");
   }
-  function waFill() { const msg = buildWaMessage(state.waCompact); if (!msg) return false; $("waText").value = msg; $("waStatus").textContent = `${msg.length} karakter · pesan bisa diedit sebelum dikirim`; $("waText").scrollTop = 0; document.querySelectorAll("#waMode button").forEach(b => b.classList.toggle("on", (b.dataset.m === "compact") === !!state.waCompact)); return true; }
+  function buildWaPercent() {
+    const B = computeTargetBoard(); if (!B || !B.rows.length) return null;
+    const E = state.range ? computeExecRange(state.range.a, state.range.b, null) : computeExec(state.month, null);
+    const org = (C.OWNER && C.OWNER.org) || "Perusahaan"; const warnAt = (C.ALERTS || {}).achWarn ?? 80;
+    const ytd = !state.range && state.month === "ytd"; const mi = state.range ? null : state.month; const totalDays = B.partial ? B.N + B.remDays : null;
+    const periode = state.range ? fmtRange(state.range.a, state.range.b) : ytd ? `Januari–${MONTH_SHORT[E && E.cur ? E.cur.last : 0]} ${Y()} (YTD)` : `${MONTH_NAMES[mi].toLowerCase().replace(/^./, c => c.toUpperCase())} ${Y()}${B.partial ? `, sampai tanggal ${B.N} (hari ke-${B.N} dari ${totalDays})` : ""}`;
+    const below = B.rows.filter(r => r.status === "bad" || r.status === "warn"), ok = B.rows.filter(r => r.status === "ok"), na = B.rows.filter(r => r.status === "na");
+    const L = [`📊 *PENCAPAIAN TARGET OUTLET*`, `${org} · ${periode}`, ""];
+    if (E && E.ach != null) { const st = E.ach >= 1 ? "ok" : E.ach * 100 >= warnAt ? "warn" : "bad"; L.push(`Total ${org}: ${waIco(st)} *${(E.ach * 100).toFixed(0)}%*`); L.push(""); }
+    const row = (r, i) => `${i}. ${waIco(r.status)} ${r.label} — *${(r.ach * 100).toFixed(0)}%*`;
+    if (below.length) { L.push(`*Belum mencapai target (${below.length}):*`); below.forEach((r, i) => L.push(row(r, i + 1))); L.push(""); }
+    if (ok.length) { L.push(`*Sudah mencapai target (${ok.length}):* 👏`); ok.forEach((r, i) => L.push(row(r, i + 1))); L.push(""); }
+    if (na.length) { na.forEach(r => L.push(`⚪ ${r.label} — target belum diisi`)); L.push(""); }
+    if (B.partial && B.remDays > 0) L.push(below.length ? `⏱ Sisa ${B.remDays} hari. Ayo kejar target! 💪` : `⏱ Sisa ${B.remDays} hari. Pertahankan! 💪`);
+    L.push(`🔴 di bawah ${warnAt}% · 🟠 ${warnAt}–99% · 🟢 100% ke atas`);
+    return L.join("\n");
+  }
+  function waFill() { const m = state.waMode || "detail"; const msg = m === "pct" ? buildWaPercent() : buildWaMessage(m === "compact"); if (!msg) return false; $("waText").value = msg; $("waStatus").textContent = `${msg.length} karakter · pesan bisa diedit sebelum dikirim`; $("waText").scrollTop = 0; document.querySelectorAll("#waMode button").forEach(b => b.classList.toggle("on", b.dataset.m === m)); $("waHint").textContent = m === "pct" ? "Untuk Grup Leader: hanya persentase pencapaian per outlet, tanpa angka rupiah." : m === "compact" ? "Versi singkat satu baris per outlet, angka disingkat (jt/M)." : "Untuk BOD/manajemen: omset, target, kekurangan, dan kebutuhan per hari setiap outlet, angka rupiah penuh."; return true; }
   function openWa() {
     if (!waFill()) { alert("Belum ada data target untuk periode ini."); return; }
     $("waModal").classList.remove("hidden"); $("waText").focus(); $("waText").scrollTop = 0; $("waText").setSelectionRange(0, 0);
@@ -1475,7 +1492,7 @@
   $("selStore").addEventListener("change", e => { state.execKey = e.target.value || null; render(); });
   try { state.targetFilter = localStorage.getItem("sssg.tgFilter") || "all"; state.targetSort = localStorage.getItem("sssg.tgSort") || "pct"; } catch (e) { }
   document.querySelectorAll("#tgFilter button").forEach(b => b.addEventListener("click", () => { state.targetFilter = b.dataset.f; try { localStorage.setItem("sssg.tgFilter", b.dataset.f); } catch (e) { } renderTargetBoard(); }));
-  $("btnWa").addEventListener("click", openWa); document.querySelectorAll("#waMode button").forEach(b => b.addEventListener("click", () => { state.waCompact = b.dataset.m === "compact"; waFill(); })); $("waClose").addEventListener("click", closeWa); $("waCopy").addEventListener("click", waCopy); $("waOpen").addEventListener("click", waOpen);
+  $("btnWa").addEventListener("click", openWa); document.querySelectorAll("#waMode button").forEach(b => b.addEventListener("click", () => { state.waMode = b.dataset.m; try { localStorage.setItem("sssg.waMode", b.dataset.m); } catch (e) { } waFill(); })); try { state.waMode = localStorage.getItem("sssg.waMode") || "detail"; } catch (e) { } $("waClose").addEventListener("click", closeWa); $("waCopy").addEventListener("click", waCopy); $("waOpen").addEventListener("click", waOpen);
   $("waModal").addEventListener("click", e => { if (e.target === $("waModal")) closeWa(); }); document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("waModal").classList.contains("hidden")) closeWa(); });
   document.querySelectorAll("#tgSort button").forEach(b => b.addEventListener("click", () => { state.targetSort = b.dataset.s; try { localStorage.setItem("sssg.tgSort", b.dataset.s); } catch (e) { } renderTargetBoard(); }));
   $("btnBell").addEventListener("click", () => setView("alerts"));

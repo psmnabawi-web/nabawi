@@ -337,3 +337,5 @@ button.link{background:none;border:0;padding:0;font:inherit}
 .btn-glass.dark{background:var(--card-2);color:var(--ink);border:1px solid var(--line);cursor:pointer;font:inherit;font-size:12.5px;font-weight:700}.btn-glass.dark:hover{background:#fff}
 @media(max-width:760px){.wa-modal{padding:0;align-items:stretch}.wa-box{border-radius:0;max-height:none;height:100%}.wa-text{min-height:0}.wa-btns{width:100%}.wa-btns button{flex:1;justify-content:center}}
 .wa-mode{display:flex;align-items:center;gap:10px}
+.wa-hint{margin-top:-6px;font-size:12px}
+@media(max-width:760px){.wa-mode{flex-wrap:wrap}.wa-mode .seg{flex-wrap:wrap}}
