@@ -1007,8 +1007,48 @@
       tile("Konversi (belanja ÷ datang)", fmtPct(c.konversi).replace("+", ""), pillPts(gy.konversi), `${cmpTxt(x => fmtPct(x.konversi).replace("+", ""), x => fmtPct(x.konversi).replace("+", ""))}${cm && gm.konversi != null ? ` (${fmtPts(gm.konversi)})` : ""}`),
     ].join("");
   }
+  // ---------- papan target per outlet (Ringkasan): semua outlet vs target periode terpilih, tanpa memilih outlet ----------
+  function computeTargetBoard() {
+    const A = { achWarn: 80, achCrit: 60, ...(C.ALERTS || {}) }; const mi = state.month, ytd = mi === "ytd", rng = state.range; const rows = [];
+    let pName, partial = false, remDays = 0, N = null;
+    if (rng) {
+      pName = fmtRange(rng.a, rng.b);
+      for (const s of activeStores()) { const c = sumRange(rangeDays(rng.a, rng.b, s.key)); if (!c.nDays && !c.targetAll) continue; rows.push({ key: s.key, label: s.label, actual: c.total, target: c.target, fullTarget: c.targetAll, nDays: c.nDays }); }
+    } else {
+      const R = ytd ? computeYTD("yoy") : computeMonth(mi, "yoy"); if (!R) return null; pName = periodName(mi);
+      const idxs = ytd ? state.months.map((m, i) => m ? i : -1).filter(i => i >= 0) : [mi]; const last = idxs[idxs.length - 1];
+      partial = !ytd && R.partial; N = partial ? R.N : null; remDays = partial ? daysIn(Y(), mi) - N : 0;
+      for (const r of R.rows) { if (r.excluded) continue; const full = idxs.reduce((x, i) => x + (state.months[i] ? state.months[i].days.reduce((y, d) => y + (d.tgt[r.key] || 0), 0) : 0), 0); if (r.actual == null && !full) continue; rows.push({ key: r.key, label: r.label, actual: r.actual || 0, target: r.target || 0, fullTarget: full, nDays: null }); }
+      void last;
+    }
+    for (const r of rows) {
+      r.ach = r.target ? r.actual / r.target : null;               // pencapaian vs target s/d hari berdata (like-for-like)
+      r.gap = r.target ? r.target - r.actual : null;                // kekurangan terhadap target s/d hari berdata
+      r.gapFull = r.fullTarget ? r.fullTarget - r.actual : null;    // kekurangan terhadap target periode penuh
+      r.needPerDay = partial && remDays > 0 && r.gapFull > 0 ? r.gapFull / remDays : null;
+      r.status = r.ach == null ? "na" : r.ach >= 1 ? "ok" : r.ach * 100 >= A.achWarn ? "warn" : "bad";
+    }
+    const order = { bad: 0, warn: 1, ok: 2, na: 3 };
+    rows.sort((a, b) => order[a.status] - order[b.status] || (a.ach ?? 9) - (b.ach ?? 9) || b.actual - a.actual);
+    const withT = rows.filter(r => r.ach != null), below = withT.filter(r => r.ach < 1);
+    return { rows, pName, partial, N, remDays, nTarget: withT.length, nBelow: below.length, gapBelow: below.reduce((x, r) => x + r.gap, 0), gapFullBelow: below.reduce((x, r) => x + (r.gapFull > 0 ? r.gapFull : 0), 0) };
+  }
+  function renderTargetBoard() {
+    const B = computeTargetBoard(); const box = $("exTargetList"); if (!B || !B.rows.length) { $("exTargetSum").textContent = "target belum diisi di sheet"; box.innerHTML = `<div class="muted">Belum ada data target untuk periode ini.</div>`; $("exTargetFoot").textContent = ""; return; }
+    const lfl = B.partial ? ` · s/d tgl ${B.N}` : "";
+    $("exTargetSum").innerHTML = B.nTarget ? (B.nBelow ? `<b class="bad">${B.nBelow} dari ${B.nTarget} outlet</b> belum mencapai target ${B.pName}${lfl} · kekurangan ${fmtRpS(B.gapBelow)}` : `<b class="good">Semua ${B.nTarget} outlet</b> mencapai target ${B.pName}${lfl}`) : `target belum diisi di sheet untuk ${B.pName}`;
+    const only = !!state.targetOnlyBelow; const list = only ? B.rows.filter(r => r.status === "bad" || r.status === "warn") : B.rows;
+    $("btnTargetOnly").classList.toggle("on", only); $("btnTargetOnly").textContent = only ? "Tampilkan semua" : "Hanya yang belum tercapai";
+    box.innerHTML = list.length ? list.map(r => {
+      const pct = r.ach == null ? 0 : Math.min(1, r.ach); const lab = r.ach == null ? "tanpa target" : (r.ach * 100).toFixed(0) + "%";
+      const sub = r.ach == null ? `${fmtRpS(r.actual)} · target belum diisi` : r.ach >= 1 ? `${fmtRpS(r.actual)} dari target ${fmtRpS(r.target)} · lebih ${fmtRpS(r.actual - r.target)}` : `${fmtRpS(r.actual)} dari target ${fmtRpS(r.target)} · kurang <b>${fmtRpS(r.gap)}</b>${r.needPerDay ? ` · butuh ${fmtRpS(r.needPerDay)}/hari × ${B.remDays} hari tersisa` : ""}`;
+      return `<div class="tg tg-${r.status}" data-key="${r.key}" title="Klik untuk melihat detail ${r.label}"><div class="tg-top"><b>${r.label}</b><span class="tg-pct">${lab}</span></div><div class="tg-bar"><i style="width:${(pct * 100).toFixed(1)}%"></i></div><div class="tg-sub">${sub}</div></div>`;
+    }).join("") : `<div class="muted">Semua outlet mencapai target. Klik "Tampilkan semua" untuk melihat rinciannya.</div>`;
+    box.querySelectorAll(".tg[data-key]").forEach(el => el.addEventListener("click", () => { state.execKey = el.dataset.key; $("selStore").value = state.execKey; render(); window.scrollTo({ top: 0, behavior: "smooth" }); }));
+    $("exTargetFoot").textContent = `Pencapaian = omset ÷ target ${B.partial ? "sampai hari berdata (like-for-like)" : "periode"} · merah < ${(C.ALERTS || {}).achWarn ?? 80}% · kuning ${(C.ALERTS || {}).achWarn ?? 80}–99% · hijau ≥ 100%${B.partial ? ` · "butuh/hari" dihitung dari target bulan penuh` : ""} · diurutkan dari yang paling tertinggal`;
+  }
   function renderExec() {
-    buildExecChips(); renderExecVisitTiles(state.execKey || null, execEntity()); const key = state.execKey || null, ent = execEntity();
+    buildExecChips(); renderTargetBoard(); renderExecVisitTiles(state.execKey || null, execEntity()); const key = state.execKey || null, ent = execEntity();
     if (state.range) { const R = computeExecRange(state.range.a, state.range.b, key); if (R) return renderExecRange(R, key, ent); $("exHeroLabel").textContent = `${ent}: tidak ada data pada rentang ini`; $("exHeroVal").textContent = "—"; }
     const mi = state.month, ytd = mi === "ytd"; const E = computeExec(mi, key); if (!E) { $("exHeroLabel").textContent = `${ent}: tidak ada data`; $("exHeroVal").textContent = "—"; $("exHeroSub").textContent = ""; $("exTiles").innerHTML = ""; return; } const c = E.cur, pName = periodName(mi);
     // target bulan penuh (Σ target harian seluruh bulan) & target s/d hari ini
@@ -1341,6 +1381,7 @@
   $("selYear").addEventListener("change", e => { selectYear(+e.target.value); state.range = null; $("rangePill").classList.remove("on"); $("rangeFrom").value = ""; $("rangeTo").value = ""; buildMonthSelect(); render(); });
   const onRangeInput = () => { const a = $("rangeFrom").value, b = $("rangeTo").value; if (a && b) setRange(new Date(a + "T00:00:00"), new Date(b + "T00:00:00")); };
   $("selStore").addEventListener("change", e => { state.execKey = e.target.value || null; render(); });
+  $("btnTargetOnly").addEventListener("click", () => { state.targetOnlyBelow = !state.targetOnlyBelow; renderTargetBoard(); });
   $("btnBell").addEventListener("click", () => setView("alerts"));
   $("rangeFrom").addEventListener("change", onRangeInput); $("rangeTo").addEventListener("change", onRangeInput);
   $("rangeClear").addEventListener("click", () => { clearRange(); buildMonthSelect(); });

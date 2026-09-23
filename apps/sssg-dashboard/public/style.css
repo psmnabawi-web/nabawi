@@ -272,3 +272,20 @@ button.link{background:none;border:0;padding:0;font:inherit}
 .chat-form .btn-brand{width:44px;height:44px;padding:0;justify-content:center;border-radius:50%;flex-shrink:0}.chat-form .btn-brand svg{width:18px;height:18px}.chat-form .btn-brand:disabled{opacity:.55;cursor:wait;box-shadow:none}
 .chat-status{margin-top:5px;min-height:14px;font-size:11.5px;display:flex;gap:8px;align-items:center}
 @media(max-width:760px){.chat-fab{right:14px;bottom:14px;padding:12px 14px}.chat-fab span{display:none}.chat-panel{inset:0;width:auto;max-width:none;height:auto;border-radius:0;bottom:0;right:0;padding:12px 12px 10px;padding-bottom:calc(10px + env(safe-area-inset-bottom))}.chat-head-btns .chk{display:none}.msg{max-width:92%}}
+
+/* papan pencapaian target per outlet (Ringkasan) */
+.tg-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.tg{background:var(--card-2);border-radius:var(--r-sm);padding:12px 14px 11px;border-left:4px solid var(--na);cursor:pointer;transition:box-shadow .15s,transform .15s;min-width:0}
+.tg:hover{box-shadow:var(--shadow);transform:translateY(-1px)}
+.tg-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.tg-top b{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tg-pct{font-weight:800;font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tg-bar{height:8px;border-radius:999px;background:#E6E9F1;overflow:hidden;margin:8px 0 7px}.tg-bar i{display:block;height:100%;border-radius:999px;width:0;transition:width .5s}
+.tg-sub{font-size:11.5px;line-height:1.35;color:var(--muted)}.tg-sub b{color:var(--ink);font-weight:700}
+.tg-bad{border-left-color:var(--bad)}.tg-bad .tg-pct{color:var(--bad)}.tg-bad .tg-bar i{background:var(--bad)}
+.tg-warn{border-left-color:var(--warn)}.tg-warn .tg-pct{color:var(--warn)}.tg-warn .tg-bar i{background:var(--warn)}
+.tg-ok{border-left-color:var(--good)}.tg-ok .tg-pct{color:var(--good)}.tg-ok .tg-bar i{background:var(--good)}
+.tg-na{border-left-color:var(--na)}.tg-na .tg-pct{color:var(--muted)}.tg-na .tg-bar i{background:#C9CDD9}
+#exTargetSum b.bad{color:var(--bad)}#exTargetSum b.good{color:var(--good)}
+.btn-toggle{border:1px solid var(--line-2);background:var(--card);color:var(--brand-2);font:inherit;font-size:12px;font-weight:700;border-radius:999px;padding:7px 12px;cursor:pointer;white-space:nowrap}
+.btn-toggle.on{background:var(--brand-tint);border-color:transparent}
+@media(max-width:760px){.tg-list{grid-template-columns:1fr}}
