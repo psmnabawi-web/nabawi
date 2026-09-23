@@ -8,9 +8,9 @@ Prasyarat: Node.js 18+ dan akun Google yang punya akses Firebase.
 
 ```bash
 cd sssg-dashboard
-PROJECT_ID=iw-sssg bash deploy.sh
+bash deploy.sh
 ```
-Hasil: https://iw-sssg.web.app (ganti `iw-sssg` dengan Project ID pilihan Anda; harus unik global).
+Hasil: https://sssg-dashboard-2026.web.app (project Firebase `sssg-dashboard-2026`, akun nabawim@gmail.com; ganti lewat `PROJECT_ID=... bash deploy.sh`).
 
 ## Syarat data
 1. Spreadsheet dibagikan **Siapa saja yang memiliki link → Viewer** (Bagikan → Akses umum).

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Deploy Dashboard SSSG ke Firebase Hosting.
-# Pakai:  bash deploy.sh            (default PROJECT_ID=iw-sssg)
+# Pakai:  bash deploy.sh            (default PROJECT_ID=sssg-dashboard-2026)
 #         PROJECT_ID=lain bash deploy.sh
 set -euo pipefail
 
-PROJECT_ID="${PROJECT_ID:-iw-sssg}"
+PROJECT_ID="${PROJECT_ID:-sssg-dashboard-2026}"
 DISPLAY_NAME="${DISPLAY_NAME:-IW SSSG Dashboard}"
 
 cd "$(dirname "$0")"
