@@ -31,7 +31,7 @@
   <symbol id="i-store" viewBox="0 0 24 24"><path d="M4 9l1.5-5h13L20 9M4 9v11h16V9M4 9h16M9 20v-6h6v6" stroke-linejoin="round"/></symbol>
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z" stroke-linejoin="round"/><path d="M8 9h8M8 12h5" stroke-linecap="round"/></symbol>
   <symbol id="i-send" viewBox="0 0 24 24"><path d="M3 12l18-8-6 18-3-8z" stroke-linejoin="round"/><path d="M12 14l9-10" stroke-linecap="round"/></symbol>
-  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol><symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
 </svg>
 
@@ -77,9 +77,12 @@
         <div class="tiles big" id="exTiles"></div>
       </section>
       <section class="card" id="exTargetCard">
-        <div class="card-head"><div><h3>Pencapaian target per outlet</h3><div class="muted" id="exTargetSum"></div></div><button class="btn-toggle" id="btnTargetOnly" type="button">Hanya yang belum tercapai</button></div>
+        <div class="card-head tg-head"><div><h3>Pencapaian target per outlet</h3><div class="muted" id="exTargetSum"></div></div>
+          <div class="tg-ctrl"><div class="seg sm" id="tgFilter" role="tablist"><button data-f="all" class="on" role="tab">Semua <i></i></button><button data-f="below" role="tab">Belum tercapai <i></i></button><button data-f="ok" role="tab">Tercapai <i></i></button></div><div class="seg sm" id="tgSort" title="Urutan daftar"><button data-s="pct" class="on">Urut %</button><button data-s="gap">Urut Rp kurang</button></div></div></div>
+        <div class="tg-kpis" id="exTargetKpi"></div>
+        <div class="tg-prio hidden" id="exTargetPrio"></div>
         <div class="tg-list" id="exTargetList"></div>
-        <div class="howto" id="exTargetFoot"></div>
+        <div class="tg-foot" id="exTargetFoot"></div>
       </section>
       <div class="tiles big three" id="exTiles2"></div>
       <section class="card">

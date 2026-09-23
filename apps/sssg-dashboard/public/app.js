@@ -1034,18 +1034,34 @@
     return { rows, pName, partial, N, remDays, nTarget: withT.length, nBelow: below.length, gapBelow: below.reduce((x, r) => x + r.gap, 0), gapFullBelow: below.reduce((x, r) => x + (r.gapFull > 0 ? r.gapFull : 0), 0) };
   }
   function renderTargetBoard() {
-    const B = computeTargetBoard(); const box = $("exTargetList"); if (!B || !B.rows.length) { $("exTargetSum").textContent = "target belum diisi di sheet"; box.innerHTML = `<div class="muted">Belum ada data target untuk periode ini.</div>`; $("exTargetFoot").textContent = ""; return; }
-    const lfl = B.partial ? ` · s/d tgl ${B.N}` : "";
-    $("exTargetSum").innerHTML = B.nTarget ? (B.nBelow ? `<b class="bad">${B.nBelow} dari ${B.nTarget} outlet</b> belum mencapai target ${B.pName}${lfl} · kekurangan ${fmtRpS(B.gapBelow)}` : `<b class="good">Semua ${B.nTarget} outlet</b> mencapai target ${B.pName}${lfl}`) : `target belum diisi di sheet untuk ${B.pName}`;
-    const only = !!state.targetOnlyBelow; const list = only ? B.rows.filter(r => r.status === "bad" || r.status === "warn") : B.rows;
-    $("btnTargetOnly").classList.toggle("on", only); $("btnTargetOnly").textContent = only ? "Tampilkan semua" : "Hanya yang belum tercapai";
-    box.innerHTML = list.length ? list.map(r => {
-      const pct = r.ach == null ? 0 : Math.min(1, r.ach); const lab = r.ach == null ? "tanpa target" : (r.ach * 100).toFixed(0) + "%";
-      const sub = r.ach == null ? `${fmtRpS(r.actual)} · target belum diisi` : r.ach >= 1 ? `${fmtRpS(r.actual)} dari target ${fmtRpS(r.target)} · lebih ${fmtRpS(r.actual - r.target)}` : `${fmtRpS(r.actual)} dari target ${fmtRpS(r.target)} · kurang <b>${fmtRpS(r.gap)}</b>${r.needPerDay ? ` · butuh ${fmtRpS(r.needPerDay)}/hari × ${B.remDays} hari tersisa` : ""}`;
-      return `<div class="tg tg-${r.status}" data-key="${r.key}" title="Klik untuk melihat detail ${r.label}"><div class="tg-top"><b>${r.label}</b><span class="tg-pct">${lab}</span></div><div class="tg-bar"><i style="width:${(pct * 100).toFixed(1)}%"></i></div><div class="tg-sub">${sub}</div></div>`;
-    }).join("") : `<div class="muted">Semua outlet mencapai target. Klik "Tampilkan semua" untuk melihat rinciannya.</div>`;
-    box.querySelectorAll(".tg[data-key]").forEach(el => el.addEventListener("click", () => { state.execKey = el.dataset.key; $("selStore").value = state.execKey; render(); window.scrollTo({ top: 0, behavior: "smooth" }); }));
-    $("exTargetFoot").textContent = `Pencapaian = omset ÷ target ${B.partial ? "sampai hari berdata (like-for-like)" : "periode"} · merah < ${(C.ALERTS || {}).achWarn ?? 80}% · kuning ${(C.ALERTS || {}).achWarn ?? 80}–99% · hijau ≥ 100%${B.partial ? ` · "butuh/hari" dihitung dari target bulan penuh` : ""} · diurutkan dari yang paling tertinggal`;
+    const B = computeTargetBoard(); const list = $("exTargetList"), kpi = $("exTargetKpi"), prio = $("exTargetPrio");
+    const empty = (msg) => { kpi.innerHTML = ""; prio.classList.add("hidden"); list.innerHTML = `<div class="tg-empty">${msg}</div>`; $("exTargetSum").textContent = ""; $("exTargetFoot").textContent = ""; };
+    if (!B || !B.rows.length) return empty("Belum ada data untuk periode ini.");
+    const A = (C.ALERTS || {}); const warnAt = A.achWarn ?? 80; const lfl = B.partial ? ` · s/d tgl ${B.N}` : "";
+    const ok = B.rows.filter(r => r.status === "ok"), below = B.rows.filter(r => r.status === "bad" || r.status === "warn"), na = B.rows.filter(r => r.status === "na");
+    $("exTargetSum").textContent = `${B.pName}${lfl} · ${B.partial ? "pencapaian s/d hari berdata (like-for-like)" : "pencapaian target periode"}`;
+    // KPI ringkas
+    const k = (n, l, cl, sub) => `<div class="tg-kpi ${cl}"><b>${n}</b><span>${l}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
+    kpi.innerHTML = k(below.length, "belum tercapai", below.length ? "bad" : "muted", B.nTarget ? `dari ${B.nTarget} outlet bertarget` : "") + k(ok.length, "tercapai", ok.length ? "good" : "muted", ok.length ? `lebih ${fmtRpS(ok.reduce((x, r) => x + (r.actual - r.target), 0))}` : "") + k(fmtRpS(B.gapBelow), "total kekurangan", below.length ? "bad" : "muted", B.partial && B.gapFullBelow ? `${fmtRpS(B.gapFullBelow)} ke target bulan penuh` : "") + (na.length ? k(na.length, "tanpa target", "muted", "isi kolom TARGET di sheet") : "");
+    // prioritas: gap Rp terbesar (bukan % terbesar)
+    const top = below.slice().sort((a, b) => b.gap - a.gap)[0];
+    if (top) { prio.classList.remove("hidden"); prio.innerHTML = `<svg><use href="#i-target"/></svg><div><b>Prioritas: ${top.label}</b> menyumbang kekurangan terbesar, <b>${fmtRpS(top.gap)}</b> (${(top.gap / B.gapBelow * 100).toFixed(0)}% dari total kekurangan)${top.needPerDay ? ` · butuh ${fmtRpS(top.needPerDay)}/hari pada ${B.remDays} hari tersisa` : ""}.</div>`; } else prio.classList.add("hidden");
+    // filter & urutan
+    const f = state.targetFilter || "all", srt = state.targetSort || "pct";
+    document.querySelectorAll("#tgFilter button").forEach(b => { b.classList.toggle("on", b.dataset.f === f); const n = b.dataset.f === "all" ? B.rows.length : b.dataset.f === "below" ? below.length : ok.length; b.querySelector("i").textContent = n; });
+    document.querySelectorAll("#tgSort button").forEach(b => b.classList.toggle("on", b.dataset.s === srt));
+    let rows = f === "below" ? below : f === "ok" ? ok : B.rows;
+    if (srt === "gap") rows = rows.slice().sort((a, b) => (b.gap ?? -Infinity) - (a.gap ?? -Infinity));
+    const maxPct = Math.max(1.2, ...rows.map(r => r.ach || 0)); // skala bar: 100% = tanda garis, lebih dari itu tetap terlihat
+    list.innerHTML = rows.length ? rows.map((r, i) => {
+      const w = r.ach == null ? 0 : Math.min(100, r.ach / maxPct * 100), mark = 100 / maxPct;
+      const pct = r.ach == null ? "—" : (r.ach * 100).toFixed(0) + "%";
+      const sub = r.ach == null ? `${fmtRpS(r.actual)} · target belum diisi di sheet` : r.ach >= 1 ? `${fmtRpS(r.actual)} dari ${fmtRpS(r.target)} · <span class="good">lebih ${fmtRpS(r.actual - r.target)}</span>` : `${fmtRpS(r.actual)} dari ${fmtRpS(r.target)} · <span class="${r.status}">kurang ${fmtRpS(r.gap)}</span>${r.needPerDay ? ` · butuh <b>${fmtRpS(r.needPerDay)}/hari</b> × ${B.remDays} hari` : ""}`;
+      const sel = state.execKey === r.key ? " sel" : "";
+      return `<button type="button" class="tg tg-${r.status}${sel}" data-key="${r.key}" title="Lihat rincian ${r.label}"><span class="tg-rank">${i + 1}</span><span class="tg-body"><span class="tg-top"><b>${r.label}</b><span class="tg-pct">${pct}</span></span><span class="tg-bar"><i style="width:${w.toFixed(1)}%"></i><em style="left:${mark.toFixed(1)}%"></em></span><span class="tg-sub">${sub}</span></span><svg class="tg-go"><use href="#i-chev"/></svg></button>`;
+    }).join("") : `<div class="tg-empty">${f === "below" ? "Semua outlet bertarget sudah mencapai target." : "Belum ada outlet yang mencapai target."}</div>`;
+    list.querySelectorAll(".tg[data-key]").forEach(el => el.addEventListener("click", () => { state.execKey = el.dataset.key; $("selStore").value = state.execKey; render(); $("exHeroLabel").scrollIntoView({ behavior: "smooth", block: "center" }); }));
+    $("exTargetFoot").innerHTML = `<span class="lg lg-bad">&lt; ${warnAt}%</span><span class="lg lg-warn">${warnAt}–99%</span><span class="lg lg-good">≥ 100%</span><span class="lg lg-na">tanpa target</span><span>garis tipis = 100% target${B.partial ? ` · "butuh/hari" = sisa ke target bulan penuh ÷ ${B.remDays} hari tersisa` : ""} · klik outlet untuk rinciannya</span>`;
   }
   function renderExec() {
     buildExecChips(); renderTargetBoard(); renderExecVisitTiles(state.execKey || null, execEntity()); const key = state.execKey || null, ent = execEntity();
@@ -1381,7 +1397,9 @@
   $("selYear").addEventListener("change", e => { selectYear(+e.target.value); state.range = null; $("rangePill").classList.remove("on"); $("rangeFrom").value = ""; $("rangeTo").value = ""; buildMonthSelect(); render(); });
   const onRangeInput = () => { const a = $("rangeFrom").value, b = $("rangeTo").value; if (a && b) setRange(new Date(a + "T00:00:00"), new Date(b + "T00:00:00")); };
   $("selStore").addEventListener("change", e => { state.execKey = e.target.value || null; render(); });
-  $("btnTargetOnly").addEventListener("click", () => { state.targetOnlyBelow = !state.targetOnlyBelow; renderTargetBoard(); });
+  try { state.targetFilter = localStorage.getItem("sssg.tgFilter") || "all"; state.targetSort = localStorage.getItem("sssg.tgSort") || "pct"; } catch (e) { }
+  document.querySelectorAll("#tgFilter button").forEach(b => b.addEventListener("click", () => { state.targetFilter = b.dataset.f; try { localStorage.setItem("sssg.tgFilter", b.dataset.f); } catch (e) { } renderTargetBoard(); }));
+  document.querySelectorAll("#tgSort button").forEach(b => b.addEventListener("click", () => { state.targetSort = b.dataset.s; try { localStorage.setItem("sssg.tgSort", b.dataset.s); } catch (e) { } renderTargetBoard(); }));
   $("btnBell").addEventListener("click", () => setView("alerts"));
   $("rangeFrom").addEventListener("change", onRangeInput); $("rangeTo").addEventListener("change", onRangeInput);
   $("rangeClear").addEventListener("click", () => { clearRange(); buildMonthSelect(); });

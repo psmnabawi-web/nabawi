@@ -21,12 +21,13 @@ Hasil: https://sssg-dashboard-2026.web.app (project Firebase `sssg-dashboard-202
    Tanpa sheet ini, dashboard tetap jalan: SSSG YoY hanya di level perusahaan (dari sheet REKAP) dan mode **Growth MoM** tersedia per toko.
 
 ## Pencapaian target per outlet (halaman Ringkasan)
-Kartu **Pencapaian target per outlet** tampil di halaman Ringkasan tanpa perlu memilih outlet: semua outlet
-diurutkan dari yang paling tertinggal (merah < 80%, kuning 80–99%, hijau ≥ 100%, abu-abu = target belum diisi).
+Kartu **Pencapaian target per outlet** tampil di halaman Ringkasan tanpa perlu memilih outlet.
+- KPI ringkas: jumlah outlet belum tercapai, tercapai, total kekurangan Rp, dan outlet tanpa target.
+- Sorotan **Prioritas**: outlet dengan kekurangan Rp terbesar (bukan % terbesar) beserta kebutuhan Rp/hari pada sisa hari.
+- Daftar peringkat dengan bar sejajar dan garis tanda 100%: merah < 80%, kuning 80–99%, hijau ≥ 100%, abu-abu = target belum diisi.
+- Filter **Semua / Belum tercapai / Tercapai** dan urutan **% pencapaian** atau **Rp kekurangan** (pilihan diingat di browser).
 - Pencapaian = omset ÷ target **sampai hari berdata** (like-for-like) untuk bulan berjalan; target periode penuh untuk bulan lalu, YTD, dan rentang tanggal.
-- Baris yang belum tercapai menampilkan kekurangan Rp dan, untuk bulan berjalan, kebutuhan Rp/hari pada sisa hari agar target bulan penuh terkejar.
-- Tombol **Hanya yang belum tercapai** menyaring daftar; klik kartu outlet untuk membuka rinciannya di Ringkasan.
-- Ambang warna mengikuti `ALERTS.achWarn` di `config.js`.
+- Klik outlet untuk membuka rinciannya. Ambang warna mengikuti `ALERTS.achWarn` di `config.js`.
 
 ## Cara hitung
 - SSSG YoY = Omset toko bulan ini 2026 ÷ Omset toko bulan sama 2025 − 1 (hanya toko yang ada di kedua tahun).
