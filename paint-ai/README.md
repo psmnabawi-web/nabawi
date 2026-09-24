@@ -159,43 +159,40 @@ Scheduler tidak berjalan di emulator. Di Video Studio, klik **Check status** unt
 
 ### 1. Persiapan di Firebase Console (sekali saja)
 
-1. Buat project **baru**, misalnya `paint-content-ai`, lalu upgrade ke plan **Blaze**. Functions v2, Scheduler, Secret Manager dan Storage mewajibkan Blaze.
-2. **Authentication → Sign-in method**: aktifkan **Email/Password** dan **Google**.
-3. **Build → Storage → Get started** untuk membuat bucket. Lokasi disarankan sama dengan Firestore.
-4. **Project settings → Your apps → Web app**: salin config ke `paint-ai/.env.local`. Set `VITE_USE_EMULATORS=false`.
-5. Isi `functions/.env`, salin dari `functions/.env.example`. Minimal isi `SUPER_ADMIN_EMAILS=email@anda.com`. `FUNCTIONS_REGION` harus sama dengan `VITE_FUNCTIONS_REGION`.
+1. Buat project **baru** dan upgrade ke plan **Blaze**. Tambahkan juga sebuah **Web app** di Project settings → Your apps.
+2. **Authentication → Get started → Sign-in method**: aktifkan **Email/Password** dan **Google**.
+3. **Storage → Get started**: buat bucket default, pilih lokasi yang sama dengan Firestore (disarankan `asia-southeast2`).
+4. Siapkan minimal satu API key AI teks. Gemini paling mudah: key gratis di https://aistudio.google.com/apikey.
 
-### 2. Deploy (satu blok)
+### 2. Deploy (satu blok, dijalankan di laptop)
+
+Prasyarat: Node.js 22+ dan Git.
 
 ```bash
-cd paint-ai
-bash scripts/deploy.sh <PROJECT_ID_BARU> asia-southeast2
+bash scripts/deploy.sh <PROJECT_ID> asia-southeast2 email-admin@anda.com
 ```
 
-Script ini menjalankan:
+Script mengerjakan semuanya secara otomatis:
 
-- Guard: menolak project app lain, mismatch project/region, dan mode emulator.
-- `npm ci`.
-- Lint, typecheck dan unit test.
-- `firebase login`.
-- Membuat Firestore di region pilihan (jika belum ada).
-- Meminta nilai setiap secret. Isi `disabled` untuk provider yang tidak dipakai.
-- `firebase deploy --only firestore:rules,firestore:indexes,storage,functions,hosting`.
+- Guard: menolak project app lain dan config project yang tidak cocok.
+- `npm ci`, lalu lint, typecheck dan unit test.
+- `firebase login` (browser terbuka).
+- Firestore: membuat database di region pilihan, atau memastikan region-nya cocok dengan database yang sudah ada.
+- Mengambil config Web app otomatis ke `.env.production.local`.
+- Membuat `functions/.env` dengan region dan email Super Admin.
+- Meminta nilai setiap secret. Isi `disabled` untuk provider yang belum dipakai.
+- `firebase deploy` (rules, indexes, storage, functions, hosting), dengan satu kali retry otomatis. Retry ini mengantisipasi service account Google yang belum siap pada deploy pertama.
 
-Perintah manual yang setara:
+Secret bisa ditambah atau diganti kapan saja:
 
 ```bash
-cd paint-ai
-npm ci && npm ci --prefix functions
-npx firebase login
-npx firebase use --add                       # pilih project BARU, alias default
-npx firebase functions:secrets:set GEMINI_API_KEY   # ulangi untuk semua secret (isi "disabled" jika tidak dipakai)
-npx firebase deploy
+npx firebase-tools functions:secrets:set RUNWAY_API_KEY --project <PROJECT_ID>
+npx firebase-tools deploy --only functions --project <PROJECT_ID>
 ```
 
 ### 3. Setelah deploy
 
-1. Buka `https://<PROJECT_ID>.web.app`, lalu login dengan email di `SUPER_ADMIN_EMAILS`. Pakai Google, atau Email/Password lalu klik link verifikasi.
+1. Buka `https://<PROJECT_ID>.web.app`, lalu login dengan email Super Admin. Pakai Google, atau Email/Password lalu klik link verifikasi.
 2. **Settings → Stores**: tambah store.
 3. **Settings → Users & roles**: atur role/store tim.
 4. **Settings → AI & Integrations**: pilih provider default, isi brand context, lalu cek status API key.
