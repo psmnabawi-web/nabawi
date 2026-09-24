@@ -186,7 +186,7 @@ if [ -z "$(get_env functions/.env SUPER_ADMIN_EMAILS)" ]; then
 fi
 green "functions/.env → region $REGION, super admin: $(get_env functions/.env SUPER_ADMIN_EMAILS)"
 
-step "7/8 Secrets (Secret Manager) — type the key, or 'disabled' for providers you do not use yet"
+step "7/8 Secrets (Secret Manager) — paste the key, or just press Enter for providers you do not use yet"
 secret_hint() {
   case "$1" in
     GEMINI_API_KEY) echo "Google Gemini — free key: https://aistudio.google.com/apikey (recommended to start)" ;;
@@ -194,18 +194,25 @@ secret_hint() {
     ANTHROPIC_API_KEY) echo "Anthropic Claude — https://console.anthropic.com/settings/keys" ;;
     RUNWAY_API_KEY) echo "Runway video — https://dev.runwayml.com" ;;
     KLING_ACCESS_KEY) echo "Kling video — API key (or access key if you use AK/SK)" ;;
-    KLING_SECRET_KEY) echo "Kling video — secret key (type 'disabled' when using a single API key)" ;;
+    KLING_SECRET_KEY) echo "Kling video — secret key (press Enter when using a single API key)" ;;
     FAL_KEY) echo "Pika video via fal.ai — https://fal.ai/dashboard/keys" ;;
     HEYGEN_API_KEY) echo "HeyGen avatar video — https://app.heygen.com/settings" ;;
   esac
 }
 for SECRET in GEMINI_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY RUNWAY_API_KEY KLING_ACCESS_KEY KLING_SECRET_KEY FAL_KEY HEYGEN_API_KEY; do
-  if $FIREBASE functions:secrets:get "$SECRET" --project "$PROJECT_ID" >/dev/null 2>&1; then
+  # "access" succeeds only when the secret has a usable version (a secret created without a value does not count).
+  if $FIREBASE functions:secrets:access "$SECRET" --project "$PROJECT_ID" >/dev/null 2>&1; then
     echo "✓ $SECRET already set (change later with: npx firebase-tools functions:secrets:set $SECRET --project $PROJECT_ID)"
-  else
-    echo "→ $SECRET  ($(secret_hint "$SECRET"))"
-    $FIREBASE functions:secrets:set "$SECRET" --project "$PROJECT_ID"
+    continue
   fi
+  echo "→ $SECRET  ($(secret_hint "$SECRET"))"
+  printf '  Value (hidden; press Enter alone = disabled): '
+  read -r -s SECRET_VALUE
+  echo ""
+  if [ -z "$SECRET_VALUE" ]; then SECRET_VALUE="disabled"; fi
+  printf '%s' "$SECRET_VALUE" | $FIREBASE functions:secrets:set "$SECRET" --data-file=- --project "$PROJECT_ID" --non-interactive >/dev/null
+  if [ "$SECRET_VALUE" = "disabled" ]; then echo "  ✓ $SECRET = disabled"; else echo "  ✓ $SECRET saved"; fi
+  SECRET_VALUE=""
 done
 
 step "8/8 Deploying rules, indexes, storage rules, functions and hosting to $PROJECT_ID"
