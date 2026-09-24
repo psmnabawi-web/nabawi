@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { AuditLogTab } from '../components/settings/AuditLogTab'
 import { DemoDataTab } from '../components/settings/DemoDataTab'
 import { IntegrationsTab } from '../components/settings/IntegrationsTab'
@@ -15,13 +16,16 @@ export default function SettingsPage() {
   const { profile } = useAuth()
   const admin = isAdmin(profile)
   const manager = isContentManager(profile)
-  const [tab, setTab] = useState<Tab>('profile')
+  const [params] = useSearchParams()
   const tabs: { id: Tab; label: string }[] = [
     { id: 'profile', label: 'Profile' },
     ...(admin ? [{ id: 'stores' as Tab, label: 'Stores' }, { id: 'users' as Tab, label: 'Users & roles' }] : []),
     ...(manager ? [{ id: 'integrations' as Tab, label: 'AI & Integrations' }] : []),
     ...(admin ? [{ id: 'demo' as Tab, label: 'Demo data' }, { id: 'audit' as Tab, label: 'Audit log' }] : []),
   ]
+  // Deep link: /settings?tab=stores (ignored when the tab is not available for this role).
+  const requested = params.get('tab')
+  const [tab, setTab] = useState<Tab>(() => tabs.find((t) => t.id === requested)?.id ?? 'profile')
   return (
     <>
       <PageHeader title="Settings" description={admin ? 'Stores, users, AI providers and audit trail.' : 'Your profile and access.'} />

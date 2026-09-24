@@ -1,6 +1,7 @@
 import { logger } from 'firebase-functions';
 import { ALL_STORES } from '../config.js';
 import { db, serverTimestamp, toDate } from '../lib/firebase.js';
+import { dayKey } from '../lib/quota.js';
 
 const num = (v) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
 const round = (v, digits = 2) => Math.round(v * 10 ** digits) / 10 ** digits;
@@ -28,6 +29,57 @@ export function lastMonths(count, now = new Date()) {
     keys.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`);
   }
   return keys;
+}
+
+/** Last `count` calendar days as 'YYYY-MM-DD' (Asia/Jakarta), oldest first. */
+export function lastDays(count, now = new Date()) {
+  const keys = [];
+  for (let i = count - 1; i >= 0; i -= 1) keys.push(dayKey(new Date(now.getTime() - i * 24 * 3600 * 1000)));
+  return [...new Set(keys)];
+}
+
+const ACTIVITY_DAYS = 30;
+
+/**
+ * AI activity per day for the last 30 days: trend analyses, idea generations (one per batch of ideas),
+ * scripts and video jobs, plus the outcome of the videos created in that window.
+ */
+export function aiActivity(data, now = new Date()) {
+  const keys = lastDays(ACTIVITY_DAYS, now);
+  const days = Object.fromEntries(keys.map((k) => [k, { date: k, trends: 0, ideas: 0, scripts: 0, videos: 0, total: 0 }]));
+  const keyOf = (item) => {
+    const d = toDate(item.createdAt);
+    return d ? dayKey(d) : null;
+  };
+  const count = (items, field) => {
+    for (const item of items) {
+      const day = days[keyOf(item)];
+      if (day) day[field] += 1;
+    }
+  };
+  count(data.trends, 'trends');
+  count(data.scripts, 'scripts');
+  count(data.videos, 'videos');
+  const batches = new Set();
+  for (const idea of data.ideas) {
+    const key = keyOf(idea);
+    const batch = `${key}|${idea.batchId || idea.id}`;
+    if (!days[key] || batches.has(batch)) continue;
+    batches.add(batch);
+    days[key].ideas += 1;
+  }
+  const series = keys.map((k) => {
+    const d = days[k];
+    return { ...d, total: d.trends + d.ideas + d.scripts + d.videos };
+  });
+  const videoResults = { succeeded: 0, failed: 0, processing: 0 };
+  for (const v of data.videos) {
+    if (!days[keyOf(v)]) continue;
+    if (v.status === 'Completed' || v.status === 'Published') videoResults.succeeded += 1;
+    else if (v.status === 'Failed') videoResults.failed += 1;
+    else if (v.status === 'Processing') videoResults.processing += 1;
+  }
+  return { days: series, total: series.reduce((sum, d) => sum + d.total, 0), videoResults };
 }
 
 /**
@@ -99,6 +151,7 @@ export function aggregate(data, now = new Date()) {
     },
     avgEngagementRate: engagementRate(totals),
     statusBreakdown,
+    aiActivity: aiActivity(data, now),
     contentGrowth: months.map((k) => growth[k]),
     platformPerformance: [...platforms.values()]
       .map((p) => ({ ...p, engagementRate: engagementRate(p) }))
@@ -123,7 +176,7 @@ const rows = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 export async function recomputeStats() {
   const [videos, ideas, scripts, trends, performance, stores] = await Promise.all([
     db.collection('generated_videos').select('status', 'storeId', 'createdAt', 'title', 'thumbnail').get().then(rows),
-    db.collection('content_ideas').select('storeId', 'createdAt').get().then(rows),
+    db.collection('content_ideas').select('storeId', 'createdAt', 'batchId').get().then(rows),
     db.collection('video_scripts').select('storeId', 'createdAt').get().then(rows),
     db.collection('trend_analysis').select('storeId', 'createdAt', 'trendName', 'trendScore', 'growthLevel', 'recommendation', 'platform').get().then(rows),
     db.collection('performance').get().then(rows),

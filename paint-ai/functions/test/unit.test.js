@@ -9,7 +9,7 @@ process.env.FAL_KEY = 'fal-test';
 process.env.HEYGEN_API_KEY = 'disabled';
 
 const { planSegments, composeClipPrompt, fallbackPlan, tokenDownloadUrl } = await import('../src/video/pipeline.js');
-const { engagementRate, aggregate, lastMonths, monthKey } = await import('../src/performance/calculatePerformance.js');
+const { engagementRate, aggregate, lastMonths, monthKey, lastDays, aiActivity } = await import('../src/performance/calculatePerformance.js');
 const { parseJsonLoose, toGeminiSchema } = await import('../src/ai/providers/json.js');
 const { trendAnalysisNormalizer, videoScriptNormalizer, contentIdeasNormalizer, trendAnalysisSchema, contentIdeasSchema, videoScriptSchema, videoPlanSchema } = await import('../src/ai/schemas.js');
 const { klingJwt, kling } = await import('../src/video/adapters/kling.js');
@@ -140,6 +140,43 @@ describe('performance', () => {
     assert.equal(stats.contentGrowth.length, 6);
     assert.equal(stats.contentGrowth.at(-1).videos, 2);
     assert.equal(stats.contentGrowth.at(-1).ideas, 1);
+  });
+});
+
+describe('AI activity (dashboard)', () => {
+  const now = new Date('2026-09-24T05:00:00Z'); // 12:00 WIB
+  const at = (iso) => new Date(iso);
+  it('builds 30 Jakarta calendar days ending today', () => {
+    const keys = lastDays(30, now);
+    assert.equal(keys.length, 30);
+    assert.equal(keys.at(-1), '2026-09-24');
+    assert.equal(keys[0], '2026-08-26');
+  });
+  it('counts idea batches once, buckets by WIB date and summarises video outcomes', () => {
+    const r = aiActivity(
+      {
+        trends: [{ createdAt: at('2026-09-23T18:30:00Z') }], // 01:30 WIB on the 24th
+        ideas: [
+          { id: 'i1', batchId: 'b1', createdAt: at('2026-09-24T01:00:00Z') },
+          { id: 'i2', batchId: 'b1', createdAt: at('2026-09-24T01:00:00Z') },
+          { id: 'i3', batchId: 'b2', createdAt: at('2026-09-20T01:00:00Z') },
+        ],
+        scripts: [{ createdAt: at('2026-09-24T02:00:00Z') }, { createdAt: at('2026-07-01T02:00:00Z') }],
+        videos: [
+          { status: 'Completed', createdAt: at('2026-09-24T03:00:00Z') },
+          { status: 'Published', createdAt: at('2026-09-10T03:00:00Z') },
+          { status: 'Failed', createdAt: at('2026-09-11T03:00:00Z') },
+          { status: 'Processing', createdAt: at('2026-09-24T04:00:00Z') },
+          { status: 'Failed', createdAt: at('2026-06-01T03:00:00Z') },
+        ],
+      },
+      now,
+    );
+    const today = r.days.at(-1);
+    assert.deepEqual(today, { date: '2026-09-24', trends: 1, ideas: 1, scripts: 1, videos: 2, total: 5 });
+    assert.equal(r.days.find((d) => d.date === '2026-09-20').ideas, 1);
+    assert.equal(r.total, 5 + 1 + 1 + 1);
+    assert.deepEqual(r.videoResults, { succeeded: 2, failed: 1, processing: 1 });
   });
 });
 

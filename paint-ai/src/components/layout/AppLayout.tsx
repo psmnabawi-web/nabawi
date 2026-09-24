@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { cn } from '../../utils/cn'
 import { Outlet } from 'react-router'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../hooks/useToast'
@@ -43,16 +44,35 @@ function VerifyEmailBanner() {
   )
 }
 
+const COLLAPSE_KEY = 'sidebar-collapsed'
+function readCollapsed() {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 export function AppLayout() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(readCollapsed)
+  const toggleCollapsed = () =>
+    setCollapsed((c) => {
+      try {
+        localStorage.setItem(COLLAPSE_KEY, c ? '0' : '1')
+      } catch {
+        /* preference just won't persist */
+      }
+      return !c
+    })
   return (
     <div className="min-h-dvh">
-      <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} />
-      <div className="lg:pl-64">
+      <Sidebar open={menuOpen} onClose={() => setMenuOpen(false)} collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
+      <div className={cn('transition-[padding] duration-200', collapsed ? 'lg:pl-20' : 'lg:pl-72')}>
         <Topbar onMenu={() => setMenuOpen(true)} />
         {useEmulators && <div className="bg-brand-50 px-4 py-1 text-center text-xs text-brand-800 sm:px-6">Local emulator mode — data is not production.</div>}
         <VerifyEmailBanner />
-        <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
+        <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           <Outlet />
         </main>
       </div>

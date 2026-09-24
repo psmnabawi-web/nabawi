@@ -49,6 +49,12 @@ export function monthLabel(key: string) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' }).format(new Date(Date.UTC(y, m - 1, 15)))
 }
 
+/** 'YYYY-MM-DD' → 'Sep 24' */
+export function dayLabel(key: string) {
+  const [y, m, d] = key.split('-').map(Number)
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(y, m - 1, d)))
+}
+
 /** Local date key YYYY-MM-DD in Asia/Jakarta. */
 export function dateKey(d: Date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)

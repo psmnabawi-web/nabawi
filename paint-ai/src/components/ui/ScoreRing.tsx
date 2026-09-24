@@ -6,7 +6,7 @@ export function ScoreRing({ score, size = 56, className, light }: { score: numbe
   const stroke = 5
   const r = (size - stroke) / 2
   const c = 2 * Math.PI * r
-  const color = light ? '#ffffff' : value >= 80 ? '#1d36ad' : value >= 60 ? '#3b62ee' : '#94a3b8'
+  const color = light ? '#ffffff' : value >= 80 ? '#45398d' : value >= 60 ? '#7869d6' : '#94a3b8'
   return (
     <div className={cn('relative inline-flex shrink-0 items-center justify-center', className)} style={{ width: size, height: size }} role="img" aria-label={`Trend score ${value} out of 100`}>
       <svg width={size} height={size} className="-rotate-90">

@@ -295,7 +295,7 @@ export default function VideoStudioPage() {
                   type="button"
                   onClick={() => setStatusFilter(s)}
                   aria-pressed={statusFilter === s}
-                  className={cn('rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition', statusFilter === s ? 'bg-brand-950 text-white ring-brand-950' : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50')}
+                  className={cn('rounded-full px-3 py-1.5 text-xs font-medium ring-1 transition', statusFilter === s ? 'bg-brand-800 text-white ring-brand-800' : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50')}
                 >
                   {s || 'All'} <span className="tabular-nums opacity-70">{s ? counts[s] : videos.data.length}</span>
                 </button>

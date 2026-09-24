@@ -12,7 +12,7 @@ export function Tabs<T extends string>({ tabs, value, onChange }: { tabs: { id: 
           onClick={() => onChange(t.id)}
           className={cn(
             '-mb-px flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition',
-            value === t.id ? 'border-brand-800 text-brand-900' : 'border-transparent text-slate-500 hover:text-slate-800',
+            value === t.id ? 'border-brand-700 text-brand-800' : 'border-transparent text-slate-500 hover:text-slate-800',
           )}
         >
           {t.label}

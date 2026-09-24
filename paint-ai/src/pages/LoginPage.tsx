@@ -1,10 +1,10 @@
 import { BarChart3, Clapperboard, Sparkles, TrendingUp } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation } from 'react-router'
-import { Brand } from '../components/layout/Sidebar'
 import { Alert, Button, PageLoader, TextInput } from '../components/ui'
 import { isFirebaseConfigured } from '../firebase/config'
 import { useAuth } from '../hooks/useAuth'
+import { BRAND } from '../utils/constants'
 import { errorMessage } from '../utils/errors'
 import { fieldErrors, signInSchema, signUpSchema } from '../utils/validation'
 
@@ -87,31 +87,32 @@ export default function LoginPage() {
 
   return (
     <div className="grid min-h-dvh lg:grid-cols-2">
-      <div className="relative hidden flex-col justify-between overflow-hidden bg-brand-950 p-10 text-white lg:flex">
-        <div className="absolute -top-24 -right-24 size-96 rounded-full bg-brand-700/40 blur-3xl" aria-hidden />
-        <Brand />
+      <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-brand-50 via-[#f0effa] to-[#e6e3f7] p-10 lg:flex">
+        <div className="absolute -top-24 -right-24 size-96 rounded-full bg-brand-200/50 blur-3xl" aria-hidden />
+        <img src={BRAND.logoUrl} alt={BRAND.fullName} className="relative h-24 w-auto self-start" />
         <div className="relative">
-          <h1 className="max-w-md text-3xl font-semibold tracking-tight">AI Content Intelligence & Video Generator for Retail Paint</h1>
-          <p className="mt-3 max-w-md text-brand-100/80">From social media trend to published video — and the numbers to prove it worked.</p>
+          <p className="text-sm font-semibold tracking-wider text-brand-700 uppercase">Content Intelligence · AI Studio</p>
+          <h1 className="mt-2 max-w-md text-3xl font-bold tracking-tight text-slate-900">AI Content Intelligence & Video Generator for Retail Paint</h1>
+          <p className="mt-3 max-w-md text-slate-600">From social media trend to published video — and the numbers to prove it worked.</p>
           <ul className="mt-8 grid max-w-lg grid-cols-2 gap-4">
             {features.map(({ icon: Icon, title, text }) => (
-              <li key={title} className="rounded-xl bg-white/5 p-4 ring-1 ring-white/10">
-                <Icon className="size-5 text-brand-300" aria-hidden />
-                <p className="mt-2 text-sm font-semibold">{title}</p>
-                <p className="mt-1 text-xs text-brand-100/70">{text}</p>
+              <li key={title} className="rounded-2xl bg-white p-4 shadow-soft ring-1 ring-slate-900/[0.04]">
+                <span className="flex size-10 items-center justify-center rounded-full bg-brand-50 text-brand-800">
+                  <Icon className="size-5" aria-hidden />
+                </span>
+                <p className="mt-3 text-sm font-semibold text-slate-900">{title}</p>
+                <p className="mt-1 text-xs text-slate-500">{text}</p>
               </li>
             ))}
           </ul>
         </div>
-        <p className="relative text-xs text-brand-200/60">Secure sign-in with Firebase Authentication</p>
+        <p className="relative text-xs text-slate-500">Secure sign-in with Firebase Authentication</p>
       </div>
 
-      <div className="flex items-center justify-center bg-slate-50 p-4 sm:p-8">
+      <div className="flex items-center justify-center bg-white p-4 sm:p-8">
         <div className="w-full max-w-sm">
-          <div className="mb-6 rounded-xl bg-brand-950 p-4 lg:hidden">
-            <Brand />
-          </div>
-          <h2 className="text-xl font-semibold text-slate-900">{mode === 'signup' ? 'Create your account' : mode === 'reset' ? 'Reset password' : 'Sign in'}</h2>
+          <img src={BRAND.logoUrl} alt={BRAND.fullName} className="mb-8 h-16 w-auto lg:hidden" />
+          <h2 className="text-2xl font-bold text-slate-900">{mode === 'signup' ? 'Create your account' : mode === 'reset' ? 'Reset password' : 'Sign in'}</h2>
           <p className="mt-1 text-sm text-slate-500">
             {mode === 'signup' ? 'An admin will assign your role and store after you register.' : mode === 'reset' ? 'We will email you a reset link.' : 'Welcome back. Sign in to continue.'}
           </p>

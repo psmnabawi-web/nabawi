@@ -77,6 +77,15 @@ export const TEXT_PROVIDERS: { id: TextProvider; label: string }[] = [
   { id: 'claude', label: 'Anthropic Claude' },
   { id: 'mock', label: 'Demo (offline mock)' },
 ]
+/** Brand identity (Toko Cat Inti Warna). Assets live in /public/brand. */
+export const BRAND = {
+  name: 'Inti Warna',
+  fullName: 'Toko Cat Inti Warna',
+  tagline: 'Memberi Warna Untuk Bahagia',
+  markUrl: '/brand/inti-warna-mark.png',
+  logoUrl: '/brand/inti-warna-logo.png',
+} as const
+
 export const VIDEO_PROVIDERS: { id: VideoProvider; label: string; note: string }[] = [
   { id: 'veo', label: 'Google Veo (Vertex AI)', note: 'Veo 3.1 Lite clips (4/6/8s), stitched · no API key, billed to the Firebase project' },
   { id: 'runway', label: 'Runway', note: 'Text-to-video clips, stitched to 15/30/60s' },

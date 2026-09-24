@@ -255,6 +255,21 @@ export interface CalendarEntry {
   demo?: boolean
 }
 
+export interface AiActivityDay {
+  date: string
+  trends: number
+  ideas: number
+  scripts: number
+  videos: number
+  total: number
+}
+
+export interface AiActivity {
+  days: AiActivityDay[]
+  total: number
+  videoResults: { succeeded: number; failed: number; processing: number }
+}
+
 export interface StatsDoc {
   scope: string
   totals: {
@@ -274,6 +289,8 @@ export interface StatsDoc {
   }
   avgEngagementRate: number
   statusBreakdown: Record<VideoStatus, number>
+  /** Added with the dashboard redesign; missing on stats docs computed before it. */
+  aiActivity?: AiActivity
   contentGrowth: { month: string; ideas: number; scripts: number; videos: number }[]
   platformPerformance: { platform: string; posts: number; views: number; likes: number; comments: number; shares: number; leads: number; engagementRate: number }[]
   topContent: { videoId: string; title: string; platform: string; thumbnail: string | null; views: number; engagementRate: number; leads: number; salesImpact: number }[]
