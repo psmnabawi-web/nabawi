@@ -1,10 +1,10 @@
-import { AlertTriangle, BarChart3, Clapperboard, Download, Film, Loader2, Pencil, Play, RefreshCw, RotateCcw, Send, Trash2, Undo2 } from 'lucide-react'
+import { AlertTriangle, BarChart3, Clapperboard, Download, Film, Loader2, Pencil, Play, RefreshCw, RotateCcw, Send, Trash2, Undo2, Wand2 } from 'lucide-react'
 import type { GeneratedVideo } from '../../types'
 import { VIDEO_STATUS_STYLES, videoProviderLabel } from '../../utils/constants'
 import { timeAgo } from '../../utils/format'
 import { Badge, Button } from '../ui'
 
-export type VideoCardAction = 'start' | 'refresh' | 'retry' | 'publish' | 'unpublish' | 'rename' | 'delete' | 'performance'
+export type VideoCardAction = 'start' | 'refresh' | 'retry' | 'brand' | 'publish' | 'unpublish' | 'rename' | 'delete' | 'performance'
 
 export function VideoCard({ video, canEdit, busy, onAction, storeLabel }: { video: GeneratedVideo; canEdit: boolean; busy: VideoCardAction | null; onAction: (a: VideoCardAction) => void; storeLabel: string }) {
   const ready = (video.status === 'Completed' || video.status === 'Published') && !!video.videoUrl
@@ -72,6 +72,11 @@ export function VideoCard({ video, canEdit, busy, onAction, storeLabel }: { vide
                 Retry
               </Button>
             )}
+            {ready && !video.brandTemplateApplied && (
+              <Button size="sm" variant="secondary" icon={<Wand2 className="size-4" />} loading={busy === 'brand'} onClick={() => onAction('brand')}>
+                Apply template
+              </Button>
+            )}
             {video.status === 'Completed' && (
               <Button size="sm" icon={<Send className="size-4" />} onClick={() => onAction('publish')}>
                 Mark published
@@ -95,6 +100,9 @@ export function VideoCard({ video, canEdit, busy, onAction, storeLabel }: { vide
                 <a href={video.cleanVideoUrl} download target="_blank" rel="noopener noreferrer" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100" aria-label="Download without template" title="Download without template (for editing)">
                   <Film className="size-4" />
                 </a>
+              )}
+              {ready && video.brandTemplateApplied && (
+                <Button size="sm" variant="ghost" aria-label="Re-apply template" title="Re-apply template (uses the latest Brand template settings)" icon={<Wand2 className="size-4" />} loading={busy === 'brand'} onClick={() => onAction('brand')} />
               )}
               <Button size="sm" variant="ghost" aria-label="Rename" icon={<Pencil className="size-4" />} onClick={() => onAction('rename')} />
               {video.status !== 'Processing' && <Button size="sm" variant="ghost" aria-label="Delete video" icon={<Trash2 className="size-4" />} onClick={() => onAction('delete')} />}

@@ -127,7 +127,10 @@ export default function VideoStudioPage() {
       } else {
         const res = await videoAction({ videoId: video.id, action })
         if (action === 'refresh') toast.toast(res.busy ? 'The video is being processed right now — check again shortly.' : `Status: ${res.status}${res.total ? ` (${res.done}/${res.total} clips)` : ''}`)
-        else toast.success('Generation started.')
+        else if (action === 'brand') {
+          if (res.busy) toast.toast('The video is being processed right now — try again in a minute.')
+          else toast.success('Inti Warna template applied. The clean version is still available for download.')
+        } else toast.success('Generation started.')
       }
     } catch (err) {
       toast.error(errorMessage(err))

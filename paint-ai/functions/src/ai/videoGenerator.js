@@ -7,7 +7,7 @@ import { db, serverTimestamp } from '../lib/firebase.js';
 import { consumeQuota, refundQuota } from '../lib/quota.js';
 import { getAppSettings } from '../lib/settings.js';
 import { VIDEO_ADAPTERS } from '../video/adapters/index.js';
-import { pollVideo, startVideo } from '../video/pipeline.js';
+import { applyBrandTemplate, pollVideo, startVideo } from '../video/pipeline.js';
 
 /**
  * MODULE 5 — AI Video Generator.
@@ -79,7 +79,7 @@ async function startWithQuota(user, videoId) {
   }
 }
 
-/** start (Draft → Processing), retry (Failed → Processing), refresh (poll provider now). */
+/** start (Draft → Processing), retry (Failed → Processing), refresh (poll provider now), brand (apply template). */
 export async function videoAction(user, { videoId, action }) {
   const snap = await db.doc(`generated_videos/${videoId}`).get();
   if (!snap.exists) throw new HttpsError('not-found', 'Video not found.');
@@ -89,6 +89,13 @@ export async function videoAction(user, { videoId, action }) {
   if (action === 'refresh') {
     const result = await pollVideo(videoId);
     return result.skipped ? { status: video.status, busy: true } : result;
+  }
+  if (action === 'brand') {
+    // Re-renders from the stored video: no AI provider call, so no video quota is used.
+    const result = await applyBrandTemplate(videoId);
+    if (result.skipped) return { status: video.status, busy: true };
+    await logAudit({ actor: user, action: 'video.brand', entity: 'generated_videos', entityId: videoId, details: { template: video.template } });
+    return result;
   }
   if (action === 'start' && video.status !== 'Draft') throw new HttpsError('failed-precondition', 'Only Draft videos can be started.');
   if (action === 'retry' && video.status !== 'Failed') throw new HttpsError('failed-precondition', 'Only Failed videos can be retried.');

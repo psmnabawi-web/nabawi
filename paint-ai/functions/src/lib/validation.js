@@ -106,7 +106,7 @@ export const schemas = {
   videoAction: z
     .object({
       videoId: docId,
-      action: z.enum(['start', 'refresh', 'retry']),
+      action: z.enum(['start', 'refresh', 'retry', 'brand']),
     })
     .strict(),
 

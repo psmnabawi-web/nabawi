@@ -8,7 +8,7 @@ process.env.KLING_SECRET_KEY = 'sk-test';
 process.env.FAL_KEY = 'fal-test';
 process.env.HEYGEN_API_KEY = 'disabled';
 
-const { planSegments, composeClipPrompt, fallbackPlan, tokenDownloadUrl, captionsFromScript, transitionsFor } = await import('../src/video/pipeline.js');
+const { planSegments, composeClipPrompt, fallbackPlan, tokenDownloadUrl, captionsFromScript, transitionsFor, sourceTimeline } = await import('../src/video/pipeline.js');
 const { engagementRate, aggregate, lastMonths, monthKey, lastDays, aiActivity } = await import('../src/performance/calculatePerformance.js');
 const { parseJsonLoose, toGeminiSchema } = await import('../src/ai/providers/json.js');
 const { trendAnalysisNormalizer, videoScriptNormalizer, contentIdeasNormalizer, trendAnalysisSchema, contentIdeasSchema, videoScriptSchema, videoPlanSchema } = await import('../src/ai/schemas.js');
@@ -18,7 +18,7 @@ const { pika } = await import('../src/video/adapters/pika.js');
 const { heygen } = await import('../src/video/adapters/heygen.js');
 const { isPlatformUrl } = await import('../src/ai/socialContext.js');
 const { buildComposeArgs } = await import('../src/video/ffmpeg.js');
-const { buildTemplateAssets, cleanText, computeTimeline, stageFor } = await import('../src/video/template/brandTemplate.js');
+const { buildTemplateAssets, cleanText, computeTimeline, loadFonts, stageFor } = await import('../src/video/template/brandTemplate.js');
 const { normalizeBrandKit } = await import('../src/lib/settings.js');
 const { parseInput, schemas } = await import('../src/lib/validation.js');
 const { mock } = await import('../src/ai/providers/mock.js');
@@ -73,8 +73,9 @@ describe('prompt composition', () => {
   it('adds style + framing and respects max length', () => {
     const p = composeClipPrompt('A painter rolls beige paint on a wall.'.repeat(60), { style: 'Cinematic', ratio: '9:16', maxLength: 1000 });
     assert.ok(p.length <= 1000);
-    assert.match(p, /Vertical 9:16/);
-    assert.match(p, /No on-screen text/);
+    assert.match(p, /vertical portrait/);
+    assert.doesNotMatch(p, /9:16|16:9/, 'no ratio numbers: models draw them as text');
+    assert.match(p, /no on-screen text/i);
   });
   it('fallback plan distributes script beats over clips', () => {
     const plan = fallbackPlan({
@@ -555,12 +556,32 @@ describe('brand template', () => {
     assert.equal(cleanText('Sebelum → sesudah'), 'Sebelum - sesudah');
     assert.ok(cleanText('kata '.repeat(40), 30).endsWith('…'));
   });
+  it('finds clip boundaries in an unbranded source video', () => {
+    assert.deepEqual(sourceTimeline({ render: { durations: [8, 8], transition: 0.35 } }, 15.65), { durations: [8, 8], transition: 0.35 });
+    // made before the template: hard cuts, planned 8+8 scaled to the real 16.1 s
+    assert.deepEqual(sourceTimeline({ plan: { segmentDurations: [8, 8] } }, 16.1), { durations: [8.05, 8.05], transition: 0 });
+    assert.deepEqual(sourceTimeline({}, 12), { durations: [12], transition: 0 });
+  });
   it('spreads script captions over clips and normalises the brand kit', () => {
     const script = { scenes: [{ onScreenText: 'A' }, { onScreenText: '' }, { onScreenText: 'B' }], cta: { onScreenText: 'C' } };
     assert.deepEqual(captionsFromScript(script, 4), ['A', 'B', 'B', 'C']);
     assert.deepEqual(captionsFromScript(null, 3), []);
     assert.deepEqual(normalizeBrandKit(undefined), { enabled: true, captions: true, endCard: true, instagram: '', whatsapp: '', website: '', hours: '', ctaText: '' });
     assert.equal(normalizeBrandKit({ enabled: false, instagram: ' @intiwarna_ ' }).instagram, '@intiwarna_');
+  });
+  it('draws real glyphs (regression: garbled text when font decoding breaks)', async () => {
+    const { default: satori } = await import('satori');
+    const { Resvg } = await import('@resvg/resvg-js');
+    const svg = await satori(
+      { type: 'div', props: { style: { display: 'flex', width: 300, height: 300, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', color: '#000', fontFamily: 'Jakarta', fontWeight: 800, fontSize: 260 }, children: 'O' } },
+      { width: 300, height: 300, fonts: await loadFonts() },
+    );
+    const img = new Resvg(svg).render();
+    const dark = (x, y) => img.pixels[(y * img.width + x) * 4] < 100;
+    let strokes = 0;
+    for (let x = 1; x < img.width; x += 1) if (dark(x, 150) && !dark(x - 1, 150)) strokes += 1;
+    assert.equal(strokes, 2, 'the middle row of "O" crosses exactly two strokes');
+    assert.equal(dark(150, 150), false, 'the counter of "O" is empty');
   });
   it('renders the graphics as cropped PNG overlays with the right time windows', async () => {
     const { mkdtemp, rm, stat } = await import('node:fs/promises');

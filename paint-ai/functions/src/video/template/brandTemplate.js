@@ -1,5 +1,4 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import { Resvg } from '@resvg/resvg-js';
 import satori from 'satori';
@@ -13,7 +12,6 @@ import satori from 'satori';
  * Layout keeps inside the Reels/TikTok safe zone (top ~8 %, bottom ~22 %, right ~11 % reserved for app UI).
  */
 
-const require = createRequire(import.meta.url);
 const ASSETS = new URL('../../../assets/brand/', import.meta.url);
 
 export const BRAND_COLORS = {
@@ -62,15 +60,15 @@ export const templateLabels = (lang) => LABELS[lang === 'en' ? 'en' : 'id'];
 
 // ------------------------------------------------------------------ assets
 
+// Plain TrueType on purpose: satori inflates WOFF tables through fflate and silently draws blank glyphs
+// when that dependency changes behaviour. TTF needs no decompression. (Plus Jakarta Sans, SIL OFL 1.1.)
+const FONTS = { 600: 'PlusJakartaSans-SemiBold.ttf', 700: 'PlusJakartaSans-Bold.ttf', 800: 'PlusJakartaSans-ExtraBold.ttf' };
+const FONT_DIR = new URL('../../../assets/fonts/', import.meta.url);
+
 let fontsPromise = null;
-function loadFonts() {
+export function loadFonts() {
   fontsPromise ??= Promise.all(
-    [600, 700, 800].map(async (weight) => ({
-      name: 'Jakarta',
-      weight,
-      style: 'normal',
-      data: await readFile(require.resolve(`@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-${weight}-normal.woff`)),
-    })),
+    Object.entries(FONTS).map(async ([weight, file]) => ({ name: 'Jakarta', weight: Number(weight), style: 'normal', data: await readFile(new URL(file, FONT_DIR)) })),
   );
   return fontsPromise;
 }

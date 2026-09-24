@@ -33,7 +33,7 @@ export const generateScript = callable<ScriptRequest & { provider?: TextProvider
 
 export const generateVideo = callable<VideoRequest & { provider: VideoProvider }, { videoId: string; status: string; segments?: number }>('generateVideo', AI_CALL_TIMEOUT_MS)
 
-export const videoAction = callable<{ videoId: string; action: 'start' | 'refresh' | 'retry' }, { status: string; busy?: boolean; done?: number; total?: number }>(
+export const videoAction = callable<{ videoId: string; action: 'start' | 'refresh' | 'retry' | 'brand' }, { status: string; busy?: boolean; done?: number; total?: number; branded?: boolean }>(
   'videoAction',
   AI_CALL_TIMEOUT_MS,
 )

@@ -70,8 +70,9 @@ const STYLE_SUFFIX = {
 };
 
 export function composeClipPrompt(basePrompt, { style, ratio, maxLength = 1000 }) {
-  const orientation = ratio === '9:16' ? 'Vertical 9:16 framing.' : ratio === '1:1' ? 'Square framing.' : 'Horizontal 16:9 framing.';
-  const suffix = ` ${STYLE_SUFFIX[style] ?? STYLE_SUFFIX.Realistic} ${orientation} No on-screen text, no logos, no watermark.`;
+  // No aspect-ratio numbers in the prompt: video models tend to draw them as on-screen text ("9.16").
+  const orientation = ratio === '9:16' ? 'Tall vertical portrait composition.' : ratio === '1:1' ? 'Square composition.' : 'Wide landscape composition.';
+  const suffix = ` ${STYLE_SUFFIX[style] ?? STYLE_SUFFIX.Realistic} ${orientation} Clean frame: no on-screen text, numbers, letters, logos or watermark.`;
   return `${basePrompt.trim().slice(0, Math.max(100, maxLength - suffix.length))}${suffix}`.slice(0, maxLength);
 }
 
@@ -268,13 +269,12 @@ export function transitionsFor(template, clipCount) {
 }
 
 /** Texts and contact details for the brand template of one video. */
-async function templateContent(video, settings) {
+async function templateContent(video, settings, count = video.segments.length) {
   const kit = settings.brandKit;
   const [script, store] = await Promise.all([
     video.scriptId ? db.doc(`video_scripts/${video.scriptId}`).get().then((s) => (s.exists ? s.data() : null)) : null,
     video.storeId && video.storeId !== 'ALL' ? db.doc(`stores/${video.storeId}`).get().then((s) => (s.exists ? s.data() : null)) : null,
   ]);
-  const count = video.segments.length;
   const planCaptions = Array.isArray(video.plan?.captions) ? video.plan.captions : [];
   const scriptCaptions = captionsFromScript(script, count);
   const fullMode = VIDEO_ADAPTERS[video.provider]?.mode === 'full';
@@ -361,6 +361,8 @@ async function finalizeVideo(ref, video) {
       cleanVideoUrl: uploadedClean?.url ?? null,
       cleanStoragePath: uploadedClean?.path ?? null,
       brandTemplateApplied: branded,
+      // Clip boundaries inside clean.mp4, so the template can be re-applied later without the clips.
+      render: { durations: inputs.map((i) => Math.round(i.duration * 1000) / 1000), transition: inputs.length > 1 ? TRANSITION_SECONDS : 0 },
       thumbnail: uploadedThumb.url,
       thumbnailPath: uploadedThumb.path,
       actualDurationSec: Math.round(info.duration * 10) / 10,
@@ -377,6 +379,83 @@ async function finalizeVideo(ref, video) {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Clip boundaries inside an unbranded video: stored at render time, or (videos made before the template
+ * existed: hard cuts, no transitions) the planned clip durations scaled to the real length.
+ */
+export function sourceTimeline(video, sourceDuration) {
+  const stored = video.render?.durations;
+  if (Array.isArray(stored) && stored.length) return { durations: stored, transition: Number(video.render.transition) || 0 };
+  const planned = (video.plan?.segmentDurations ?? []).filter((d) => d > 0);
+  if (!planned.length) return { durations: [sourceDuration], transition: 0 };
+  const scale = sourceDuration / planned.reduce((a, b) => a + b, 0);
+  return { durations: planned.map((d) => Math.round(d * scale * 1000) / 1000), transition: 0 };
+}
+
+/**
+ * Applies (or re-applies, e.g. after the brand template settings changed) the brand template to a finished
+ * video without generating new clips: renders from clean.mp4, or from the unbranded final.mp4 of videos
+ * made before the template existed (that file is then kept as the clean copy).
+ */
+export async function applyBrandTemplate(videoId) {
+  return withLease(videoId, async (ref) => {
+    const snap = await ref.get();
+    const video = { id: snap.id, ...snap.data() };
+    if (!['Completed', 'Published'].includes(video.status)) throw new HttpsError('failed-precondition', 'Only finished videos can get the brand template.');
+    const sourcePath = video.cleanStoragePath || (!video.brandTemplateApplied ? video.storagePath : null);
+    if (!sourcePath) throw new HttpsError('failed-precondition', 'This video has no unbranded copy to render from.');
+
+    const dir = await mkdtemp(path.join(tmpdir(), `brand-${video.id}-`));
+    try {
+      const sourceFile = path.join(dir, 'source.mp4');
+      await bucket().file(sourcePath).download({ destination: sourceFile });
+      const source = await probe(sourceFile);
+      if (!source.hasVideo) throw new HttpsError('failed-precondition', 'The stored video file is not readable.');
+
+      const settings = await getAppSettings({ fresh: true });
+      const dims = RATIO_RESOLUTION[video.ratio] ?? RATIO_RESOLUTION['9:16'];
+      const { durations, transition } = sourceTimeline(video, source.duration);
+      const content = await templateContent(video, settings, durations.length);
+      const template = await buildTemplateAssets({
+        dir,
+        dims,
+        durations,
+        transition,
+        template: video.template,
+        ...content,
+        lang: settings.contentLanguage,
+        options: { captions: settings.brandKit.captions, endCard: settings.brandKit.endCard },
+      });
+      const finalPath = path.join(dir, 'final.mp4');
+      const info = await composeVideo({ clips: [{ path: sourceFile, ...source }], dims, transition: TRANSITION_SECONDS, overlays: template.overlays, endCard: template.endCard, output: finalPath });
+
+      const thumbPath = path.join(dir, 'thumbnail.jpg');
+      await extractThumbnail(finalPath, thumbPath, Math.min(1.2, Math.max(0, info.duration / 3)));
+      // Keep the unbranded source first, then overwrite final.mp4.
+      const clean = video.cleanStoragePath ? { url: video.cleanVideoUrl, path: video.cleanStoragePath } : await uploadWithToken(sourceFile, `videos/${video.id}/clean.mp4`, 'video/mp4');
+      const uploadedVideo = await uploadWithToken(finalPath, `videos/${video.id}/final.mp4`, 'video/mp4');
+      const uploadedThumb = await uploadWithToken(thumbPath, `videos/${video.id}/thumbnail.jpg`, 'image/jpeg');
+
+      await ref.update({
+        videoUrl: uploadedVideo.url,
+        storagePath: uploadedVideo.path,
+        cleanVideoUrl: clean.url,
+        cleanStoragePath: clean.path,
+        brandTemplate: true,
+        brandTemplateApplied: true,
+        render: { durations, transition },
+        thumbnail: uploadedThumb.url,
+        thumbnailPath: uploadedThumb.path,
+        actualDurationSec: Math.round(info.duration * 10) / 10,
+        updatedAt: serverTimestamp(),
+      });
+      return { status: video.status, branded: true };
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 }
 
 /** Polls provider jobs for one Processing video and finalizes it when all clips are ready. */

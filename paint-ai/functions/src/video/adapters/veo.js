@@ -14,7 +14,7 @@ import { bucket } from '../../lib/firebase.js';
  * Clips are 4/6/8 s (1080p: 8 s only), ratio 9:16 or 16:9.
  */
 const RATIOS = new Set(['9:16', '16:9']);
-const NEGATIVE_PROMPT = 'text, subtitles, captions, watermark, logo, distorted faces, extra fingers, blurry, low quality';
+const NEGATIVE_PROMPT = 'text, numbers, letters, typography, subtitles, captions, watermark, logo, distorted faces, extra fingers, blurry, low quality';
 
 let client = null;
 let clientKey = '';

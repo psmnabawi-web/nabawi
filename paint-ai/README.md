@@ -135,6 +135,8 @@ Template dipasang otomatis saat video selesai dirakit (`functions/src/video/temp
 
 - Pengaturan ada di **Settings → Brand template**: aktif/nonaktif, caption, end card, Instagram, WhatsApp, website, jam buka, dan CTA default. Tab ini menampilkan preview.
 - Template bisa dimatikan per video di **Video Studio** (toggle *Inti Warna template*).
+- Video yang sudah jadi bisa diberi template tanpa generate ulang klip: tombol **Apply template** di library. Setelah Brand template diubah, gunakan ikon tongkat ajaib (**Re-apply template**). Keduanya merender ulang dari versi clean dan tidak memakai kuota video atau biaya AI.
+- Font memakai file TTF yang dibundel (`functions/assets/fonts`, SIL OFL). Jangan ganti ke WOFF: satori mendekompresi WOFF lewat fflate, dan versi fflate yang tidak cocok membuat huruf tergambar kosong. Test `draws real glyphs` menjaga hal ini.
 - Setiap video menyimpan `final.mp4` (dengan template) dan `clean.mp4` (tanpa template, untuk diedit lanjut), dengan tombol unduh terpisah di library.
 - Layout mengikuti safe zone Reels/TikTok (atas ±8%, bawah ±22%, kanan ±11% dikosongkan untuk UI aplikasi).
 - Audio: klip Veo dibuat tanpa suara. Musik sebaiknya ditambahkan dari library musik Instagram/TikTok saat posting, karena lisensinya aman dan membantu jangkauan.
