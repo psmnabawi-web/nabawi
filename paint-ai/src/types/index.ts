@@ -208,6 +208,9 @@ export interface GeneratedVideo {
   brandTemplateApplied?: boolean
   /** Same video without branding (for further editing). */
   cleanVideoUrl?: string | null
+  /** AI-written captions per platform (editable). */
+  socialCaptions?: SocialCaptions
+  lastSocialPost?: { platform: string; account: string; permalink: string | null; at?: TS }
   actualDurationSec?: number
   segments: VideoSegment[]
   progress: { done: number; total: number }
@@ -322,6 +325,7 @@ export interface AppSettings {
   heygenAvatarId: string
   heygenVoiceId: string
   brandKit?: Partial<BrandKit>
+  social?: { autoPost?: boolean }
   updatedAt?: TS
   updatedBy?: string
 }
@@ -346,6 +350,55 @@ export interface ProviderStatus {
   mode?: 'clips' | 'full'
 }
 
+export interface SocialCaptions {
+  instagram: string
+  tiktok: string
+  facebook: string
+  youtubeTitle: string
+  youtubeDescription: string
+  hashtags: string[]
+  provider?: string
+  generatedAt?: TS
+  editedAt?: TS
+}
+
+export type SocialAccountStatus = 'connected' | 'reconnect'
+export interface SocialAccount {
+  id: string
+  platform: 'instagram'
+  externalId: string
+  username: string
+  accountType: string
+  pictureUrl: string
+  /** 'ALL' = brand-wide account, otherwise the store it posts for. */
+  storeId: string
+  status: SocialAccountStatus
+  error: string | null
+  connectedBy: string
+  connectedAt?: TS
+  tokenExpiresAt?: TS
+}
+
+export type SocialPostStatus = 'Scheduled' | 'Publishing' | 'Published' | 'Failed' | 'Cancelled'
+export interface SocialPost {
+  id: string
+  videoId: string
+  videoTitle: string
+  storeId: string
+  platform: 'instagram'
+  accountId: string
+  accountName: string
+  caption: string
+  status: SocialPostStatus
+  scheduledAt?: TS
+  auto?: boolean
+  permalink: string | null
+  error: string | null
+  createdBy: string
+  createdAt?: TS
+  publishedAt?: TS
+}
+
 export interface IntegrationStatus {
   text: ProviderStatus[]
   video: ProviderStatus[]
@@ -354,4 +407,5 @@ export interface IntegrationStatus {
   limits: { aiDaily: number; videoDaily: number }
   usageToday: { ai: number; video: number }
   region: string
+  social?: { instagram: { configured: boolean; redirectUri: string; appIdSet: boolean } }
 }

@@ -152,8 +152,24 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------------ generated_videos (Module 5)
+    function validSocialCaptions(c) {
+      return c is map
+        && c.keys().hasOnly(['instagram', 'tiktok', 'facebook', 'youtubeTitle', 'youtubeDescription', 'hashtags', 'provider', 'generatedAt', 'editedAt'])
+        && str(c.get('instagram', ''), 2200)
+        && str(c.get('tiktok', ''), 2200)
+        && str(c.get('facebook', ''), 2200)
+        && str(c.get('youtubeTitle', ''), 100)
+        && str(c.get('youtubeDescription', ''), 5000)
+        && c.get('hashtags', []) is list && c.get('hashtags', []).size() <= 30;
+    }
+
     match /generated_videos/{id} {
       allow read: if canReadScoped(resource.data.storeId);
+      // Content managers may edit the AI-written social captions.
+      allow update: if isContentManager()
+        && changedOnly(['socialCaptions', 'updatedAt', 'updatedBy'])
+        && validSocialCaptions(request.resource.data.socialCaptions)
+        && stampedBy();
       // Client may only rename and publish/unpublish a completed video. Everything else is server-side.
       allow update: if isContentManager()
         && changedOnly(['title', 'status', 'platform', 'publishedUrl', 'publishedAt', 'updatedAt', 'updatedBy'])
@@ -221,11 +237,26 @@ service cloud.firestore {
       allow delete: if isContentManager();
     }
 
+    // ------------------------------------------------------------------ social posting
+    // Public account info only; access tokens live in social_tokens (no client access at all).
+    match /social_accounts/{id} {
+      allow read: if isContentManager();
+      allow write: if false;
+    }
+    match /social_posts/{id} {
+      allow read: if canReadScoped(resource.data.storeId);
+      allow write: if false;
+    }
+
     // ------------------------------------------------------------------ aggregates, settings, logs
     match /stats/{statId} {
       allow read: if isContentManager()
         || (isStoreManager() && myStore() != null && statId == 'store_' + myStore());
       allow write: if false;
+    }
+
+    function validSocial(s) {
+      return s is map && s.keys().hasOnly(['autoPost']) && s.get('autoPost', false) is bool;
     }
 
     function validBrandKit(k) {
@@ -245,11 +276,12 @@ service cloud.firestore {
       allow read: if active();
       // Written with merge from two tabs (AI & Integrations, Brand template): every field is optional.
       allow write: if isAdmin() && docId == 'app'
-        && request.resource.data.keys().hasOnly(['textProvider', 'videoProvider', 'contentLanguage', 'brandContext', 'heygenAvatarId', 'heygenVoiceId', 'brandKit', 'updatedAt', 'updatedBy'])
+        && request.resource.data.keys().hasOnly(['textProvider', 'videoProvider', 'contentLanguage', 'brandContext', 'heygenAvatarId', 'heygenVoiceId', 'brandKit', 'social', 'updatedAt', 'updatedBy'])
         && request.resource.data.get('textProvider', 'gemini') in ['gemini', 'openai', 'claude', 'mock']
         && request.resource.data.get('videoProvider', 'veo') in ['veo', 'runway', 'kling', 'pika', 'heygen', 'mock']
         && request.resource.data.get('contentLanguage', 'id') in ['id', 'en']
         && validBrandKit(request.resource.data.get('brandKit', {}))
+        && validSocial(request.resource.data.get('social', {}))
         && str(request.resource.data.get('brandContext', ''), 2000)
         && str(request.resource.data.get('heygenAvatarId', ''), 200)
         && str(request.resource.data.get('heygenVoiceId', ''), 200)

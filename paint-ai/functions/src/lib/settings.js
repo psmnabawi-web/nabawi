@@ -40,6 +40,8 @@ export async function getAppSettings({ fresh = false } = {}) {
     heygenAvatarId: typeof data.heygenAvatarId === 'string' && data.heygenAvatarId ? data.heygenAvatarId : config.video.heygenAvatarId,
     heygenVoiceId: typeof data.heygenVoiceId === 'string' && data.heygenVoiceId ? data.heygenVoiceId : config.video.heygenVoiceId,
     brandKit: normalizeBrandKit(data.brandKit),
+    // Auto-post finished videos to the connected Instagram account (off by default: human review first).
+    social: { autoPost: data.social?.autoPost === true },
   };
   cache = { at: Date.now(), value };
   return value;

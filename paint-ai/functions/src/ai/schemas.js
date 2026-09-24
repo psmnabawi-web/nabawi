@@ -175,3 +175,46 @@ export const videoPlanNormalizer = z.object({
   hookText: cleanStr(90),
   voiceOverText: cleanStr(5000),
 });
+
+// ---------------------------------------------------------------- Social captions (one set per video)
+export const socialCaptionsSchema = obj({
+  instagram: str('Instagram Reels caption: scroll-stopping first line, 2-4 short value lines, call to action with the given contact details, then 8-15 relevant hashtags on the last line. Max 1800 characters.'),
+  tiktok: str('TikTok caption: 1-2 punchy lines, short call to action, 3-6 hashtags. Max 300 characters.'),
+  facebook: str('Facebook Reels caption: friendly, 2-4 lines, call to action with the given contact details, max 5 hashtags.'),
+  youtubeTitle: str('YouTube Shorts title, max 90 characters, ending with #Shorts.'),
+  youtubeDescription: str('YouTube Shorts description: 2-3 lines, call to action with the given contact details, 3-5 hashtags.'),
+  hashtags: strArray('The 8-15 hashtags used in the Instagram caption, each starting with #.'),
+});
+
+/** Keeps at most `max` hashtags in a caption (Instagram rejects more than 30). */
+export function limitHashtags(text, max = 30) {
+  let seen = 0;
+  return text
+    .replace(/(^|\s)#[\p{L}\p{N}_]+/gu, (tag) => {
+      seen += 1;
+      return seen > max ? '' : tag;
+    })
+    .replace(/[ \t]+\n/g, '\n')
+    .trim();
+}
+
+const hashtagList = z.preprocess(
+  (v) =>
+    (Array.isArray(v) ? v : [])
+      .filter((x) => typeof x === 'string')
+      .map((x) => `#${x.trim().replace(/^#+/, '').replace(/[^\p{L}\p{N}_]/gu, '')}`)
+      .filter((x) => x.length > 1 && x.length <= 60)
+      .filter((x, i, all) => all.findIndex((y) => y.toLowerCase() === x.toLowerCase()) === i)
+      .slice(0, 30),
+  z.array(z.string()),
+);
+const captionText = (max) => z.preprocess((v) => (typeof v === 'string' ? limitHashtags(v.trim(), 30).slice(0, max) : ''), z.string());
+
+export const socialCaptionsNormalizer = z.object({
+  instagram: captionText(2200),
+  tiktok: captionText(2200),
+  facebook: captionText(2200),
+  youtubeTitle: cleanStr(100),
+  youtubeDescription: captionText(5000),
+  hashtags: hashtagList,
+});

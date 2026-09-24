@@ -19,7 +19,10 @@
     "public": "dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "predeploy": ["npm install --no-audit --no-fund", "npm run build"],
-    "rewrites": [{ "source": "**", "destination": "/index.html" }],
+    "rewrites": [
+      { "source": "/api/oauth/instagram", "function": { "functionId": "socialOAuthCallback", "region": "asia-southeast2" } },
+      { "source": "**", "destination": "/index.html" }
+    ],
     "headers": [
       {
         "source": "**",

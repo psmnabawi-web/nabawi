@@ -1,4 +1,5 @@
 import type {
+  SocialPostStatus,
   Audience,
   CalendarStatus,
   Category,
@@ -110,6 +111,14 @@ export const VIDEO_STATUS_STYLES: Record<VideoStatus, string> = {
   Completed: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
   Published: 'bg-brand-50 text-brand-800 ring-brand-200',
   Failed: 'bg-rose-50 text-rose-700 ring-rose-200',
+}
+
+export const POST_STATUS_STYLES: Record<SocialPostStatus, string> = {
+  Scheduled: 'bg-blue-50 text-blue-700 ring-blue-200',
+  Publishing: 'bg-brand-50 text-brand-800 ring-brand-200',
+  Published: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  Failed: 'bg-rose-50 text-rose-700 ring-rose-200',
+  Cancelled: 'bg-slate-100 text-slate-600 ring-slate-200',
 }
 
 export const CALENDAR_STATUS_STYLES: Record<CalendarStatus, string> = {

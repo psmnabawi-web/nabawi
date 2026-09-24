@@ -1,12 +1,13 @@
 import { AlertTriangle, BarChart3, Clapperboard, Download, Film, Loader2, Pencil, Play, RefreshCw, RotateCcw, Send, Trash2, Undo2, Wand2 } from 'lucide-react'
-import type { GeneratedVideo } from '../../types'
+import type { GeneratedVideo, SocialPost } from '../../types'
 import { VIDEO_STATUS_STYLES, videoProviderLabel } from '../../utils/constants'
 import { timeAgo } from '../../utils/format'
 import { Badge, Button } from '../ui'
+import { PostStatusLine } from './PostModal'
 
-export type VideoCardAction = 'start' | 'refresh' | 'retry' | 'brand' | 'publish' | 'unpublish' | 'rename' | 'delete' | 'performance'
+export type VideoCardAction = 'start' | 'refresh' | 'retry' | 'brand' | 'post' | 'publish' | 'unpublish' | 'rename' | 'delete' | 'performance'
 
-export function VideoCard({ video, canEdit, busy, onAction, storeLabel }: { video: GeneratedVideo; canEdit: boolean; busy: VideoCardAction | null; onAction: (a: VideoCardAction) => void; storeLabel: string }) {
+export function VideoCard({ video, canEdit, busy, onAction, storeLabel, post }: { video: GeneratedVideo; canEdit: boolean; busy: VideoCardAction | null; onAction: (a: VideoCardAction) => void; storeLabel: string; post?: SocialPost }) {
   const ready = (video.status === 'Completed' || video.status === 'Published') && !!video.videoUrl
   const pct = video.progress?.total ? Math.round((video.progress.done / video.progress.total) * 100) : 0
   return (
@@ -55,6 +56,7 @@ export function VideoCard({ video, canEdit, busy, onAction, storeLabel }: { vide
           {videoProviderLabel(video.provider)} · {storeLabel} · {timeAgo(video.createdAt)}
           {video.status === 'Published' && video.platform && <> · on {video.platform}</>}
         </p>
+        <PostStatusLine post={post} />
         {canEdit && (
           <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-3">
             {video.status === 'Draft' && (
@@ -78,8 +80,8 @@ export function VideoCard({ video, canEdit, busy, onAction, storeLabel }: { vide
               </Button>
             )}
             {video.status === 'Completed' && (
-              <Button size="sm" icon={<Send className="size-4" />} onClick={() => onAction('publish')}>
-                Mark published
+              <Button size="sm" icon={<Send className="size-4" />} onClick={() => onAction('post')}>
+                Post
               </Button>
             )}
             {video.status === 'Published' && (
@@ -100,6 +102,9 @@ export function VideoCard({ video, canEdit, busy, onAction, storeLabel }: { vide
                 <a href={video.cleanVideoUrl} download target="_blank" rel="noopener noreferrer" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100" aria-label="Download without template" title="Download without template (for editing)">
                   <Film className="size-4" />
                 </a>
+              )}
+              {video.status === 'Published' && (
+                <Button size="sm" variant="ghost" aria-label="Post & captions" title="Post again / captions" icon={<Send className="size-4" />} onClick={() => onAction('post')} />
               )}
               {ready && video.brandTemplateApplied && (
                 <Button size="sm" variant="ghost" aria-label="Re-apply template" title="Re-apply template (uses the latest Brand template settings)" icon={<Wand2 className="size-4" />} loading={busy === 'brand'} onClick={() => onAction('brand')} />

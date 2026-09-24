@@ -8,26 +8,34 @@
  *   generateContent        MODULE 3 — AI content ideas (generateContentIdeas)
  *   generateScript         MODULE 4 — AI video script (generateVideoScript)
  *   generateVideo          MODULE 5 — create a video (draft or start generation)
- *   videoAction            start a draft / retry a failed video / refresh status now
+ *   videoAction            start / retry / refresh a video, apply the brand template, (re)write social captions
  *   calculatePerformance   recompute dashboard & analytics aggregates
  *   getIntegrationStatus   which AI / video providers are configured (never returns keys)
  *   seedDemoData           super admin: load or remove demo data
+ *   socialConnect          super admin: start connecting an Instagram professional account (OAuth)
+ *   manageSocialAccount    super admin: map an account to a store / disconnect
+ *   schedulePost           post a finished video to Instagram now or at a time
+ *   cancelPost             cancel a scheduled post
+ * HTTP:
+ *   socialOAuthCallback    Instagram OAuth redirect (/api/oauth/instagram on the site via Hosting rewrite)
  * Background:
- *   pollVideoJobs          every minute: poll providers, stitch clips, store final video in Storage
+ *   pollVideoJobs          every minute: poll providers, stitch clips, store final video in Storage;
+ *                          publish due social posts and refresh expiring social tokens
  *   scheduledStats         hourly: recompute aggregates
  *   onPerformanceWritten   keep engagementRate consistent
  *   onVideoDeleted         delete Storage files + performance of a deleted video
  */
+import { logger } from 'firebase-functions';
 import { setGlobalOptions } from 'firebase-functions/v2';
 import { onDocumentDeleted, onDocumentWritten } from 'firebase-functions/v2/firestore';
-import { onCall } from 'firebase-functions/v2/https';
+import { onCall, onRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { analyzeTrend as runAnalyzeTrend } from './src/ai/trendAnalyzer.js';
 import { generateContentIdeas } from './src/ai/contentGenerator.js';
 import { generateVideoScript } from './src/ai/scriptGenerator.js';
 import { createVideo, videoAction as runVideoAction } from './src/ai/videoGenerator.js';
 import { textProviderStatus } from './src/ai/providers/index.js';
-import { ALL_SECRETS, CONTENT_ROLES, REGION, ROLES, TEXT_AI_SECRETS, config } from './src/config.js';
+import { ALL_SECRETS, CONTENT_ROLES, REGION, ROLES, SOCIAL_SECRETS, TEXT_AI_SECRETS, config } from './src/config.js';
 import { logAudit } from './src/lib/audit.js';
 import { requireUser } from './src/lib/auth.js';
 import { withErrorHandling } from './src/lib/errors.js';
@@ -40,6 +48,8 @@ import { removeDemoData, seedDemoData as runSeedDemoData } from './src/seed/demo
 import { bootstrapProfile as runBootstrapProfile, manageUser as runManageUser } from './src/users/users.js';
 import { videoProviderStatus } from './src/video/adapters/index.js';
 import { pollProcessingVideos } from './src/video/pipeline.js';
+import { handleInstagramCallback, manageAccount, socialStatus, startConnect } from './src/social/accounts.js';
+import { cancelPost as runCancelPost, processSocialQueue, schedulePost as runSchedulePost } from './src/social/posts.js';
 
 setGlobalOptions({ region: REGION, maxInstances: 10 });
 
@@ -102,8 +112,10 @@ export const onPerformanceWritten = onDocumentWritten({ document: 'performance/{
 });
 
 // ---------------------------------------------------------------- Video background jobs
+// Also works the social posting queue (no extra Cloud Scheduler job needed).
 export const pollVideoJobs = onSchedule({ schedule: 'every 1 minutes', timeoutSeconds: 540, memory: '2GiB', secrets: ALL_SECRETS, maxInstances: 1 }, async () => {
   await pollProcessingVideos({ limit: 10 });
+  await processSocialQueue().catch((err) => logger.error('social queue failed', { err: err?.message }));
 });
 
 export const onVideoDeleted = onDocumentDeleted({ document: 'generated_videos/{videoId}' }, async (event) => {
@@ -124,7 +136,32 @@ export const getIntegrationStatus = callable('getIntegrationStatus', { secrets: 
     limits: config.limits,
     usageToday: { ai: usage.get('ai') ?? 0, video: usage.get('video') ?? 0 },
     region: REGION,
+    social: socialStatus(),
   };
+});
+
+// ---------------------------------------------------------------- Social posting (Instagram)
+export const socialConnect = callable('socialConnect', { secrets: SOCIAL_SECRETS }, async (request) => {
+  const user = await requireUser(request, [ROLES.SUPER_ADMIN]);
+  return startConnect(user, parseInput(schemas.socialConnect, request.data));
+});
+
+/** OAuth redirect target, served on the site domain through the Hosting rewrite /api/oauth/instagram. */
+export const socialOAuthCallback = onRequest({ secrets: SOCIAL_SECRETS, timeoutSeconds: 60, memory: '256MiB' }, handleInstagramCallback);
+
+export const manageSocialAccount = callable('manageSocialAccount', {}, async (request) => {
+  const user = await requireUser(request, [ROLES.SUPER_ADMIN]);
+  return manageAccount(user, parseInput(schemas.manageSocialAccount, request.data));
+});
+
+export const schedulePost = callable('schedulePost', { secrets: SOCIAL_SECRETS, timeoutSeconds: 120 }, async (request) => {
+  const user = await requireUser(request, CONTENT_ROLES);
+  return runSchedulePost(user, parseInput(schemas.schedulePost, request.data));
+});
+
+export const cancelPost = callable('cancelPost', {}, async (request) => {
+  const user = await requireUser(request, CONTENT_ROLES);
+  return runCancelPost(user, parseInput(schemas.cancelPost, request.data));
 });
 
 export const seedDemoData = callable('seedDemoData', { timeoutSeconds: 120 }, async (request) => {

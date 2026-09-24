@@ -14,7 +14,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore'
 import { auth, db } from '../firebase/config'
-import { ALL_STORES, type AppSettings, type BrandKit, type Platform, type UserProfile } from '../types'
+import { ALL_STORES, type AppSettings, type BrandKit, type Platform, type SocialCaptions, type UserProfile } from '../types'
 import type { CalendarInput, PerformanceInput, SourceInput, StoreInput } from '../utils/validation'
 import { engagementRate } from '../utils/engagement'
 
@@ -85,6 +85,12 @@ export const publishVideo = (id: string, platform: Platform, publishedUrl: strin
   updateDoc(doc(db, 'generated_videos', id), { status: 'Published', platform, publishedUrl, publishedAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: uid() })
 export const unpublishVideo = (id: string) => updateDoc(doc(db, 'generated_videos', id), { status: 'Completed', updatedAt: serverTimestamp(), updatedBy: uid() })
 export const deleteVideo = (id: string) => deleteDoc(doc(db, 'generated_videos', id))
+export const saveSocialCaptions = (id: string, captions: SocialCaptions) =>
+  updateDoc(doc(db, 'generated_videos', id), { socialCaptions: { ...captions, editedAt: serverTimestamp() }, updatedAt: serverTimestamp(), updatedBy: uid() })
+
+// ------------------------------------------------------------------ social accounts & posts
+export const socialAccountsQuery = () => query(collection(db, 'social_accounts'), orderBy('username'))
+export const saveSocialSettings = (social: { autoPost: boolean }) => setDoc(doc(db, 'settings', 'app'), { social, updatedAt: serverTimestamp(), updatedBy: uid() }, { merge: true })
 
 // ------------------------------------------------------------------ performance (doc id = videoId)
 export async function savePerformance(video: { id: string; title: string; storeId: string }, input: PerformanceInput) {

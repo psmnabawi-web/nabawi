@@ -103,11 +103,26 @@ function mockPlan(ctx) {
   };
 }
 
+function mockSocialCaptions(ctx) {
+  const title = ctx.video?.title ?? 'Video cat';
+  const tags = ['#IntiWarna', '#CatRumah', '#RumahMinimalis', '#InspirasiWarna', '#RenovasiRumah', '#CatTembok', '#TipsCat', '#DekorasiRumah'];
+  const cta = ctx.cta ?? 'Konsultasikan warna rumahmu di toko kami';
+  return {
+    instagram: `[DEMO] ${title} ✨\n\nDinding kusam bikin rumah terasa sempit. Pilih warna yang tepat dan lihat bedanya!\n\n${cta}.\n\n${tags.join(' ')}`,
+    tiktok: `[DEMO] ${title} 🎨 ${cta}! ${tags.slice(0, 4).join(' ')}`,
+    facebook: `[DEMO] ${title}\n\nRumah jadi lebih segar dengan warna yang tepat. ${cta}. ${tags.slice(0, 3).join(' ')}`,
+    youtubeTitle: `[DEMO] ${title} #Shorts`.slice(0, 100),
+    youtubeDescription: `[DEMO] ${title}. ${cta}. ${tags.slice(0, 4).join(' ')}`,
+    hashtags: tags,
+  };
+}
+
 const builders = {
   trend_analysis: mockTrend,
   content_ideas: mockIdeas,
   video_script: mockScript,
   video_plan: mockPlan,
+  social_captions: mockSocialCaptions,
 };
 
 export const mock = {

@@ -59,6 +59,11 @@ beforeAll(async () => {
     await setDoc(doc(f, 'stats', 'store_s2'), { totals: {} });
     await setDoc(doc(f, 'audit_logs', 'a1'), { action: 'x', createdAt: ts });
     await setDoc(doc(f, 'usage', 'sm1_2026-09-01'), { uid: 'sm1', ai: 1 });
+    await setDoc(doc(f, 'social_accounts', 'instagram_1'), { platform: 'instagram', username: 'intiwarna_', storeId: 'ALL', status: 'connected' });
+    await setDoc(doc(f, 'social_tokens', 'instagram_1'), { sealed: 'v1.x.y.z' });
+    await setDoc(doc(f, 'oauth_states', 'st1'), { uid: 'admin', platform: 'instagram' });
+    await setDoc(doc(f, 'social_posts', 'p1'), { storeId: 's1', videoId: 'v-t1', status: 'Scheduled', createdAt: ts });
+    await setDoc(doc(f, 'social_posts', 'p2'), { storeId: 's2', videoId: 'v-t2', status: 'Published', createdAt: ts });
     const st = ctx.storage();
     await uploadString(ref(st, 'videos/v-t1/final.mp4'), 'video-bytes');
   });
@@ -285,6 +290,43 @@ describe('settings, usage & audit log', () => {
   it('usage is readable by its owner only', async () => {
     await assertSucceeds(getDoc(doc(db('sm1'), 'usage', 'sm1_2026-09-01')));
     await assertFails(getDoc(doc(db('sm2'), 'usage', 'sm1_2026-09-01')));
+  });
+});
+
+describe('social posting', () => {
+  it('account info is for content managers; tokens and OAuth states are never readable', async () => {
+    await assertSucceeds(getDoc(doc(db('mkt'), 'social_accounts', 'instagram_1')));
+    await assertFails(getDoc(doc(db('sm1'), 'social_accounts', 'instagram_1')));
+    await assertFails(setDoc(doc(db('admin'), 'social_accounts', 'instagram_2'), { platform: 'instagram', username: 'x', storeId: 'ALL', status: 'connected' }));
+    for (const who of ['admin', 'mkt', 'sm1'] as const) {
+      await assertFails(getDoc(doc(db(who), 'social_tokens', 'instagram_1')));
+      await assertFails(getDoc(doc(db(who), 'oauth_states', 'st1')));
+    }
+    await assertFails(setDoc(doc(db('admin'), 'social_tokens', 'instagram_9'), { sealed: 'forged' }));
+  });
+  it('posts follow the store scope and are written by the server only', async () => {
+    await assertSucceeds(getDoc(doc(db('sm1'), 'social_posts', 'p1')));
+    await assertFails(getDoc(doc(db('sm1'), 'social_posts', 'p2')));
+    await assertSucceeds(getDoc(doc(db('mkt'), 'social_posts', 'p2')));
+    await assertFails(updateDoc(doc(db('mkt'), 'social_posts', 'p1'), { status: 'Published' }));
+    await assertFails(setDoc(doc(db('admin'), 'social_posts', 'p3'), { storeId: 's1', status: 'Scheduled' }));
+  });
+  it('content managers can edit the AI captions of a video, nothing else with it', async () => {
+    const captions = { instagram: 'Halo #cat', tiktok: 't', facebook: 'f', youtubeTitle: 'y #Shorts', youtubeDescription: 'd', hashtags: ['#cat'], provider: 'gemini' };
+    const edit = (who: keyof typeof users, extra: Record<string, unknown> = {}) =>
+      updateDoc(doc(db(who), 'generated_videos', 'v-t1'), { socialCaptions: captions, updatedAt: serverTimestamp(), updatedBy: who, ...extra });
+    await assertSucceeds(edit('mkt'));
+    await assertFails(edit('sm1'));
+    await assertFails(edit('mkt', { videoUrl: 'https://evil.test/v.mp4' }));
+    await assertFails(updateDoc(doc(db('mkt'), 'generated_videos', 'v-t1'), { socialCaptions: { ...captions, instagram: 'x'.repeat(2201) }, updatedAt: serverTimestamp(), updatedBy: 'mkt' }));
+    await assertFails(updateDoc(doc(db('mkt'), 'generated_videos', 'v-t1'), { socialCaptions: { ...captions, token: 'x' }, updatedAt: serverTimestamp(), updatedBy: 'mkt' }));
+  });
+  it('only the super admin switches auto-posting, as a boolean', async () => {
+    const write = (who: keyof typeof users, social: unknown) => setDoc(doc(db(who), 'settings', 'app'), { social, updatedAt: serverTimestamp(), updatedBy: who }, { merge: true });
+    await assertSucceeds(write('admin', { autoPost: true }));
+    await assertFails(write('admin', { autoPost: 'yes' }));
+    await assertFails(write('admin', { autoPost: true, accountId: 'x' }));
+    await assertFails(write('mkt', { autoPost: false }));
   });
 });
 

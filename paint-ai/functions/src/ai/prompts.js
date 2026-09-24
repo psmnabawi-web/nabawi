@@ -162,3 +162,40 @@ export function videoPlanPrompt({ template, style, ratio, segmentDurations, scri
   if (brief) lines.push('', 'Additional brief:', `<data>${brief}</data>`);
   return lines.join('\n');
 }
+
+export function socialCaptionsPrompt({ video, script, contact, cta, templateLabel }) {
+  const facts = [
+    line('Store', [contact.storeName, [contact.address, contact.city].filter(Boolean).join(', ')].filter(Boolean).join(' - ')),
+    line('WhatsApp', contact.whatsapp),
+    line('Instagram', contact.instagram),
+    line('Website', contact.website),
+    line('Opening hours', contact.hours),
+    line('Call to action', cta),
+  ].filter(Boolean);
+  const lines = [
+    'Write ready-to-post social media captions for this short vertical paint retail video.',
+    '',
+    'Video:',
+    '<data>',
+    line('Title', video.title),
+    line('Template', templateLabel),
+    line('Duration', `${video.actualDurationSec ?? video.duration} seconds`),
+    line('On-screen hook', video.plan?.hookText),
+    line('On-screen captions', (video.plan?.captions ?? []).filter(Boolean).join(' | ')),
+    line('Voice-over', video.plan?.voiceOverText),
+    line('Visual brief', video.brief),
+    script ? line('Script caption draft', script.caption) : null,
+    script ? line('Script hashtags', (script.hashtags ?? []).join(' ')) : null,
+    '</data>',
+    '',
+    facts.length ? 'Contact facts you may use (use only these, exactly as written):' : 'No contact details were provided: invite people to visit or message the store without inventing any address, phone number or handle.',
+    ...facts,
+    '',
+    'Rules:',
+    '- Write in the content language, natural and conversational for Indonesian homeowners and contractors.',
+    '- Never invent prices, discounts, promos, stock, guarantees, product specs or awards that are not given above.',
+    '- Use at most 4 emojis per caption. Hashtags: relevant to paint, home and renovation, the city when known, plus one brand hashtag for Inti Warna.',
+    '- Each platform gets its own style (see schema descriptions). The Instagram caption ends with its hashtags.',
+  ];
+  return lines.filter((l) => l !== null).join('\n');
+}

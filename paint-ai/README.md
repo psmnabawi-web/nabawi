@@ -141,6 +141,30 @@ Template dipasang otomatis saat video selesai dirakit (`functions/src/video/temp
 - Layout mengikuti safe zone Reels/TikTok (atas ±8%, bawah ±22%, kanan ±11% dikosongkan untuk UI aplikasi).
 - Audio: klip Veo dibuat tanpa suara. Musik sebaiknya ditambahkan dari library musik Instagram/TikTok saat posting, karena lisensinya aman dan membantu jangkauan.
 
+## Caption otomatis & auto-posting Instagram
+
+**Caption AI.** Saat video selesai, AI menulis caption untuk Instagram, TikTok, Facebook, dan YouTube Shorts (judul + deskripsi) dari script, teks hook/caption video, dan kontak di Brand template. AI tidak boleh mengarang harga, promo, atau klaim. Caption bisa diedit, ditulis ulang dengan AI, dan disalin dari **Video Studio → Post**.
+
+**Auto-posting Instagram Reels** memakai API resmi *Instagram API with Instagram Login* (akun Business/Creator):
+
+| Langkah | Detail |
+|---|---|
+| 1. Meta app | developers.facebook.com/apps → Create app → use case *Manage messaging & content on Instagram* |
+| 2. Kredensial | Instagram → API setup with Instagram login: catat **Instagram app ID** dan **app secret** |
+| 3. Redirect URI | Business login settings → tambahkan `https://<PROJECT_ID>.web.app/api/oauth/instagram` (ditampilkan juga di Settings → Social accounts) |
+| 4. Akun tester | App roles → Instagram testers: tambahkan akun IG toko, lalu terima undangannya di aplikasi Instagram (Settings → Apps and websites → Tester invites). Untuk akun milik sendiri, mode development cukup; App Review tidak diperlukan |
+| 5. Server | `functions/.env`: `INSTAGRAM_APP_ID=…`; secret: `npx firebase-tools functions:secrets:set INSTAGRAM_APP_SECRET`; lalu deploy |
+| 6. Connect | Settings → **Social accounts** → *Connect Instagram account* (super admin), lalu pilih toko untuk tiap akun (atau "All stores" untuk akun brand) |
+
+Alur posting: **Post** di kartu video → pilih akun → *Post now* atau *Schedule*. Server membuat media container (Instagram mengunduh `final.mp4`), worker `pollVideoJobs` (tiap menit) mengecek sampai `FINISHED`, lalu `media_publish` → permalink disimpan dan video otomatis berstatus **Published**.
+
+- Token long-lived (±60 hari) diperpanjang otomatis kalau tinggal kurang dari 10 hari. Kalau dicabut, status akun menjadi *Reconnect needed*.
+- Token disimpan terenkripsi di `social_tokens` (tidak bisa dibaca client) dan hanya dikirim ke `api.instagram.com` / `graph.instagram.com`.
+- **Auto-post** (Settings → Social accounts) default **OFF**. Kalau ON, setiap video yang selesai langsung diposting dengan caption AI tanpa review. Tidak disarankan, karena video AI bisa berisi kesalahan.
+- Batas Instagram: 30 hashtag, 2.200 karakter, Reels lewat API maksimal 90 detik, dan kuota posting per 24 jam per akun. Kalau kena rate limit, posting otomatis dicoba lagi 15 menit kemudian.
+- Video tanpa suara diberi track audio AAC senyap (Instagram mensyaratkan stream audio).
+- **TikTok & YouTube Shorts:** API mereka mengunci upload sebagai *private* sampai app lolos audit platform. Sementara itu, gunakan caption AI dan upload manual (tambahkan musik dari library aplikasi), lalu catat lewat *Record it as published*.
+
 ## Jalan lokal (emulator, tanpa API key)
 
 Prasyarat: Node.js 22+, Java 21 (untuk emulator).
@@ -253,6 +277,9 @@ Workflow `.github/workflows/paint-ai.yml` menjalankan semuanya ketika ada peruba
 | Veo: `model … is not available` / `quota reached` | Model belum tersedia di region tersebut: ubah `VEO_MODEL` atau `VEO_LOCATION` di `functions/.env`, lalu deploy functions. Untuk quota per menit: tunggu 1 menit lalu Retry, atau pakai durasi 15/30 detik (klipnya lebih sedikit). |
 | Veo: `safety filter blocked this clip` | Prompt klip terkena filter keamanan Google (misalnya orang terkenal atau merek). Ubah brief/script, lalu Retry. |
 | Predeploy gagal `ERR_MODULE_NOT_FOUND` (mis. `@resvg/resvg-js`) | Setelah `git pull` ada dependensi baru yang belum ter-install. Sekarang predeploy menjalankan `npm install` otomatis. Untuk versi lama, jalankan `npm --prefix functions install && npm install`, lalu deploy lagi. |
+| Settings → Social accounts: "Instagram is not set up yet" | `INSTAGRAM_APP_ID` belum ada di `functions/.env` atau secret `INSTAGRAM_APP_SECRET` masih `disabled`. Isi keduanya, lalu deploy functions. |
+| Connect Instagram: "Invalid redirect_uri" / "Invalid platform app" | Redirect URI di Meta app harus persis `https://<PROJECT_ID>.web.app/api/oauth/instagram`, dan yang dipakai adalah *Instagram* app ID (bukan Facebook app ID). |
+| Post gagal: "personal account" / izin | Ubah akun IG menjadi Business/Creator, tambahkan sebagai Instagram tester di Meta app, lalu Connect ulang. |
 | "X is not configured" | Secret provider belum diisi, atau masih `disabled`. Set dengan `firebase functions:secrets:set`, lalu deploy ulang functions. |
 | Store Manager melihat layar "Waiting for access" | Belum di-assign store. Buka Settings → Users & roles. |
 | Login email tidak menjadi Super Admin | Email belum diverifikasi. Klik link verifikasi, lalu klik **I have verified** di banner. |

@@ -106,11 +106,32 @@ export const schemas = {
   videoAction: z
     .object({
       videoId: docId,
-      action: z.enum(['start', 'refresh', 'retry', 'brand']),
+      action: z.enum(['start', 'refresh', 'retry', 'brand', 'captions']),
     })
     .strict(),
 
   calculatePerformance: z.object({}).strict(),
+
+  socialConnect: z.object({ platform: z.enum(['instagram']) }).strict(),
+
+  manageSocialAccount: z
+    .object({
+      accountId: docId,
+      storeId: opt(storeScope),
+      disconnect: opt(z.boolean()),
+    })
+    .strict(),
+
+  schedulePost: z
+    .object({
+      videoId: docId,
+      accountId: docId,
+      caption: z.string().trim().min(1, 'Caption is required').max(2200, 'Instagram captions are limited to 2,200 characters'),
+      scheduledAt: opt(z.string().datetime({ offset: true })),
+    })
+    .strict(),
+
+  cancelPost: z.object({ postId: docId }).strict(),
 
   seedDemoData: z.object({ action: z.enum(['seed', 'remove']).default('seed') }).strict(),
 };

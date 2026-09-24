@@ -55,6 +55,9 @@ export const SECRETS = Object.freeze({
   KLING_SECRET_KEY: defineSecret('KLING_SECRET_KEY'),
   FAL_KEY: defineSecret('FAL_KEY'),
   HEYGEN_API_KEY: defineSecret('HEYGEN_API_KEY'),
+  // Instagram app secret (Meta app > Instagram > API setup with Instagram login). Also derives the key
+  // that encrypts stored social access tokens.
+  INSTAGRAM_APP_SECRET: defineSecret('INSTAGRAM_APP_SECRET'),
 });
 
 export const TEXT_AI_SECRETS = [SECRETS.GEMINI_API_KEY, SECRETS.OPENAI_API_KEY, SECRETS.ANTHROPIC_API_KEY];
@@ -65,7 +68,8 @@ export const VIDEO_AI_SECRETS = [
   SECRETS.FAL_KEY,
   SECRETS.HEYGEN_API_KEY,
 ];
-export const ALL_SECRETS = [...TEXT_AI_SECRETS, ...VIDEO_AI_SECRETS];
+export const SOCIAL_SECRETS = [SECRETS.INSTAGRAM_APP_SECRET];
+export const ALL_SECRETS = [...TEXT_AI_SECRETS, ...VIDEO_AI_SECRETS, ...SOCIAL_SECRETS];
 
 const DISABLED_VALUES = new Set(['', 'disabled', 'none', 'null', 'changeme']);
 
@@ -116,6 +120,12 @@ export const config = Object.freeze({
     heygenAvatarId: env('HEYGEN_AVATAR_ID'),
     heygenVoiceId: env('HEYGEN_VOICE_ID'),
     timeoutMinutes: intEnv('VIDEO_TIMEOUT_MINUTES', 60),
+  },
+  social: {
+    instagramAppId: env('INSTAGRAM_APP_ID'),
+    graphVersion: env('INSTAGRAM_GRAPH_VERSION', 'v24.0'),
+    // Public site that hosts the OAuth callback rewrite (/api/oauth/instagram).
+    publicBaseUrl: env('PUBLIC_BASE_URL', `https://${env('GOOGLE_CLOUD_PROJECT', env('GCLOUD_PROJECT', firebaseProjectId()))}.web.app`).replace(/\/+$/, ''),
   },
   limits: {
     aiDaily: intEnv('AI_DAILY_LIMIT', 200),

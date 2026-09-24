@@ -123,6 +123,8 @@ Writer: server. Client (marketing/admin) boleh mengedit title, hook, scenes, cta
 | platform, publishedUrl, publishedAt | | client (saat publish) |
 | storeId, createdBy, createdAt, updatedAt, startedAt, completedAt | | server |
 
+Field tambahan: `socialCaptions` (instagram, tiktok, facebook, youtubeTitle, youtubeDescription, hashtags, provider, generatedAt, editedAt) ditulis AI saat video selesai dan bisa diedit content manager. Juga ada `lastSocialPost`, `cleanVideoUrl`/`cleanStoragePath`, `brandTemplate`/`brandTemplateApplied`, dan `render` (batas klip untuk re-apply template).
+
 ## performance/{videoId}
 
 Doc id sama dengan id video.
@@ -156,9 +158,14 @@ Writer: client (marketing/admin).
 | Koleksi | Isi | Dibaca oleh |
 |---|---|---|
 | `stats/global`, `stats/store_{storeId}` | Agregat dashboard: totals, avgEngagementRate, statusBreakdown, contentGrowth (6 bulan), platformPerformance, topContent, topTrend | global: marketing/admin. store_x: store manager store x |
-| `settings/app` | textProvider, videoProvider, contentLanguage, brandContext, heygenAvatarId, heygenVoiceId | semua user aktif. Hanya super admin yang bisa menulis |
+| `settings/app` | textProvider, videoProvider, contentLanguage, brandContext, heygenAvatarId, heygenVoiceId, brandKit, social.autoPost | semua user aktif. Hanya super admin yang bisa menulis (merge per tab) |
 | `usage/{uid}_{yyyy-mm-dd}` | Kuota harian `{ai, video}` | pemilik & super admin |
 | `audit_logs/{id}` | actor, action, entity, entityId, details, createdAt | super admin |
+| `social_accounts/{platform_externalId}` | Akun Instagram terhubung: username, accountType, pictureUrl, storeId (`ALL` = akun brand), status (`connected`/`reconnect`), tokenExpiresAt | marketing/admin (tanpa token) |
+| `social_tokens/{id}` | Access token terenkripsi AES-256-GCM (kunci diturunkan dari `INSTAGRAM_APP_SECRET`) | tidak ada (server saja) |
+| `oauth_states/{state}` | State OAuth sekali pakai, berlaku 10 menit | tidak ada (server saja) |
+| `social_posts/{id}` | videoId, storeId, platform, accountId/accountName, caption, status (Scheduled → Publishing → Published/Failed/Cancelled), scheduledAt, containerId, mediaId, permalink, error, auto | sesuai scope store video |
+| `system/social` | tokensCheckedAt (penanda refresh token per jam) | tidak ada |
 
 ## Index komposit
 
@@ -168,3 +175,4 @@ Lihat `firestore.indexes.json`. Index ini dibutuhkan query Store Manager (`store
 - `sourceId + createdAt` di `trend_analysis`.
 - `contentId + createdAt` di `video_scripts`.
 - `storeId + date` di `campaign_calendar`.
+- `status + scheduledAt` dan `storeId + createdAt` di `social_posts` (antrean posting & daftar post).

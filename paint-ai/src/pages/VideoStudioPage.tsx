@@ -6,14 +6,15 @@ import { ScopeSelect } from '../components/ScopeSelect'
 import { Alert, Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, EmptyState, PageHeader, Segmented, SelectInput, Skeleton, Switch, Tabs, TextArea, TextInput } from '../components/ui'
 import { PublishModal, RenameModal } from '../components/video/PublishModal'
 import { VideoCard, type VideoCardAction } from '../components/video/VideoCard'
+import { PostModal } from '../components/video/PostModal'
 import { useAuth } from '../hooks/useAuth'
 import { useCollection, useDocument } from '../hooks/useFirestore'
 import { useIntegrationStatus } from '../hooks/useIntegrationStatus'
 import { useStoreScope } from '../hooks/useStoreScope'
 import { useToast } from '../hooks/useToast'
-import { deleteVideo, isContentManager, recentScoped, unpublishVideo } from '../services/firestore'
+import { deleteVideo, isContentManager, recentScoped, socialAccountsQuery, unpublishVideo } from '../services/firestore'
 import { generateVideo, videoAction } from '../services/functions'
-import type { AppSettings, GeneratedVideo, PerformanceRecord, VideoDuration, VideoProvider, VideoScript, VideoStatus, VideoStyle, VideoTemplate } from '../types'
+import type { AppSettings, GeneratedVideo, PerformanceRecord, SocialAccount, SocialPost, VideoDuration, VideoProvider, VideoScript, VideoStatus, VideoStyle, VideoTemplate } from '../types'
 import { brandKitOf } from '../utils/brandKit'
 import { cn } from '../utils/cn'
 import { DURATIONS, VIDEO_PROVIDERS, VIDEO_STATUSES, VIDEO_STYLES, VIDEO_TEMPLATES } from '../utils/constants'
@@ -40,6 +41,15 @@ export default function VideoStudioPage() {
   const scripts = useCollection<VideoScript>(() => (canEdit ? recentScoped('video_scripts', profile, selectedStoreId, 100) : null), deps)
   const integrations = useIntegrationStatus(canEdit)
   const appSettings = useDocument<AppSettings>('settings/app')
+  const socialPosts = useCollection<SocialPost>(() => recentScoped('social_posts', profile, selectedStoreId, 200), deps)
+  const socialAccounts = useCollection<SocialAccount>(() => (canEdit ? socialAccountsQuery() : null), [canEdit])
+  const [postFor, setPostFor] = useState<GeneratedVideo | null>(null)
+  // Newest post per video (the query is ordered by createdAt desc).
+  const latestPost = useMemo(() => {
+    const map = new Map<string, SocialPost>()
+    for (const p of socialPosts.data) if (!map.has(p.videoId)) map.set(p.videoId, p)
+    return map
+  }, [socialPosts.data])
 
   const presetScript = params.get('scriptId')
   const [tab, setTab] = useState<Tab>(canEdit ? 'create' : 'library')
@@ -115,6 +125,7 @@ export default function VideoStudioPage() {
   }
 
   const act = async (video: GeneratedVideo, action: VideoCardAction) => {
+    if (action === 'post') return setPostFor(video)
     if (action === 'publish') return setPublishFor(video)
     if (action === 'rename') return setRenameFor(video)
     if (action === 'delete') return setConfirmDelete(video)
@@ -328,7 +339,7 @@ export default function VideoStudioPage() {
             ) : shown.length ? (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {shown.map((v) => (
-                  <VideoCard key={v.id} video={v} canEdit={canEdit} busy={busy[v.id] ?? null} onAction={(a) => act(v, a)} storeLabel={storeName(v.storeId)} />
+                  <VideoCard key={v.id} video={v} canEdit={canEdit} busy={busy[v.id] ?? null} onAction={(a) => act(v, a)} storeLabel={storeName(v.storeId)} post={latestPost.get(v.id)} />
                 ))}
               </div>
             ) : (
@@ -349,6 +360,18 @@ export default function VideoStudioPage() {
         )}
       </div>
 
+      <PostModal
+        // Live copy of the video so regenerated captions show up while the modal is open.
+        video={postFor ? (videos.data.find((v) => v.id === postFor.id) ?? postFor) : null}
+        accounts={socialAccounts.data}
+        posts={postFor ? socialPosts.data.filter((p) => p.videoId === postFor.id) : []}
+        instagramReady={!!integrations.data?.social?.instagram.configured}
+        onClose={() => setPostFor(null)}
+        onManual={(v) => {
+          setPostFor(null)
+          setPublishFor(v)
+        }}
+      />
       <PublishModal
         key={`publish-${publishFor?.id ?? 'none'}`}
         video={publishFor}

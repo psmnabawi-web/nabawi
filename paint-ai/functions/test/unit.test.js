@@ -7,6 +7,8 @@ process.env.KLING_ACCESS_KEY = 'ak-test';
 process.env.KLING_SECRET_KEY = 'sk-test';
 process.env.FAL_KEY = 'fal-test';
 process.env.HEYGEN_API_KEY = 'disabled';
+process.env.INSTAGRAM_APP_SECRET = 'ig-secret-test';
+process.env.INSTAGRAM_APP_ID = '1234567890';
 
 const { planSegments, composeClipPrompt, fallbackPlan, tokenDownloadUrl, captionsFromScript, transitionsFor, sourceTimeline } = await import('../src/video/pipeline.js');
 const { engagementRate, aggregate, lastMonths, monthKey, lastDays, aiActivity } = await import('../src/performance/calculatePerformance.js');
@@ -29,6 +31,10 @@ const { ApiError } = await import('@google/genai');
 const { gemini, __setGeminiTestHooks } = await import('../src/ai/providers/gemini.js');
 const { veo, __setVeoTestHooks } = await import('../src/video/adapters/veo.js');
 const { VIDEO_ADAPTERS } = await import('../src/video/adapters/index.js');
+const { sealToken, openToken } = await import('../src/social/crypto.js');
+const ig = await import('../src/social/instagram.js');
+const { countHashtags, accountFitsVideo } = await import('../src/social/posts.js');
+const { socialCaptionsNormalizer, limitHashtags, socialCaptionsSchema } = await import('../src/ai/schemas.js');
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -417,6 +423,72 @@ describe('veo adapter (Vertex AI)', () => {
   });
 });
 
+describe('social posting', () => {
+  it('seals tokens with AES-GCM and detects tampering', () => {
+    const sealed = sealToken('IGAAT-secret-token');
+    assert.match(sealed, /^v1\./);
+    assert.ok(!sealed.includes('IGAAT'));
+    assert.equal(openToken(sealed), 'IGAAT-secret-token');
+    const parts = sealed.split('.');
+    parts[3] = Buffer.from('tampered').toString('base64url');
+    assert.throws(() => openToken(parts.join('.')), /cannot be decrypted/);
+  });
+  it('builds the Instagram login URL with publish scope and the site callback', () => {
+    const url = new URL(ig.authorizeUrl({ appId: '1234567890', state: 'abc' }));
+    assert.equal(url.origin + url.pathname, 'https://www.instagram.com/oauth/authorize');
+    assert.equal(url.searchParams.get('scope'), 'instagram_business_basic,instagram_business_content_publish');
+    assert.equal(url.searchParams.get('redirect_uri'), 'https://demo-paint-ai.web.app/api/oauth/instagram');
+    assert.equal(url.searchParams.get('state'), 'abc');
+  });
+  it('exchanges the code and publishes a reel through the container flow', async () => {
+    const calls = mockFetch(async (url, init) => {
+      if (url.startsWith('https://api.instagram.com/oauth/access_token')) return { body: { access_token: 'short', user_id: 17841400000000000 } };
+      if (url.includes('/access_token?')) return { body: { access_token: 'long', token_type: 'bearer', expires_in: 5183944 } };
+      if (url.includes('/me?')) return { body: { user_id: '17841400000000000', username: 'intiwarna_', account_type: 'BUSINESS' } };
+      if (url.endsWith('/17841400000000000/media') && init.method === 'POST') return { body: { id: 'container-1' } };
+      if (url.includes('/container-1?')) return { body: { status_code: 'FINISHED', status: 'Finished: Media has been uploaded' } };
+      if (url.endsWith('/media_publish') && init.method === 'POST') return { body: { id: 'media-9' } };
+      if (url.includes('/media-9?')) return { body: { permalink: 'https://www.instagram.com/reel/abc/' } };
+      return { status: 404, body: { error: { message: 'unexpected ' + url } } };
+    });
+    const { shortToken } = await ig.exchangeCode({ appId: '1', appSecret: 's', code: 'CODE#_' });
+    assert.equal(shortToken, 'short');
+    assert.match(calls[0].init.body, /code=CODE(&|$)/);
+    assert.match(calls[0].init.body, /grant_type=authorization_code/);
+    const { token, expiresIn } = await ig.longLivedToken({ appSecret: 's', shortToken });
+    assert.deepEqual([token, expiresIn], ['long', 5183944]);
+    assert.equal((await ig.getProfile(token)).accountType, 'BUSINESS');
+    const containerId = await ig.createReelContainer({ userId: '17841400000000000', token, videoUrl: 'https://firebasestorage.googleapis.com/v0/b/x/o/v.mp4?alt=media&token=t', caption: 'Halo #cat' });
+    const form = new URLSearchParams(calls.at(-1).init.body);
+    assert.deepEqual([form.get('media_type'), form.get('share_to_feed'), form.get('caption')], ['REELS', 'true', 'Halo #cat']);
+    assert.match(calls.at(-1).url, /graph\.instagram\.com\/v24\.0\//);
+    assert.equal((await ig.getContainerStatus({ containerId, token })).statusCode, 'FINISHED');
+    const mediaId = await ig.publishContainer({ userId: '17841400000000000', token, containerId });
+    assert.equal(await ig.getPermalink({ mediaId, token }), 'https://www.instagram.com/reel/abc/');
+  });
+  it('maps Graph API errors (expired token → reconnect, rate limit)', async () => {
+    mockFetch(async () => ({ status: 400, body: { error: { message: 'Session has expired', code: 190 } } }));
+    await assert.rejects(ig.getProfile('t'), (err) => err.code === 'failed-precondition' && err.details?.reconnect === true);
+    mockFetch(async () => ({ status: 400, body: { error: { message: 'Application request limit reached', code: 4 } } }));
+    await assert.rejects(ig.getContainerStatus({ containerId: 'c', token: 't' }), (err) => err.code === 'resource-exhausted');
+  });
+  it('limits hashtags and cleans AI captions', () => {
+    const many = Array.from({ length: 35 }, (_, i) => `#tag${i}`).join(' ');
+    assert.equal(countHashtags(limitHashtags(`Halo ${many}`)), 30);
+    const c = socialCaptionsNormalizer.parse({ instagram: `Cat baru ✨ ${many}`, tiktok: 'Hi', facebook: 'Fb', youtubeTitle: 'x'.repeat(150), youtubeDescription: 'd', hashtags: ['CatRumah', '#catrumah', '#Inti Warna!', ''] });
+    assert.equal(countHashtags(c.instagram), 30);
+    assert.equal(c.youtubeTitle.length, 100);
+    assert.deepEqual(c.hashtags, ['#CatRumah', '#IntiWarna']);
+    assert.deepEqual(socialCaptionsSchema.required.sort(), ['facebook', 'hashtags', 'instagram', 'tiktok', 'youtubeDescription', 'youtubeTitle']);
+  });
+  it('only lets an account post videos of its store or brand-wide', () => {
+    assert.equal(accountFitsVideo({ storeId: 'ALL' }, { storeId: 'jkt' }), true);
+    assert.equal(accountFitsVideo({ storeId: 'jkt' }, { storeId: 'jkt' }), true);
+    assert.equal(accountFitsVideo({ storeId: 'pku' }, { storeId: 'jkt' }), false);
+    assert.equal(accountFitsVideo({ storeId: 'pku' }, { storeId: 'ALL' }), true);
+  });
+});
+
 describe('video adapters (HTTP contract)', () => {
   it('Kling JWT is HS256 with iss/exp/nbf', async () => {
     const token = klingJwt('ak', 'sk', 1_000_000);
@@ -512,11 +584,12 @@ describe('ffmpeg compose arguments', () => {
     assert.equal(total, 21.3);
     assert.ok(args.includes('o.mp4'));
   });
-  it('video only when no clip has audio', () => {
-    const { args } = buildComposeArgs({ clips: clips.map((c) => ({ ...c, hasAudio: false })), dims, output: 'o.mp4' });
+  it('adds a silent AAC track when no clip has audio (Instagram expects one)', () => {
+    const { args, total } = buildComposeArgs({ clips: clips.map((c) => ({ ...c, hasAudio: false })), dims, output: 'o.mp4' });
     const filter = args[args.indexOf('-filter_complex') + 1];
-    assert.doesNotMatch(filter, /anullsrc|acrossfade/);
-    assert.equal(args.includes('-c:a'), false);
+    assert.doesNotMatch(filter, /acrossfade/);
+    assert.match(filter, new RegExp(`anullsrc=channel_layout=stereo:sample_rate=44100,atrim=0:${total},asetpts=PTS-STARTPTS\\[asilent\\]`));
+    assert.deepEqual(args.slice(args.indexOf('[asilent]') - 1, args.indexOf('[asilent]') + 3), ['-map', '[asilent]', '-c:a', 'aac']);
   });
   it('overlays are time-windowed and placed, end card is cross-faded in, clean copy is split off', () => {
     const { args, total } = buildComposeArgs({

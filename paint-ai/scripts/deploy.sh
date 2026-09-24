@@ -197,9 +197,10 @@ secret_hint() {
     KLING_SECRET_KEY) echo "Kling video — secret key (press Enter when using a single API key)" ;;
     FAL_KEY) echo "Pika video via fal.ai — https://fal.ai/dashboard/keys" ;;
     HEYGEN_API_KEY) echo "HeyGen avatar video — https://app.heygen.com/settings" ;;
+    INSTAGRAM_APP_SECRET) echo "Instagram auto-posting — Meta app > Instagram > API setup with Instagram login > Instagram app secret" ;;
   esac
 }
-for SECRET in GEMINI_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY RUNWAY_API_KEY KLING_ACCESS_KEY KLING_SECRET_KEY FAL_KEY HEYGEN_API_KEY; do
+for SECRET in GEMINI_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY RUNWAY_API_KEY KLING_ACCESS_KEY KLING_SECRET_KEY FAL_KEY HEYGEN_API_KEY INSTAGRAM_APP_SECRET; do
   # "access" succeeds only when the secret has a usable version (a secret created without a value does not count).
   if $FIREBASE functions:secrets:access "$SECRET" --project "$PROJECT_ID" >/dev/null 2>&1; then
     echo "✓ $SECRET already set (change later with: npx firebase-tools functions:secrets:set $SECRET --project $PROJECT_ID)"

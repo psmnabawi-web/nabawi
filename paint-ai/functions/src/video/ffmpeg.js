@@ -51,7 +51,8 @@ const round3 = (n) => Math.round(n * 1000) / 1000;
  *   2. optionally writes that joined video as a "clean" output (no branding),
  *   3. composites transparent PNG overlays (logo, hook, captions…) in their time windows,
  *   4. optionally cross-fades into an end card image.
- * Clips without audio get silence when at least one clip has audio; otherwise the output has no audio.
+ * Clips without audio get silence when at least one clip has audio; when none has audio the outputs get a
+ * silent AAC track (Instagram Reels publishing expects an audio stream).
  *
  * @param {{
  *   clips: {path:string, duration:number, hasAudio?:boolean}[],
@@ -149,6 +150,15 @@ export function buildComposeArgs({ clips, dims, fps = 30, transition = 0.35, tra
       audio = '[afinal]';
     }
     total = round3(mainTotal + endCard.duration);
+  }
+
+  if (!withAudio) {
+    filters.push(`anullsrc=channel_layout=stereo:sample_rate=44100,atrim=0:${total},asetpts=PTS-STARTPTS[asilent]`);
+    audio = '[asilent]';
+    if (clean) {
+      filters.push(`anullsrc=channel_layout=stereo:sample_rate=44100,atrim=0:${mainTotal},asetpts=PTS-STARTPTS[asilentclean]`);
+      cleanAudio = '[asilentclean]';
+    }
   }
 
   args.push('-filter_complex', filters.join(';'));

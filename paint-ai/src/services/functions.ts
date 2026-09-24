@@ -33,7 +33,7 @@ export const generateScript = callable<ScriptRequest & { provider?: TextProvider
 
 export const generateVideo = callable<VideoRequest & { provider: VideoProvider }, { videoId: string; status: string; segments?: number }>('generateVideo', AI_CALL_TIMEOUT_MS)
 
-export const videoAction = callable<{ videoId: string; action: 'start' | 'refresh' | 'retry' | 'brand' }, { status: string; busy?: boolean; done?: number; total?: number; branded?: boolean }>(
+export const videoAction = callable<{ videoId: string; action: 'start' | 'refresh' | 'retry' | 'brand' | 'captions' }, { status: string; busy?: boolean; done?: number; total?: number; branded?: boolean }>(
   'videoAction',
   AI_CALL_TIMEOUT_MS,
 )
@@ -43,3 +43,9 @@ export const calculatePerformance = callable<Record<string, never>, { scopes: nu
 export const getIntegrationStatus = callable<Record<string, never>, IntegrationStatus>('getIntegrationStatus')
 
 export const seedDemoData = callable<{ action: 'seed' | 'remove' }, { written?: number; removed?: number }>('seedDemoData', 120_000)
+
+// ------------------------------------------------------------------ social posting
+export const socialConnect = callable<{ platform: 'instagram' }, { url: string; redirectUri: string }>('socialConnect')
+export const manageSocialAccount = callable<{ accountId: string; storeId?: string; disconnect?: boolean }, { ok?: boolean; disconnected?: boolean }>('manageSocialAccount')
+export const schedulePost = callable<{ videoId: string; accountId: string; caption: string; scheduledAt?: string | null }, { postId: string; status: string; error: string | null }>('schedulePost', 120_000)
+export const cancelPost = callable<{ postId: string }, { status: string }>('cancelPost')

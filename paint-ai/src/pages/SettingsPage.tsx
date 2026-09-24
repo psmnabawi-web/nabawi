@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { AuditLogTab } from '../components/settings/AuditLogTab'
 import { BrandTemplateTab } from '../components/settings/BrandTemplateTab'
+import { SocialAccountsTab } from '../components/settings/SocialAccountsTab'
 import { DemoDataTab } from '../components/settings/DemoDataTab'
 import { IntegrationsTab } from '../components/settings/IntegrationsTab'
 import { ProfileTab } from '../components/settings/ProfileTab'
@@ -11,7 +12,7 @@ import { PageHeader, Tabs } from '../components/ui'
 import { useAuth } from '../hooks/useAuth'
 import { isAdmin, isContentManager } from '../services/firestore'
 
-type Tab = 'profile' | 'stores' | 'users' | 'integrations' | 'brand' | 'demo' | 'audit'
+type Tab = 'profile' | 'stores' | 'users' | 'integrations' | 'brand' | 'social' | 'demo' | 'audit'
 
 export default function SettingsPage() {
   const { profile } = useAuth()
@@ -21,7 +22,7 @@ export default function SettingsPage() {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'profile', label: 'Profile' },
     ...(admin ? [{ id: 'stores' as Tab, label: 'Stores' }, { id: 'users' as Tab, label: 'Users & roles' }] : []),
-    ...(manager ? [{ id: 'integrations' as Tab, label: 'AI & Integrations' }, { id: 'brand' as Tab, label: 'Brand template' }] : []),
+    ...(manager ? [{ id: 'integrations' as Tab, label: 'AI & Integrations' }, { id: 'brand' as Tab, label: 'Brand template' }, { id: 'social' as Tab, label: 'Social accounts' }] : []),
     ...(admin ? [{ id: 'demo' as Tab, label: 'Demo data' }, { id: 'audit' as Tab, label: 'Audit log' }] : []),
   ]
   // Deep link: /settings?tab=stores (ignored when the tab is not available for this role).
@@ -37,6 +38,7 @@ export default function SettingsPage() {
         {tab === 'users' && admin && <UsersTab />}
         {tab === 'integrations' && manager && <IntegrationsTab />}
         {tab === 'brand' && manager && <BrandTemplateTab />}
+        {tab === 'social' && manager && <SocialAccountsTab />}
         {tab === 'demo' && admin && <DemoDataTab />}
         {tab === 'audit' && admin && <AuditLogTab />}
       </div>

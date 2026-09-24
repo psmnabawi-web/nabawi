@@ -8,6 +8,7 @@ import { consumeQuota, refundQuota } from '../lib/quota.js';
 import { getAppSettings } from '../lib/settings.js';
 import { VIDEO_ADAPTERS } from '../video/adapters/index.js';
 import { applyBrandTemplate, pollVideo, startVideo } from '../video/pipeline.js';
+import { generateVideoCaptions } from '../social/captions.js';
 
 /**
  * MODULE 5 — AI Video Generator.
@@ -89,6 +90,18 @@ export async function videoAction(user, { videoId, action }) {
   if (action === 'refresh') {
     const result = await pollVideo(videoId);
     return result.skipped ? { status: video.status, busy: true } : result;
+  }
+  if (action === 'captions') {
+    if (!['Completed', 'Published'].includes(video.status)) throw new HttpsError('failed-precondition', 'Captions are written for finished videos.');
+    await consumeQuota(user.uid, 'ai', config.limits.aiDaily);
+    try {
+      const captions = await generateVideoCaptions(videoId);
+      await logAudit({ actor: user, action: 'video.captions', entity: 'generated_videos', entityId: videoId, details: { provider: captions.provider } });
+      return { status: video.status, captions: true };
+    } catch (err) {
+      await refundQuota(user.uid, 'ai');
+      throw err;
+    }
   }
   if (action === 'brand') {
     // Re-renders from the stored video: no AI provider call, so no video quota is used.

@@ -1,13 +1,15 @@
 {
   "indexes": [
-    { "collectionGroup": "social_sources", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "storeId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
-    { "collectionGroup": "trend_analysis", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "storeId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
-    { "collectionGroup": "trend_analysis", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "sourceId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
-    { "collectionGroup": "content_ideas", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "storeId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
-    { "collectionGroup": "video_scripts", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "storeId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
-    { "collectionGroup": "video_scripts", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "contentId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
-    { "collectionGroup": "generated_videos", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "storeId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
-    { "collectionGroup": "campaign_calendar", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "storeId", "order": "ASCENDING" }, { "fieldPath": "date", "order": "ASCENDING" }] }
+    {"collectionGroup": "social_sources", "queryScope": "COLLECTION", "fields": [{"fieldPath": "storeId", "order": "ASCENDING"}, {"fieldPath": "createdAt", "order": "DESCENDING"}]},
+    {"collectionGroup": "trend_analysis", "queryScope": "COLLECTION", "fields": [{"fieldPath": "storeId", "order": "ASCENDING"}, {"fieldPath": "createdAt", "order": "DESCENDING"}]},
+    {"collectionGroup": "trend_analysis", "queryScope": "COLLECTION", "fields": [{"fieldPath": "sourceId", "order": "ASCENDING"}, {"fieldPath": "createdAt", "order": "DESCENDING"}]},
+    {"collectionGroup": "content_ideas", "queryScope": "COLLECTION", "fields": [{"fieldPath": "storeId", "order": "ASCENDING"}, {"fieldPath": "createdAt", "order": "DESCENDING"}]},
+    {"collectionGroup": "video_scripts", "queryScope": "COLLECTION", "fields": [{"fieldPath": "storeId", "order": "ASCENDING"}, {"fieldPath": "createdAt", "order": "DESCENDING"}]},
+    {"collectionGroup": "video_scripts", "queryScope": "COLLECTION", "fields": [{"fieldPath": "contentId", "order": "ASCENDING"}, {"fieldPath": "createdAt", "order": "DESCENDING"}]},
+    {"collectionGroup": "generated_videos", "queryScope": "COLLECTION", "fields": [{"fieldPath": "storeId", "order": "ASCENDING"}, {"fieldPath": "createdAt", "order": "DESCENDING"}]},
+    {"collectionGroup": "campaign_calendar", "queryScope": "COLLECTION", "fields": [{"fieldPath": "storeId", "order": "ASCENDING"}, {"fieldPath": "date", "order": "ASCENDING"}]},
+    {"collectionGroup": "social_posts", "queryScope": "COLLECTION", "fields": [{"fieldPath": "status", "order": "ASCENDING"}, {"fieldPath": "scheduledAt", "order": "ASCENDING"}]},
+    {"collectionGroup": "social_posts", "queryScope": "COLLECTION", "fields": [{"fieldPath": "storeId", "order": "ASCENDING"}, {"fieldPath": "createdAt", "order": "DESCENDING"}]}
   ],
   "fieldOverrides": []
 }

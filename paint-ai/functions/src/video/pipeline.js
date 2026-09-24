@@ -16,7 +16,12 @@ import { bucket, db, serverTimestamp, toDate } from '../lib/firebase.js';
 import { getAppSettings } from '../lib/settings.js';
 import { VIDEO_ADAPTERS } from './adapters/index.js';
 import { composeVideo, extractThumbnail, faststart, probe } from './ffmpeg.js';
-import { buildTemplateAssets, templateLabels } from './template/brandTemplate.js';
+import { buildTemplateAssets } from './template/brandTemplate.js';
+import { captionsFromScript, templateContent } from './template/content.js';
+import { generateVideoCaptions } from '../social/captions.js';
+import { autoPostVideo } from '../social/posts.js';
+
+export { captionsFromScript };
 
 const LEASE_MS = 8 * 60 * 1000;
 const MAX_DOWNLOAD_BYTES = 500 * 1024 * 1024;
@@ -90,13 +95,6 @@ export function fallbackPlan({ template, script, count }) {
     return `${template.label}: ${beat} Setting: an Indonesian home and paint store context.`;
   });
   return { prompts, voiceOverText: script?.voiceOver ?? '', hookText: script?.hook?.onScreenText ?? '', captions: captionsFromScript(script, count) };
-}
-
-/** Spreads the script's scene/CTA on-screen texts over `count` clips (the hook text is shown as the title). */
-export function captionsFromScript(script, count) {
-  const texts = [...(script?.scenes ?? []).map((s) => s?.onScreenText), script?.cta?.onScreenText].map((t) => String(t ?? '').trim()).filter(Boolean);
-  if (!texts.length || count < 1) return [];
-  return Array.from({ length: count }, (_, i) => texts[count === 1 ? 0 : Math.round((i * (texts.length - 1)) / (count - 1))]);
 }
 
 async function buildPlan(video, adapter, settings) {
@@ -268,32 +266,6 @@ export function transitionsFor(template, clipCount) {
   return Array.from({ length: Math.max(0, clipCount - 1) }, (_, i) => (template === 'before_after' && i === clipCount - 2 ? 'wipeleft' : 'fade'));
 }
 
-/** Texts and contact details for the brand template of one video. */
-async function templateContent(video, settings, count = video.segments.length) {
-  const kit = settings.brandKit;
-  const [script, store] = await Promise.all([
-    video.scriptId ? db.doc(`video_scripts/${video.scriptId}`).get().then((s) => (s.exists ? s.data() : null)) : null,
-    video.storeId && video.storeId !== 'ALL' ? db.doc(`stores/${video.storeId}`).get().then((s) => (s.exists ? s.data() : null)) : null,
-  ]);
-  const planCaptions = Array.isArray(video.plan?.captions) ? video.plan.captions : [];
-  const scriptCaptions = captionsFromScript(script, count);
-  const fullMode = VIDEO_ADAPTERS[video.provider]?.mode === 'full';
-  return {
-    hookText: fullMode ? '' : video.plan?.hookText || script?.hook?.onScreenText || video.title,
-    captions: fullMode ? [] : Array.from({ length: count }, (_, i) => planCaptions[i] || scriptCaptions[i] || ''),
-    cta: script?.cta?.onScreenText || kit.ctaText || templateLabels(settings.contentLanguage).cta,
-    contact: {
-      storeName: store?.storeName ?? '',
-      address: store?.address ?? '',
-      city: store?.city ?? '',
-      whatsapp: kit.whatsapp,
-      instagram: kit.instagram,
-      website: kit.website,
-      hours: kit.hours,
-    },
-  };
-}
-
 /**
  * Save Result URL → Store in Firebase Storage: downloads the clips, joins them with transitions, applies
  * the brand template (logo, hook title, captions, end card) and uploads the final video, a clean copy
@@ -458,6 +430,23 @@ export async function applyBrandTemplate(videoId) {
   });
 }
 
+/**
+ * Post-processing once a video is Completed: AI captions for every platform, then optional auto-posting.
+ * Failures are logged only; the video itself is already done.
+ */
+async function afterCompleted(videoId) {
+  try {
+    await generateVideoCaptions(videoId);
+  } catch (err) {
+    logger.warn('auto captions failed', { videoId, err: err?.message });
+  }
+  try {
+    await autoPostVideo(videoId);
+  } catch (err) {
+    logger.warn('auto post failed', { videoId, err: err?.message });
+  }
+}
+
 /** Polls provider jobs for one Processing video and finalizes it when all clips are ready. */
 export async function pollVideo(videoId) {
   return withLease(videoId, async (ref) => {
@@ -523,7 +512,9 @@ export async function pollVideo(videoId) {
     }
     if (done === segments.length) {
       try {
-        return await finalizeVideo(ref, { ...video, segments });
+        const result = await finalizeVideo(ref, { ...video, segments });
+        await afterCompleted(video.id);
+        return result;
       } catch (err) {
         logger.error('video finalize failed', { videoId, err: err?.message });
         await failVideo(ref, `Could not assemble the final video: ${err?.message ?? 'unknown error'}`);
