@@ -5,6 +5,8 @@
 #   bash scripts/deploy.sh <PROJECT_ID> [region] [super_admin_emails]
 # Example:
 #   bash scripts/deploy.sh content-ai-iw asia-southeast2 you@gmail.com
+# Re-run faster (skip npm ci + tests when node_modules already exist):
+#   SKIP_CHECKS=1 bash scripts/deploy.sh content-ai-iw asia-southeast2 you@gmail.com
 #
 # What it does: checks → npm ci → lint/typecheck/tests → firebase login → Firestore (create/verify region)
 # → web config into .env.production.local (auto) → functions/.env (auto) → secrets → deploy (retry once).
@@ -61,6 +63,22 @@ set_env() {
 }
 get_env() { grep -E "^$2=" "$1" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' || true; }
 
+# Every Google API the platform uses. A brand-new Cloud project has none of them enabled.
+REQUIRED_APIS="firestore.googleapis.com,firebaserules.googleapis.com,firebasestorage.googleapis.com,storage.googleapis.com,firebasehosting.googleapis.com,identitytoolkit.googleapis.com,cloudfunctions.googleapis.com,run.googleapis.com,cloudbuild.googleapis.com,artifactregistry.googleapis.com,eventarc.googleapis.com,pubsub.googleapis.com,cloudscheduler.googleapis.com,secretmanager.googleapis.com"
+ENABLE_APIS_URL="https://console.cloud.google.com/flows/enableapi?apiid=${REQUIRED_APIS}&project=${PROJECT_ID}"
+
+api_disabled() { printf '%s' "$1" | grep -qiE 'has not been used in project|SERVICE_DISABLED|is disabled|API has not been enabled'; }
+
+wait_for_apis() {
+  red "Some Google Cloud APIs are not enabled yet on $PROJECT_ID."
+  echo "Open this link (signed in with the same Google account as the Firebase CLI), click ENABLE, wait ~1-2 minutes:"
+  echo ""
+  echo "  $ENABLE_APIS_URL"
+  echo ""
+  printf 'Press Enter when the APIs are enabled… '
+  read -r _
+}
+
 step "1/8 Checking prerequisites"
 node -e 'const [maj]=process.versions.node.split(".").map(Number); if (maj < 22) { console.error("Node.js 22+ is required (found " + process.versions.node + "). Install from https://nodejs.org"); process.exit(1) }'
 if [ -f "$ENV_FILE" ] && [ "$(get_env "$ENV_FILE" VITE_FIREBASE_PROJECT_ID)" != "$PROJECT_ID" ]; then
@@ -68,26 +86,51 @@ if [ -f "$ENV_FILE" ] && [ "$(get_env "$ENV_FILE" VITE_FIREBASE_PROJECT_ID)" != 
   exit 1
 fi
 
-step "2/8 Installing dependencies"
-npm ci
-npm ci --prefix functions
+if [ "${SKIP_CHECKS:-}" = "1" ] && [ -d node_modules ] && [ -d functions/node_modules ]; then
+  step "2-3/8 Skipping install + quality gate (SKIP_CHECKS=1)"
+else
+  step "2/8 Installing dependencies"
+  npm ci
+  npm ci --prefix functions
 
-step "3/8 Quality gate (lint, typecheck, unit tests)"
-npm run lint
-npm run typecheck
-npm test
-npm --prefix functions run lint
-npm --prefix functions test
+  step "3/8 Quality gate (lint, typecheck, unit tests)"
+  npm run lint
+  npm run typecheck
+  npm test
+  npm --prefix functions run lint
+  npm --prefix functions test
+fi
 
 step "4/8 Firebase login (a browser window opens)"
 $FIREBASE login
 
 step "5/8 Firestore database"
-DB_LOCATION="$($FIREBASE firestore:databases:get "(default)" --project "$PROJECT_ID" --json 2>/dev/null | json_get result.locationId || true)"
-if [ -z "$DB_LOCATION" ]; then
-  $FIREBASE firestore:databases:create "(default)" --location="$REGION" --project "$PROJECT_ID"
+DB_LOCATION=""
+for ATTEMPT in 1 2 3 4 5; do
+  DB_OUT="$($FIREBASE firestore:databases:get "(default)" --project "$PROJECT_ID" --json 2>&1 || true)"
+  if api_disabled "$DB_OUT"; then
+    wait_for_apis
+    continue
+  fi
+  DB_LOCATION="$(printf '%s' "$DB_OUT" | json_get result.locationId)"
+  if [ -n "$DB_LOCATION" ]; then break; fi
+  CREATE_OUT="$($FIREBASE firestore:databases:create "(default)" --location="$REGION" --project "$PROJECT_ID" 2>&1 || true)"
+  if api_disabled "$CREATE_OUT"; then
+    wait_for_apis
+    continue
+  fi
+  if printf '%s' "$CREATE_OUT" | grep -qiE 'error'; then
+    red "Could not create Firestore:"
+    printf '%s\n' "$CREATE_OUT"
+    exit 1
+  fi
   DB_LOCATION="$REGION"
   green "Created Firestore (default) in $REGION"
+  break
+done
+if [ -z "$DB_LOCATION" ]; then
+  red "Firestore is still not reachable. Enable the APIs ($ENABLE_APIS_URL), wait a few minutes, then re-run with SKIP_CHECKS=1."
+  exit 1
 fi
 if [ "$DB_LOCATION" != "$REGION" ]; then
   case "$DB_LOCATION" in
@@ -168,8 +211,11 @@ done
 step "8/8 Deploying rules, indexes, storage rules, functions and hosting to $PROJECT_ID"
 DEPLOY_TARGETS="firestore:rules,firestore:indexes,storage,functions,hosting"
 if ! $FIREBASE deploy --project "$PROJECT_ID" --only "$DEPLOY_TARGETS"; then
-  red "First deploys sometimes fail while Google provisions service accounts (Eventarc / Cloud Build). Retrying in 90 seconds…"
-  sleep 90
+  red "First deploys sometimes fail while Google provisions service accounts (Eventarc / Cloud Build)."
+  red "If the error says Storage is not set up: Firebase Console > Storage > Get started, then continue."
+  echo "APIs used by this platform (enable if any is missing): $ENABLE_APIS_URL"
+  printf 'Press Enter to retry the deploy… '
+  read -r _
   $FIREBASE deploy --project "$PROJECT_ID" --only "$DEPLOY_TARGETS"
 fi
 
