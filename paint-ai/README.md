@@ -250,6 +250,7 @@ Workflow `.github/workflows/paint-ai.yml` menjalankan semuanya ketika ada peruba
 | Veo: `Permission denied on Vertex AI` | Buka IAM (`https://console.cloud.google.com/iam-admin/iam?project=<id>`). Beri role **Vertex AI User** ke `<PROJECT_NUMBER>-compute@developer.gserviceaccount.com` (service account Cloud Functions), lalu Retry. |
 | Veo: `model … is not available` / `quota reached` | Model belum tersedia di region tersebut: ubah `VEO_MODEL` atau `VEO_LOCATION` di `functions/.env`, lalu deploy functions. Untuk quota per menit: tunggu 1 menit lalu Retry, atau pakai durasi 15/30 detik (klipnya lebih sedikit). |
 | Veo: `safety filter blocked this clip` | Prompt klip terkena filter keamanan Google (misalnya orang terkenal atau merek). Ubah brief/script, lalu Retry. |
+| Predeploy gagal `ERR_MODULE_NOT_FOUND` (mis. `@resvg/resvg-js`) | Setelah `git pull` ada dependensi baru yang belum ter-install. Sekarang predeploy menjalankan `npm install` otomatis. Untuk versi lama, jalankan `npm --prefix functions install && npm install`, lalu deploy lagi. |
 | "X is not configured" | Secret provider belum diisi, atau masih `disabled`. Set dengan `firebase functions:secrets:set`, lalu deploy ulang functions. |
 | Store Manager melihat layar "Waiting for access" | Belum di-assign store. Buka Settings → Users & roles. |
 | Login email tidak menjadi Super Admin | Email belum diverifikasi. Klik link verifikasi, lalu klik **I have verified** di banner. |
