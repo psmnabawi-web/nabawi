@@ -1100,6 +1100,7 @@
       else o.push(`   Target belum diisi di sheet`);
       return o.join("\n");
     };
+    L.push(...waDailyStoreLines(compact ? "compact" : "detail"));
     if (below.length) { L.push(`*OUTLET BELUM MENCAPAI TARGET (${below.length} dari ${B.nTarget})*`); if (!compact) L.push(`Urutan dari yang paling tertinggal.`); below.forEach((r, i) => { L.push(block(r, i + 1)); if (!compact) L.push(""); }); if (compact) L.push(""); }
     if (ok.length) { L.push(`*OUTLET SUDAH MENCAPAI TARGET (${ok.length} dari ${B.nTarget})*`); ok.forEach((r, i) => { L.push(block(r, i + 1)); if (!compact) L.push(""); }); if (compact) L.push(""); }
     if (na.length) { L.push(`*OUTLET TANPA TARGET (${na.length})*`); na.forEach(r => L.push(`• ${r.label}: omset ${compact ? waRp(r.actual) : waFull(r.actual)}, target belum diisi di sheet`)); L.push(""); }
@@ -1131,6 +1132,7 @@
     L.push("");
     const perDay = (r) => { if (!B.partial || !r.needPerDay || !r.actual || !B.N) return ""; const avg = r.actual / B.N; const k = r.needPerDay / avg; return k <= 1.05 ? ` Dengan ritme sekarang target ${bulan} masih bisa terkejar, jaga konsistensi.` : ` Untuk mengejar target ${bulan}, omset harian ${B.remDays} hari ke depan harus sekitar *${x(k)}×* rata-rata harian sekarang${k >= 2 ? " (butuh usaha ekstra)" : ""}.`; };
     const blk = (r, i) => { const pct = r.ach * 100; if (r.ach >= 1) return `${i}. ${waIco(r.status)} *${r.label}* — ${pct.toFixed(0)}%\n   Sudah ${(pct - 100).toFixed(0)}% di atas target${B.partial ? " sampai hari ini" : ""}. Pertahankan ritme sampai akhir ${bulan}. 👏`; return `${i}. ${waIco(r.status)} *${r.label}* — ${pct.toFixed(0)}%\n   Baru ${pct.toFixed(0)}% dari target${B.partial ? " sampai hari ini" : ""}, masih kurang ${(100 - pct).toFixed(0)}%.${perDay(r)}`; };
+    L.push(...waDailyStoreLines("pct"));
     if (below.length) { L.push(`*BELUM MENCAPAI TARGET (${below.length} outlet)*`); L.push(`Urutan dari yang paling tertinggal.`); below.forEach((r, i) => { L.push(blk(r, i + 1)); L.push(""); }); }
     if (ok.length) { L.push(`*SUDAH MENCAPAI TARGET (${ok.length} outlet)* 👏`); ok.forEach((r, i) => { L.push(blk(r, i + 1)); L.push(""); }); }
     if (na.length) { na.forEach(r => L.push(`⚪ *${r.label}* — target belum diisi di sistem, mohon hubungi admin agar pencapaiannya bisa dihitung.`)); L.push(""); }
@@ -1213,6 +1215,47 @@
       return `<div class="tg tg-${r.status}"><span class="tg-rank">${i + 1}</span><span class="tg-body"><span class="tg-top"><b>${r.name}</b><span class="tg-pct">${pct}</span></span><span class="tg-bar"><i style="width:${w.toFixed(1)}%"></i><em style="left:${mark.toFixed(1)}%"></em></span><span class="tg-sub">${sub}</span></span></div>`; }).join("") : `<div class="tg-empty">Tidak ada sales pada filter ini.</div>`;
     $("salesFoot").innerHTML = `<span class="lg lg-bad">&lt; ${warnAt}%</span><span class="lg lg-warn">${warnAt}–99%</span><span class="lg lg-good">≥ 100%</span><span class="lg lg-na">tanpa target</span><span>garis tipis = 100% target · target s/d hari ini = target bulan ÷ ${R.dim} hari × ${R.N} hari berdata · "% target bulan" = omset ÷ target bulan penuh (angka Month to Date di sheet) · sumber: Google Sheet pencapaian sales</span>`;
   }
+  // ---------- omset hari terakhir (harian) untuk pesan WhatsApp ----------
+  function computeDailyStores() {
+    if (state.range || state.month === "ytd") return null;
+    const mi = state.month, m = state.months[mi]; if (!m) return null;
+    const N = lastDataDay(mi); if (!N) return null; const day = m.days.find(d => d.d === N); if (!day) return null;
+    const warnAt = (C.ALERTS || {}).achWarn ?? 80; const st = (a) => a == null ? "na" : Math.round(a * 100) >= 100 ? "ok" : Math.round(a * 100) >= warnAt ? "warn" : "bad";
+    const rows = activeStores().map(s => { const act = day.act[s.key] || 0, tgt = day.tgt[s.key] || 0; const ach = tgt ? act / tgt : null; return { key: s.key, label: s.label, act, tgt, ach, status: st(ach) }; }).filter(r => r.act || r.tgt);
+    rows.sort((a, b) => (b.ach ?? -1) - (a.ach ?? -1) || b.act - a.act);
+    const tAct = rows.reduce((x, r) => x + r.act, 0), tTgt = rows.reduce((x, r) => x + r.tgt, 0); const ach = tTgt ? tAct / tTgt : null;
+    return { d: N, mi, label: `${N} ${MONTH_SHORT[mi]} ${Y()}`, dow: DOW[new Date(Y(), mi, N).getDay()], rows, tAct, tTgt, ach, status: st(ach), nHit: rows.filter(r => r.ach != null && r.ach >= 1).length, nT: rows.filter(r => r.ach != null).length };
+  }
+  function waDailyStoreLines(mode) {
+    const D = computeDailyStores(); if (!D || !D.rows.length) return [];
+    const L = []; const pct = (a) => a == null ? "-" : (a * 100).toFixed(0) + "%";
+    L.push(`*OMSET HARI TERAKHIR (${D.dow}, ${D.label})*`);
+    if (mode === "pct") {
+      L.push(`Total hari itu: ${waIco(D.status)} *${pct(D.ach)}* dari target harian. ${D.nHit} dari ${D.nT} outlet mencapai target hariannya.`);
+      D.rows.forEach(r => L.push(`${waIco(r.status)} ${r.label} — *${pct(r.ach)}*${r.ach == null ? " (tanpa target harian)" : ""}`));
+    } else if (mode === "compact") {
+      L.push(`${waIco(D.status)} Total ${waRp(D.tAct)} / ${waRp(D.tTgt)} (${pct(D.ach)}) · ${D.nHit}/${D.nT} outlet capai target harian`);
+      D.rows.forEach(r => L.push(`${waIco(r.status)} *${r.label}* ${pct(r.ach)} · ${waRp(r.act)} / ${waRp(r.tgt)}`));
+    } else {
+      L.push(`• Omset perusahaan hari itu: ${waFull(D.tAct)} dari target harian ${waFull(D.tTgt)} (${waIco(D.status)} *${pct(D.ach)}*)`);
+      L.push(`• ${D.nHit} dari ${D.nT} outlet mencapai target hariannya`);
+      D.rows.forEach(r => L.push(`${waIco(r.status)} *${r.label}* — ${pct(r.ach)} · omset ${waFull(r.act)}${r.tgt ? ` dari target harian ${waFull(r.tgt)} (${r.act >= r.tgt ? "lebih " + waFull(r.act - r.tgt) : "kurang " + waFull(r.tgt - r.act)})` : " (tanpa target harian)"}`));
+    }
+    L.push("");
+    return L;
+  }
+  function waDailySalesLines(mode, R) {
+    const N = R.S.lastDay; if (!N) return []; const warnAt = (C.ALERTS || {}).achWarn ?? 80; const st = (a) => a == null ? "na" : Math.round(a * 100) >= 100 ? "ok" : Math.round(a * 100) >= warnAt ? "warn" : "bad"; const pct = (a) => a == null ? "-" : (a * 100).toFixed(0) + "%";
+    const rows = R.rows.map(r => { const act = r.days[N] || 0; const ach = r.dailyT ? act / r.dailyT : null; return { name: r.name, act, tgt: r.dailyT, ach, status: st(ach) }; }).filter(r => r.tgt || r.act).sort((a, b) => (b.ach ?? -1) - (a.ach ?? -1) || b.act - a.act);
+    if (!rows.length) return [];
+    const tAct = rows.reduce((x, r) => x + r.act, 0), tTgt = rows.reduce((x, r) => x + r.tgt, 0), ach = tTgt ? tAct / tTgt : null; const nHit = rows.filter(r => r.ach != null && r.ach >= 1).length, nT = rows.filter(r => r.ach != null).length;
+    const L = [`*OMSET SALES HARI TERAKHIR (${N} ${MONTH_SHORT[R.S.mi]})*`];
+    if (mode === "pct") { L.push(`Tim sales hari itu: ${waIco(st(ach))} *${pct(ach)}* dari target harian. ${nHit} dari ${nT} sales mencapai target hariannya.`); rows.forEach(r => L.push(`${waIco(r.status)} ${r.name} — *${pct(r.ach)}*`)); }
+    else if (mode === "compact") { L.push(`${waIco(st(ach))} Tim ${waRp(tAct)} / ${waRp(tTgt)} (${pct(ach)}) · ${nHit}/${nT} sales capai target harian`); rows.forEach(r => L.push(`${waIco(r.status)} *${r.name}* ${pct(r.ach)} · ${waRp(r.act)} / ${waRp(r.tgt)}`)); }
+    else { L.push(`• Omset tim sales hari itu: ${waFull(tAct)} dari target harian ${waFull(tTgt)} (${waIco(st(ach))} *${pct(ach)}*)`); L.push(`• ${nHit} dari ${nT} sales mencapai target hariannya`); rows.forEach(r => L.push(`${waIco(r.status)} *${r.name}* — ${pct(r.ach)} · omset ${waFull(r.act)}${r.tgt ? ` dari target harian ${waFull(r.tgt)}` : ""}`)); }
+    L.push("");
+    return L;
+  }
   // bagian sales untuk pesan WhatsApp (mode: detail | compact | pct)
   function waSalesLines(mode) {
     const R = computeSales(); if (!R || !R.same) return [];
@@ -1242,6 +1285,7 @@
       R.na.forEach(r => L.push(`⚪ *${r.name}* — omset ${waFull(r.total)}, target belum diisi`));
     }
     L.push("");
+    L.push(...waDailySalesLines(mode, R));
     return L;
   }
   function renderTargetBoard() {
