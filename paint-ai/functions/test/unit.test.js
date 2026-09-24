@@ -25,7 +25,7 @@ const { normalizeBrandKit } = await import('../src/lib/settings.js');
 const { parseInput, schemas } = await import('../src/lib/validation.js');
 const { mock } = await import('../src/ai/providers/mock.js');
 const { trendAnalysisPrompt, baseSystemPrompt } = await import('../src/ai/prompts.js');
-const { secretValue } = await import('../src/config.js');
+const { secretValue, config } = await import('../src/config.js');
 const { buildDemoDocuments } = await import('../src/seed/demoData.js');
 const { ApiError } = await import('@google/genai');
 const { gemini, __setGeminiTestHooks } = await import('../src/ai/providers/gemini.js');
@@ -437,7 +437,9 @@ describe('social posting', () => {
     const url = new URL(ig.authorizeUrl({ appId: '1234567890', state: 'abc' }));
     assert.equal(url.origin + url.pathname, 'https://www.instagram.com/oauth/authorize');
     assert.equal(url.searchParams.get('scope'), 'instagram_business_basic,instagram_business_content_publish');
-    assert.equal(url.searchParams.get('redirect_uri'), 'https://demo-paint-ai.web.app/api/oauth/instagram');
+    // The site depends on the project the tests run for (firebase deploy sets GCLOUD_PROJECT).
+    assert.equal(url.searchParams.get('redirect_uri'), `${config.social.publicBaseUrl}/api/oauth/instagram`);
+    assert.match(url.searchParams.get('redirect_uri'), /^https:\/\/[^/]+\/api\/oauth\/instagram$/);
     assert.equal(url.searchParams.get('state'), 'abc');
   });
   it('exchanges the code and publishes a reel through the container flow', async () => {
