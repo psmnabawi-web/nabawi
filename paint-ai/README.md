@@ -224,6 +224,7 @@ Workflow `.github/workflows/paint-ai.yml` menjalankan semuanya ketika ada peruba
 | `Cloud Firestore API has not been used in project … or it is disabled` | Project Google Cloud baru belum mengaktifkan API. Script menampilkan satu link untuk mengaktifkan semua API sekaligus (`console.cloud.google.com/flows/enableapi?...`). Klik **Enable**, tunggu 1-2 menit, tekan Enter. |
 | Deploy pertama gagal di Firestore trigger (Eventarc permission) | Izin service agent baru butuh waktu propagasi. Tunggu 2-5 menit, lalu jalankan `npx firebase deploy --only functions` lagi. |
 | Deploy storage rules meminta grant IAM | Ini untuk cross-service rules (Storage membaca Firestore). Jawab **Yes**. |
+| Tombol AI menampilkan `internal [0]` (status 0 / CORS) untuk function tertentu | Function itu gagal di **create** pertama, lalu di retry hanya di-**update**. Firebase CLI hanya memasang izin publik (`allUsers` invoker) untuk callable saat create. Hapus dan deploy ulang function tersebut: `npx firebase-tools functions:delete paint-ai:<nama> --region <region> --project <id> --force`, lalu `npx firebase-tools deploy --only functions:paint-ai:<nama> --project <id>`. |
 | Callable error `not-found` / CORS | Region function berbeda dari `VITE_FUNCTIONS_REGION`. Samakan keduanya, lalu build ulang. |
 | "X is not configured" | Secret provider belum diisi, atau masih `disabled`. Set dengan `firebase functions:secrets:set`, lalu deploy ulang functions. |
 | Store Manager melihat layar "Waiting for access" | Belum di-assign store. Buka Settings → Users & roles. |
