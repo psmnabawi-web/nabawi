@@ -1,0 +1,34 @@
+rules_version = '2';
+
+// Firebase Storage rules.
+// videos/{videoId}/...  final.mp4, thumbnail.jpg (+ temporary segments) — written by Cloud Functions only.
+// Readable by users who can read the matching generated_videos document (cross-service rules).
+// Download URLs issued by the Admin SDK carry a token and are stored only in documents that
+// are themselves protected by Firestore rules.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() { return request.auth != null; }
+    function profile() { return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data; }
+
+    function canReadVideo(videoId) {
+      let p = profile();
+      let v = firestore.get(/databases/(default)/documents/generated_videos/$(videoId)).data;
+      return signedIn()
+        && p.get('active', true) == true
+        && (
+          p.role in ['super_admin', 'marketing_manager']
+          || (p.role == 'store_manager' && p.get('storeId', null) != null && (v.storeId == p.storeId || v.storeId == 'ALL'))
+        );
+    }
+
+    match /videos/{videoId}/{file=**} {
+      allow read: if canReadVideo(videoId);
+      allow write: if false;
+    }
+
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

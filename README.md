@@ -54,6 +54,8 @@ firestore.rules, storage.rules, firestore.indexes.json, apphosting.yaml
 .github/workflows/ci.yml  lint+typecheck+build tiap push, deploy rules ke Firebase saat push main
 ```
 
+> Folder `paint-ai/` berisi aplikasi terpisah (**AI Content Intelligence & Video Generator — Retail Paint**) dengan project Firebase sendiri. Lihat `paint-ai/README.md`. Folder itu tidak ikut build/deploy app ini.
+
 ## Pilihan AI & biaya
 
 | Mode | Env | Biaya | Batas | Cocok untuk |

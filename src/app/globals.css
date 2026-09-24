@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* paint-ai/ is a separate app with its own Tailwind build. */
+@source not "../../paint-ai";
 
 :root {
   --surface: #f6f6f4;

@@ -1,0 +1,53 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* Primary: dark blue (navy) */
+  --color-brand-50: #eef3ff;
+  --color-brand-100: #dbe5fe;
+  --color-brand-200: #bfd0fd;
+  --color-brand-300: #93b0fb;
+  --color-brand-400: #5f86f6;
+  --color-brand-500: #3b62ee;
+  --color-brand-600: #2545d6;
+  --color-brand-700: #1d36ad;
+  --color-brand-800: #1b2f84;
+  --color-brand-900: #142462;
+  --color-brand-950: #0b1f4b;
+
+  /* Chart categorical slots (validated reference palette, fixed order) */
+  --color-series-1: #2a78d6;
+  --color-series-2: #eb6834;
+  --color-series-3: #1baf7a;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-500;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+  }
+  .input {
+    @apply block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-xs transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100;
+  }
+  .label {
+    @apply mb-1 block text-sm font-medium text-slate-700;
+  }
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+}

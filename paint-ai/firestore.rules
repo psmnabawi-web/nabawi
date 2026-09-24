@@ -1,0 +1,254 @@
+rules_version = '2';
+
+// AI Content Intelligence & Video Generator — Firestore Security Rules
+//
+// Roles (users/{uid}.role):
+//   super_admin        full access (stores, users, settings, audit log)
+//   marketing_manager  all campaign data; generates content (AI writes go through Cloud Functions)
+//   store_manager      read-only, only documents of the assigned store (storeId) or brand-wide ('ALL')
+//
+// AI results (trend_analysis, content_ideas, video_scripts, generated_videos), users, stats,
+// usage and audit_logs are created by Cloud Functions (Admin SDK) only.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ------------------------------------------------------------------ helpers
+    function signedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+    function userPath() { return /databases/$(database)/documents/users/$(request.auth.uid); }
+    function me() { return get(userPath()).data; }
+    function active() { return signedIn() && exists(userPath()) && me().get('active', true) == true; }
+    function role() { return active() ? me().get('role', 'none') : 'none'; }
+    function isAdmin() { return role() == 'super_admin'; }
+    function isContentManager() { return role() in ['super_admin', 'marketing_manager']; }
+    function isStoreManager() { return role() == 'store_manager'; }
+    function myStore() { return me().get('storeId', null); }
+
+    function canReadScoped(storeId) {
+      return isContentManager()
+        || (isStoreManager() && myStore() != null && (storeId == myStore() || storeId == 'ALL'));
+    }
+    function validStoreScope(storeId) {
+      return storeId is string
+        && (storeId == 'ALL' || exists(/databases/$(database)/documents/stores/$(storeId)));
+    }
+
+    function str(v, max) { return v is string && v.size() <= max; }
+    function reqStr(v, max) { return v is string && v.size() > 0 && v.size() <= max; }
+    function optStr(v, max) { return v == null || str(v, max); }
+    function count(v) { return v is int && v >= 0 && v <= 100000000000; }
+    function changedOnly(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+    function stamped() { return request.resource.data.updatedAt == request.time; }
+    function stampedBy() { return stamped() && request.resource.data.updatedBy == uid(); }
+
+    function platforms() { return ['TikTok', 'Instagram', 'YouTube']; }
+
+    // ------------------------------------------------------------------ users
+    match /users/{userId} {
+      allow read: if signedIn() && (uid() == userId || isAdmin());
+      // Self-service: only the display name. Role/store/active changes go through manageUser().
+      allow update: if active() && uid() == userId
+        && changedOnly(['name', 'updatedAt'])
+        && reqStr(request.resource.data.name, 80)
+        && stamped();
+      allow create, delete: if false;
+    }
+
+    // ------------------------------------------------------------------ stores
+    function validStore(d, storeId) {
+      return d.keys().hasOnly(['id', 'storeId', 'storeName', 'address', 'city', 'status', 'createdAt', 'updatedAt', 'updatedBy', 'demo'])
+        && d.keys().hasAll(['storeId', 'storeName', 'city', 'status', 'createdAt', 'updatedAt'])
+        && d.storeId == storeId
+        && reqStr(d.storeName, 100)
+        && str(d.get('address', ''), 300)
+        && reqStr(d.city, 80)
+        && d.status in ['active', 'inactive'];
+    }
+    match /stores/{storeId} {
+      allow read: if isContentManager() || (isStoreManager() && myStore() == storeId);
+      allow create: if isAdmin()
+        && storeId.matches('^[a-z0-9][a-z0-9-]{2,63}$') && storeId != 'all'
+        && validStore(request.resource.data, storeId)
+        && request.resource.data.createdAt == request.time && stamped()
+        && !request.resource.data.keys().hasAny(['demo']);
+      allow update: if isAdmin()
+        && validStore(request.resource.data, storeId)
+        && request.resource.data.createdAt == resource.data.createdAt
+        && changedOnly(['storeName', 'address', 'city', 'status', 'updatedAt', 'updatedBy'])
+        && stamped();
+      allow delete: if isAdmin();
+    }
+
+    // ------------------------------------------------------------------ social_sources (Module 1)
+    function validSource(d) {
+      return d.keys().hasOnly(['id', 'platform', 'sourceType', 'url', 'keyword', 'category', 'competitor', 'location', 'contentSample',
+                               'storeId', 'createdBy', 'createdAt', 'updatedAt', 'updatedBy',
+                               'lastAnalyzedAt', 'lastTrendId', 'lastTrendName', 'lastTrendScore', 'analysisCount', 'demo'])
+        && d.platform in platforms()
+        && d.sourceType in ['content', 'account', 'hashtag']
+        && str(d.url, 500) && (d.url == '' || d.url.matches('^https://[^\\s]+$'))
+        && str(d.keyword, 100)
+        && d.category in ['paint', 'interior', 'exterior', 'waterproofing', 'renovation', 'color-trend', 'home-decor', 'building-material']
+        && str(d.competitor, 100)
+        && str(d.location, 100)
+        && str(d.contentSample, 3000)
+        && (d.sourceType == 'hashtag' ? d.keyword.size() > 0 : d.url.size() > 0)
+        && validStoreScope(d.storeId);
+    }
+    match /social_sources/{id} {
+      allow read: if canReadScoped(resource.data.storeId);
+      allow create: if isContentManager()
+        && validSource(request.resource.data)
+        && !request.resource.data.keys().hasAny(['lastAnalyzedAt', 'lastTrendId', 'lastTrendName', 'lastTrendScore', 'analysisCount', 'demo'])
+        && request.resource.data.createdBy == uid()
+        && request.resource.data.createdAt == request.time && stamped();
+      allow update: if isContentManager()
+        && validSource(request.resource.data)
+        && changedOnly(['platform', 'sourceType', 'url', 'keyword', 'category', 'competitor', 'location', 'contentSample', 'storeId', 'updatedAt', 'updatedBy'])
+        && stampedBy();
+      allow delete: if isContentManager();
+    }
+
+    // ------------------------------------------------------------------ trend_analysis (Module 2)
+    match /trend_analysis/{id} {
+      allow read: if canReadScoped(resource.data.storeId);
+      allow delete: if isContentManager();
+      allow create, update: if false;
+    }
+
+    // ------------------------------------------------------------------ content_ideas (Module 3)
+    match /content_ideas/{id} {
+      allow read: if canReadScoped(resource.data.storeId);
+      allow update: if isContentManager()
+        && changedOnly(['title', 'hook', 'storyline', 'cta', 'favorite', 'status', 'updatedAt', 'updatedBy'])
+        && reqStr(request.resource.data.title, 160)
+        && str(request.resource.data.hook, 400)
+        && str(request.resource.data.storyline, 1500)
+        && str(request.resource.data.cta, 300)
+        && request.resource.data.favorite is bool
+        && request.resource.data.status in ['idea', 'scripted', 'approved', 'archived']
+        && stampedBy();
+      allow delete: if isContentManager();
+      allow create: if false;
+    }
+
+    // ------------------------------------------------------------------ video_scripts (Module 4)
+    match /video_scripts/{id} {
+      allow read: if canReadScoped(resource.data.storeId);
+      allow update: if isContentManager()
+        && changedOnly(['title', 'hook', 'scenes', 'cta', 'voiceOver', 'caption', 'hashtags', 'musicSuggestion', 'updatedAt', 'updatedBy'])
+        && reqStr(request.resource.data.title, 160)
+        && request.resource.data.hook is map
+        && request.resource.data.cta is map
+        && request.resource.data.scenes is list && request.resource.data.scenes.size() <= 12
+        && str(request.resource.data.voiceOver, 5000)
+        && str(request.resource.data.caption, 2200)
+        && request.resource.data.hashtags is list && request.resource.data.hashtags.size() <= 15
+        && str(request.resource.data.musicSuggestion, 300)
+        && stampedBy();
+      allow delete: if isContentManager();
+      allow create: if false;
+    }
+
+    // ------------------------------------------------------------------ generated_videos (Module 5)
+    match /generated_videos/{id} {
+      allow read: if canReadScoped(resource.data.storeId);
+      // Client may only rename and publish/unpublish a completed video. Everything else is server-side.
+      allow update: if isContentManager()
+        && changedOnly(['title', 'status', 'platform', 'publishedUrl', 'publishedAt', 'updatedAt', 'updatedBy'])
+        && reqStr(request.resource.data.title, 140)
+        && (
+          request.resource.data.status == resource.data.status
+          || (resource.data.status == 'Completed' && request.resource.data.status == 'Published')
+          || (resource.data.status == 'Published' && request.resource.data.status == 'Completed')
+        )
+        && (request.resource.data.status != 'Published' || request.resource.data.get('platform', null) in platforms())
+        && str(request.resource.data.get('publishedUrl', ''), 500)
+        && stampedBy();
+      allow delete: if isContentManager() && resource.data.status != 'Processing';
+      allow create: if false;
+    }
+
+    // ------------------------------------------------------------------ performance (doc id = videoId)
+    function validPerformance(d, videoId) {
+      let videoPath = /databases/$(database)/documents/generated_videos/$(videoId);
+      return d.keys().hasOnly(['id', 'videoId', 'title', 'platform', 'storeId', 'views', 'likes', 'comments', 'shares', 'leads',
+                               'salesImpact', 'engagementRate', 'publishedUrl', 'updatedBy', 'updatedAt', 'demo'])
+        && d.videoId == videoId
+        && exists(videoPath)
+        && d.storeId == get(videoPath).data.storeId
+        && d.platform in platforms()
+        && str(d.get('title', ''), 160)
+        && count(d.views) && count(d.likes) && count(d.comments) && count(d.shares) && count(d.leads)
+        && d.salesImpact is number && d.salesImpact >= 0
+        && d.engagementRate is number && d.engagementRate >= 0
+        && str(d.get('publishedUrl', ''), 500)
+        && stampedBy();
+    }
+    match /performance/{videoId} {
+      // Content managers may probe a not-yet-recorded doc (resource == null) before creating it.
+      allow read: if (resource == null && isContentManager()) || canReadScoped(resource.data.storeId);
+      allow create: if isContentManager() && validPerformance(request.resource.data, videoId) && !request.resource.data.keys().hasAny(['demo']);
+      allow update: if isContentManager() && validPerformance(request.resource.data, videoId);
+      allow delete: if isContentManager();
+    }
+
+    // ------------------------------------------------------------------ campaign_calendar
+    function validCalendar(d) {
+      return d.keys().hasOnly(['id', 'title', 'date', 'platform', 'status', 'contentId', 'videoId', 'notes', 'storeId',
+                               'createdBy', 'createdAt', 'updatedAt', 'updatedBy', 'demo'])
+        && reqStr(d.title, 140)
+        && d.date is string && d.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && d.platform in platforms()
+        && d.status in ['Planned', 'Scheduled', 'Published', 'Cancelled']
+        && optStr(d.get('contentId', null), 128)
+        && optStr(d.get('videoId', null), 128)
+        && str(d.get('notes', ''), 1000)
+        && validStoreScope(d.storeId);
+    }
+    match /campaign_calendar/{id} {
+      allow read: if canReadScoped(resource.data.storeId);
+      allow create: if isContentManager()
+        && validCalendar(request.resource.data)
+        && !request.resource.data.keys().hasAny(['demo'])
+        && request.resource.data.createdBy == uid()
+        && request.resource.data.createdAt == request.time && stamped();
+      allow update: if isContentManager()
+        && validCalendar(request.resource.data)
+        && changedOnly(['title', 'date', 'platform', 'status', 'contentId', 'videoId', 'notes', 'storeId', 'updatedAt', 'updatedBy'])
+        && stampedBy();
+      allow delete: if isContentManager();
+    }
+
+    // ------------------------------------------------------------------ aggregates, settings, logs
+    match /stats/{statId} {
+      allow read: if isContentManager()
+        || (isStoreManager() && myStore() != null && statId == 'store_' + myStore());
+      allow write: if false;
+    }
+
+    match /settings/{docId} {
+      allow read: if active();
+      allow write: if isAdmin() && docId == 'app'
+        && request.resource.data.keys().hasOnly(['textProvider', 'videoProvider', 'contentLanguage', 'brandContext', 'heygenAvatarId', 'heygenVoiceId', 'updatedAt', 'updatedBy'])
+        && request.resource.data.textProvider in ['gemini', 'openai', 'claude', 'mock']
+        && request.resource.data.videoProvider in ['runway', 'kling', 'pika', 'heygen', 'mock']
+        && request.resource.data.contentLanguage in ['id', 'en']
+        && str(request.resource.data.get('brandContext', ''), 2000)
+        && str(request.resource.data.get('heygenAvatarId', ''), 200)
+        && str(request.resource.data.get('heygenVoiceId', ''), 200)
+        && stampedBy();
+    }
+
+    match /usage/{id} {
+      allow read: if signedIn() && (resource.data.uid == uid() || isAdmin());
+      allow write: if false;
+    }
+
+    match /audit_logs/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+  }
+}

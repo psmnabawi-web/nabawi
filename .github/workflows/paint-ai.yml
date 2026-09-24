@@ -1,0 +1,43 @@
+name: paint-ai CI
+
+# Separate app in paint-ai/ (own Firebase project). Runs only when that folder changes.
+on:
+  push:
+    branches: [main]
+    paths: ['paint-ai/**', '.github/workflows/paint-ai.yml']
+  pull_request:
+    paths: ['paint-ai/**', '.github/workflows/paint-ai.yml']
+
+defaults:
+  run:
+    working-directory: paint-ai
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            paint-ai/package-lock.json
+            paint-ai/functions/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm ci --prefix functions
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm --prefix functions run lint
+      - run: npm --prefix functions test
+      - name: Security rules tests (Firestore + Storage emulators)
+        run: npm run test:rules
+      - run: npm run build
+        env:
+          VITE_FIREBASE_API_KEY: ci
+          VITE_FIREBASE_PROJECT_ID: ci

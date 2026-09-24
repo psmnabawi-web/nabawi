@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Separate app (own Firebase project, own tooling).
+    "paint-ai/**",
   ]),
 ]);
 

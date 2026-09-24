@@ -16,7 +16,8 @@
       ".env",
       ".env.*",
       "*.log",
-      "scratchpad"
+      "scratchpad",
+      "paint-ai"
     ],
     "alwaysDeployFromSource": true
   }
