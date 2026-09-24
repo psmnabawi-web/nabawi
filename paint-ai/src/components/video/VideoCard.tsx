@@ -1,4 +1,4 @@
-import { AlertTriangle, BarChart3, Clapperboard, Download, Loader2, Pencil, Play, RefreshCw, RotateCcw, Send, Trash2, Undo2 } from 'lucide-react'
+import { AlertTriangle, BarChart3, Clapperboard, Download, Film, Loader2, Pencil, Play, RefreshCw, RotateCcw, Send, Trash2, Undo2 } from 'lucide-react'
 import type { GeneratedVideo } from '../../types'
 import { VIDEO_STATUS_STYLES, videoProviderLabel } from '../../utils/constants'
 import { timeAgo } from '../../utils/format'
@@ -87,8 +87,13 @@ export function VideoCard({ video, canEdit, busy, onAction, storeLabel }: { vide
             )}
             <span className="ml-auto flex items-center gap-0.5">
               {ready && (
-                <a href={video.videoUrl ?? '#'} download target="_blank" rel="noopener noreferrer" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100" aria-label="Download video">
+                <a href={video.videoUrl ?? '#'} download target="_blank" rel="noopener noreferrer" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100" aria-label="Download video" title="Download video">
                   <Download className="size-4" />
+                </a>
+              )}
+              {ready && video.cleanVideoUrl && (
+                <a href={video.cleanVideoUrl} download target="_blank" rel="noopener noreferrer" className="rounded-lg p-2 text-slate-600 hover:bg-slate-100" aria-label="Download without template" title="Download without template (for editing)">
+                  <Film className="size-4" />
                 </a>
               )}
               <Button size="sm" variant="ghost" aria-label="Rename" icon={<Pencil className="size-4" />} onClick={() => onAction('rename')} />
@@ -97,9 +102,16 @@ export function VideoCard({ video, canEdit, busy, onAction, storeLabel }: { vide
           </div>
         )}
         {!canEdit && ready && (
-          <a href={video.videoUrl ?? '#'} download target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline">
-            <Download className="size-3.5" /> Download
-          </a>
+          <span className="mt-3 flex flex-wrap gap-4">
+            <a href={video.videoUrl ?? '#'} download target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline">
+              <Download className="size-3.5" /> Download
+            </a>
+            {video.cleanVideoUrl && (
+              <a href={video.cleanVideoUrl} download target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline">
+                <Film className="size-3.5" /> Without template
+              </a>
+            )}
+          </span>
         )}
       </div>
     </article>

@@ -152,11 +152,12 @@ export function videoPlanPrompt({ template, style, ratio, segmentDurations, scri
     'Write one English prompt per clip, in order, that together tell a coherent story. Each prompt must describe subject, action, setting, camera movement and lighting in one paragraph.',
     'Do not ask for on-screen text, captions, logos, brand names or watermarks (they are added in editing). Keep people and houses consistent across clips.',
     'voiceOverText: narration for the whole video in the content language, fitting the total duration.',
+    'Branding is added in editing: hookText is the big title shown over the first 3 seconds; onScreenText is a short caption per clip (max 7 words). Write both in the content language, conversational and specific to paint/home (no emojis, no hashtags, no brand names).',
   ];
   if (script) {
-    lines.push('', 'Approved script to visualize:', '<data>', `Hook: ${script.hook?.visual ?? ''} | ${script.hook?.voice ?? ''}`);
-    for (const s of script.scenes ?? []) lines.push(`Scene ${s.sceneNumber} (${s.timeRange}): ${s.visual} | ${s.voice}`);
-    lines.push(`CTA: ${script.cta?.visual ?? ''} | ${script.cta?.voice ?? ''}`, '</data>');
+    lines.push('', 'Approved script to visualize (reuse its on-screen texts for hookText/onScreenText where they fit):', '<data>', `Hook: ${script.hook?.visual ?? ''} | ${script.hook?.voice ?? ''} | text: ${script.hook?.onScreenText ?? ''}`);
+    for (const s of script.scenes ?? []) lines.push(`Scene ${s.sceneNumber} (${s.timeRange}): ${s.visual} | ${s.voice} | text: ${s.onScreenText ?? ''}`);
+    lines.push(`CTA: ${script.cta?.visual ?? ''} | ${script.cta?.voice ?? ''} | text: ${script.cta?.onScreenText ?? ''}`, '</data>');
   }
   if (brief) lines.push('', 'Additional brief:', `<data>${brief}</data>`);
   return lines.join('\n');

@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { PerformanceModal } from '../components/analytics/PerformanceModal'
 import { ScopeSelect } from '../components/ScopeSelect'
-import { Alert, Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, EmptyState, PageHeader, Segmented, SelectInput, Skeleton, Tabs, TextArea, TextInput } from '../components/ui'
+import { Alert, Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, EmptyState, PageHeader, Segmented, SelectInput, Skeleton, Switch, Tabs, TextArea, TextInput } from '../components/ui'
 import { PublishModal, RenameModal } from '../components/video/PublishModal'
 import { VideoCard, type VideoCardAction } from '../components/video/VideoCard'
 import { useAuth } from '../hooks/useAuth'
@@ -13,7 +13,8 @@ import { useStoreScope } from '../hooks/useStoreScope'
 import { useToast } from '../hooks/useToast'
 import { deleteVideo, isContentManager, recentScoped, unpublishVideo } from '../services/firestore'
 import { generateVideo, videoAction } from '../services/functions'
-import type { GeneratedVideo, PerformanceRecord, VideoDuration, VideoProvider, VideoScript, VideoStatus, VideoStyle, VideoTemplate } from '../types'
+import type { AppSettings, GeneratedVideo, PerformanceRecord, VideoDuration, VideoProvider, VideoScript, VideoStatus, VideoStyle, VideoTemplate } from '../types'
+import { brandKitOf } from '../utils/brandKit'
 import { cn } from '../utils/cn'
 import { DURATIONS, VIDEO_PROVIDERS, VIDEO_STATUSES, VIDEO_STYLES, VIDEO_TEMPLATES } from '../utils/constants'
 import { errorMessage } from '../utils/errors'
@@ -38,6 +39,7 @@ export default function VideoStudioPage() {
   const videos = useCollection<GeneratedVideo>(() => recentScoped('generated_videos', profile, selectedStoreId, 120), deps)
   const scripts = useCollection<VideoScript>(() => (canEdit ? recentScoped('video_scripts', profile, selectedStoreId, 100) : null), deps)
   const integrations = useIntegrationStatus(canEdit)
+  const appSettings = useDocument<AppSettings>('settings/app')
 
   const presetScript = params.get('scriptId')
   const [tab, setTab] = useState<Tab>(canEdit ? 'create' : 'library')
@@ -51,6 +53,7 @@ export default function VideoStudioPage() {
     provider: null as VideoProvider | null,
     storeId: null as string | null,
     brief: '',
+    brandTemplate: null as boolean | null,
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState<'draft' | 'generate' | null>(null)
@@ -76,6 +79,7 @@ export default function VideoStudioPage() {
     return VIDEO_PROVIDERS.map((p) => p.id).find(configured)
   }, [integrations.data])
   const provider: VideoProvider = form.provider ?? defaultProvider ?? 'mock'
+  const brandTemplate = form.brandTemplate ?? brandKitOf(appSettings.data).enabled
   const duration: VideoDuration = form.duration ?? selectedScript?.duration ?? 30
   const storeId = form.storeId ?? selectedScript?.storeId ?? defaultScope
   const title = form.title || selectedScript?.title || ''
@@ -84,7 +88,7 @@ export default function VideoStudioPage() {
 
   const submit = async (saveAsDraft: boolean) => {
     setSubmitError(null)
-    const parsed = videoRequestSchema.safeParse({ ...form, provider, duration, storeId, title, ratio: '9:16', saveAsDraft })
+    const parsed = videoRequestSchema.safeParse({ ...form, provider, duration, storeId, title, brandTemplate, ratio: '9:16', saveAsDraft })
     if (!parsed.success) {
       setErrors(fieldErrors(parsed.error))
       return
@@ -100,7 +104,7 @@ export default function VideoStudioPage() {
       toast.success(saveAsDraft ? 'Draft saved.' : 'Video generation started. It will appear in the library when ready.')
       setTab('library')
       setStatusFilter('')
-      setForm((f) => ({ ...f, title: '', brief: '', scriptId: null, duration: null, storeId: null }))
+      setForm((f) => ({ ...f, title: '', brief: '', scriptId: null, duration: null, storeId: null, brandTemplate: null }))
       if (presetScript) setParams({}, { replace: true })
       return res
     } catch (err) {
@@ -232,6 +236,14 @@ export default function VideoStudioPage() {
                   <div className="max-w-sm">
                     <ScopeSelect value={storeId} onChange={(v) => setForm({ ...form, storeId: v })} error={errors.storeId} />
                   </div>
+                  <div className="rounded-2xl border border-slate-200 p-4">
+                    <Switch
+                      label="Inti Warna template"
+                      description="Logo, hook title, scene captions, Before/After labels, smooth transitions and an end card with your contacts. A clean copy without branding is saved too — edit the template in Settings → Brand template."
+                      checked={brandTemplate}
+                      onChange={(v) => setForm({ ...form, brandTemplate: v })}
+                    />
+                  </div>
                 </CardBody>
               </Card>
             </div>
@@ -253,6 +265,8 @@ export default function VideoStudioPage() {
                     <dd className="text-slate-900">{VIDEO_PROVIDERS.find((p) => p.id === provider)?.label}</dd>
                     <dt className="text-slate-500">Scope</dt>
                     <dd className="text-slate-900">{storeName(storeId)}</dd>
+                    <dt className="text-slate-500">Branding</dt>
+                    <dd className="text-slate-900">{brandTemplate ? 'Inti Warna template' : 'None (raw video)'}</dd>
                   </dl>
                   <ol className="space-y-2 rounded-lg bg-slate-50 p-3">
                     {PROCESS.map(({ icon: Icon, label }, i) => (
@@ -279,7 +293,7 @@ export default function VideoStudioPage() {
                       Save as draft
                     </Button>
                   </div>
-                  <p className="text-xs text-slate-400">Clip-based providers generate 5–10s clips that are stitched automatically. Processing usually takes 2–10 minutes.</p>
+                  <p className="text-xs text-slate-400">Clip-based providers generate 4–10s clips that are joined with transitions and branded automatically. Processing usually takes 3–10 minutes.</p>
                 </CardBody>
               </Card>
             </aside>

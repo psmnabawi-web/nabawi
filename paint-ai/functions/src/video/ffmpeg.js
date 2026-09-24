@@ -42,42 +42,132 @@ export async function probe(file) {
   return { duration, hasVideo, hasAudio };
 }
 
+const round3 = (n) => Math.round(n * 1000) / 1000;
+
 /**
- * Builds the ffmpeg arguments that normalise every clip to the target resolution/fps and concatenates
- * them (re-encode, robust to clips with different codecs/sizes). Clips without audio get silence when
- * at least one clip has audio.
+ * Builds a single-pass ffmpeg command that:
+ *   1. normalises every clip (fill-crop to the target size, fps, yuv420p) and joins them with short
+ *      cross-fade transitions (xfade / acrossfade),
+ *   2. optionally writes that joined video as a "clean" output (no branding),
+ *   3. composites transparent PNG overlays (logo, hook, captions…) in their time windows,
+ *   4. optionally cross-fades into an end card image.
+ * Clips without audio get silence when at least one clip has audio; otherwise the output has no audio.
+ *
+ * @param {{
+ *   clips: {path:string, duration:number, hasAudio?:boolean}[],
+ *   dims: {width:number, height:number}, fps?: number,
+ *   transition?: number, transitions?: string[],
+ *   overlays?: {path:string, x?:number, y?:number, start:number, end:number, fade?:boolean}[],
+ *   endCard?: {path:string, duration:number} | null,
+ *   output: string, cleanOutput?: string | null,
+ * }} opts
  */
-export function buildStitchArgs(inputs, output, { width, height, fps = 30 }) {
-  const withAudio = inputs.some((i) => i.hasAudio);
+export function buildComposeArgs({ clips, dims, fps = 30, transition = 0.35, transitions = [], overlays = [], endCard = null, output, cleanOutput = null }) {
+  const { width, height } = dims;
+  const n = clips.length;
+  const durations = clips.map((c) => Math.max(0.5, Number(c.duration) || 0));
+  const T = n > 1 || endCard ? round3(Math.min(transition, Math.min(...durations) / 3)) : 0;
+  const withAudio = clips.some((c) => c.hasAudio);
   const args = ['-y'];
-  for (const input of inputs) args.push('-i', input.path);
   const filters = [];
-  const labels = [];
-  inputs.forEach((input, i) => {
-    const dur = Math.max(0.5, Number(input.duration) || 0).toFixed(3);
-    filters.push(
-      `[${i}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=${fps},format=yuv420p,trim=0:${dur},setpts=PTS-STARTPTS[v${i}]`,
-    );
-    labels.push(`[v${i}]`);
+
+  clips.forEach((c) => args.push('-i', c.path));
+  clips.forEach((c, i) => {
+    const d = durations[i].toFixed(3);
+    // trim/setpts before fps: xfade needs a constant frame rate and setpts would reset it.
+    filters.push(`[${i}:v]trim=0:${d},setpts=PTS-STARTPTS,scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1,fps=${fps},format=yuv420p[v${i}]`);
     if (withAudio) {
-      if (input.hasAudio) {
-        filters.push(`[${i}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,apad,atrim=0:${dur},asetpts=PTS-STARTPTS[a${i}]`);
-      } else {
-        filters.push(`anullsrc=channel_layout=stereo:sample_rate=44100,atrim=0:${dur},asetpts=PTS-STARTPTS[a${i}]`);
-      }
-      labels.push(`[a${i}]`);
+      filters.push(
+        c.hasAudio
+          ? `[${i}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo,apad,atrim=0:${d},asetpts=PTS-STARTPTS[a${i}]`
+          : `anullsrc=channel_layout=stereo:sample_rate=44100,atrim=0:${d},asetpts=PTS-STARTPTS[a${i}]`,
+      );
     }
   });
-  filters.push(`${labels.join('')}concat=n=${inputs.length}:v=1:a=${withAudio ? 1 : 0}[outv]${withAudio ? '[outa]' : ''}`);
-  args.push('-filter_complex', filters.join(';'), '-map', '[outv]');
-  if (withAudio) args.push('-map', '[outa]', '-c:a', 'aac', '-b:a', '128k');
-  args.push('-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', output);
-  return args;
+
+  // 1. join clips with transitions
+  let video = '[v0]';
+  let audio = withAudio ? '[a0]' : null;
+  let offset = durations[0];
+  for (let i = 1; i < n; i += 1) {
+    const name = transitions[i - 1] || 'fade';
+    filters.push(`${video}[v${i}]xfade=transition=${name}:duration=${T}:offset=${round3(offset - T)}[x${i}]`);
+    video = `[x${i}]`;
+    if (withAudio) {
+      filters.push(`${audio}[a${i}]acrossfade=d=${T}[y${i}]`);
+      audio = `[y${i}]`;
+    }
+    offset = offset - T + durations[i];
+  }
+  const mainTotal = round3(offset);
+
+  // 2. clean copy
+  let clean = null;
+  let cleanAudio = null;
+  if (cleanOutput) {
+    filters.push(`${video}split=2[main][clean]`);
+    video = '[main]';
+    clean = '[clean]';
+    if (withAudio) {
+      filters.push(`${audio}asplit=2[amain][aclean]`);
+      audio = '[amain]';
+      cleanAudio = '[aclean]';
+    }
+  }
+
+  // 3. overlays
+  let input = n;
+  overlays.forEach((o, k) => {
+    const start = round3(Math.max(0, o.start));
+    const end = round3(Math.min(mainTotal, o.end));
+    if (end - start < 0.2) return;
+    // The still only exists inside its time window (-itsoffset), so ffmpeg does no work outside it.
+    args.push('-loop', '1', '-framerate', String(fps), '-t', String(round3(end - start + 0.1)), '-itsoffset', String(start), '-i', o.path);
+    const fade = o.fade && end - start > 0.9 ? `,fade=t=in:st=${start}:d=0.3:alpha=1,fade=t=out:st=${round3(end - 0.3)}:d=0.3:alpha=1` : '';
+    filters.push(`[${input}:v]format=rgba${fade}[ov${k}]`);
+    filters.push(`${video}[ov${k}]overlay=${Math.round(o.x ?? 0)}:${Math.round(o.y ?? 0)}:enable='between(t,${start},${end})':eof_action=pass[c${k}]`);
+    video = `[c${k}]`;
+    input += 1;
+  });
+  if (overlays.length) {
+    // overlay loses the constant frame rate xfade needs; restore it
+    filters.push(`${video}fps=${fps},format=yuv420p[branded]`);
+    video = '[branded]';
+  }
+
+  // 4. end card
+  let total = mainTotal;
+  if (endCard) {
+    const len = round3(endCard.duration + T);
+    args.push('-loop', '1', '-framerate', String(fps), '-t', String(len), '-i', endCard.path);
+    filters.push(`[${input}:v]trim=0:${len},setpts=PTS-STARTPTS,scale=${width}:${height},setsar=1,fps=${fps},format=yuv420p[endv]`);
+    filters.push(`${video}[endv]xfade=transition=fade:duration=${T}:offset=${round3(mainTotal - T)}[final]`);
+    video = '[final]';
+    if (withAudio) {
+      filters.push(`anullsrc=channel_layout=stereo:sample_rate=44100,atrim=0:${len},asetpts=PTS-STARTPTS[aend]`);
+      filters.push(`${audio}[aend]acrossfade=d=${T}[afinal]`);
+      audio = '[afinal]';
+    }
+    total = round3(mainTotal + endCard.duration);
+  }
+
+  args.push('-filter_complex', filters.join(';'));
+  const encode = (crf) => ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', String(crf), '-pix_fmt', 'yuv420p', '-movflags', '+faststart'];
+  args.push('-map', video);
+  if (audio) args.push('-map', audio, '-c:a', 'aac', '-b:a', '128k');
+  args.push(...encode(21), output);
+  if (clean) {
+    args.push('-map', clean);
+    if (cleanAudio) args.push('-map', cleanAudio, '-c:a', 'aac', '-b:a', '128k');
+    args.push(...encode(23), cleanOutput);
+  }
+  return { args, total, mainTotal, transition: T };
 }
 
-export async function stitchClips(inputs, output, dims) {
-  await mustRun(buildStitchArgs(inputs, output, dims), 'stitch');
-  return probe(output);
+export async function composeVideo(opts) {
+  const { args } = buildComposeArgs(opts);
+  await mustRun(args, 'compose');
+  return probe(opts.output);
 }
 
 /** Re-muxes a single clip for progressive playback (moov atom first) without re-encoding. */

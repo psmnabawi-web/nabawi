@@ -98,6 +98,7 @@ export const schemas = {
       provider: opt(z.enum(VIDEO_PROVIDERS)),
       storeId: storeScope.default(ALL_STORES),
       brief: opt(text(1000)).default(''),
+      brandTemplate: opt(z.boolean()),
       saveAsDraft: z.boolean().default(false),
     })
     .strict(),

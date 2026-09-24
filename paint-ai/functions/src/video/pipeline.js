@@ -15,7 +15,8 @@ import { HttpsError, ProviderError } from '../lib/errors.js';
 import { bucket, db, serverTimestamp, toDate } from '../lib/firebase.js';
 import { getAppSettings } from '../lib/settings.js';
 import { VIDEO_ADAPTERS } from './adapters/index.js';
-import { extractThumbnail, faststart, probe, stitchClips } from './ffmpeg.js';
+import { composeVideo, extractThumbnail, faststart, probe } from './ffmpeg.js';
+import { buildTemplateAssets, templateLabels } from './template/brandTemplate.js';
 
 const LEASE_MS = 8 * 60 * 1000;
 const MAX_DOWNLOAD_BYTES = 500 * 1024 * 1024;
@@ -87,7 +88,14 @@ export function fallbackPlan({ template, script, count }) {
     const beat = beats[Math.min(beats.length - 1, Math.floor((i * beats.length) / count))];
     return `${template.label}: ${beat} Setting: an Indonesian home and paint store context.`;
   });
-  return { prompts, voiceOverText: script?.voiceOver ?? '' };
+  return { prompts, voiceOverText: script?.voiceOver ?? '', hookText: script?.hook?.onScreenText ?? '', captions: captionsFromScript(script, count) };
+}
+
+/** Spreads the script's scene/CTA on-screen texts over `count` clips (the hook text is shown as the title). */
+export function captionsFromScript(script, count) {
+  const texts = [...(script?.scenes ?? []).map((s) => s?.onScreenText), script?.cta?.onScreenText].map((t) => String(t ?? '').trim()).filter(Boolean);
+  if (!texts.length || count < 1) return [];
+  return Array.from({ length: count }, (_, i) => texts[count === 1 ? 0 : Math.round((i * (texts.length - 1)) / (count - 1))]);
 }
 
 async function buildPlan(video, adapter, settings) {
@@ -99,7 +107,8 @@ async function buildPlan(video, adapter, settings) {
     if (snap.exists) script = snap.data();
   }
   if (adapter.mode === 'full') {
-    return { segmentDurations, prompts: [template.brief], voiceOverText: script?.voiceOver || video.brief || '', planSource: 'script' };
+    // Avatar videos: no hook title or captions over the presenter's face (logo + end card only).
+    return { segmentDurations, prompts: [template.brief], voiceOverText: script?.voiceOver || video.brief || '', hookText: '', captions: [], planSource: 'script' };
   }
   try {
     const result = await generateStructured({
@@ -113,7 +122,8 @@ async function buildPlan(video, adapter, settings) {
     const plan = videoPlanNormalizer.parse(result.data);
     const fallback = fallbackPlan({ template, script, count: segmentDurations.length });
     const prompts = segmentDurations.map((_, i) => plan.segments[i]?.prompt || fallback.prompts[i]);
-    return { segmentDurations, prompts, voiceOverText: plan.voiceOverText || fallback.voiceOverText, planSource: result.provider };
+    const captions = segmentDurations.map((_, i) => plan.segments[i]?.onScreenText || fallback.captions[i] || '');
+    return { segmentDurations, prompts, voiceOverText: plan.voiceOverText || fallback.voiceOverText, hookText: plan.hookText || fallback.hookText, captions, planSource: result.provider };
   } catch (err) {
     logger.warn('video plan AI failed, using fallback', { videoId: video.id, err: err?.message });
     const fallback = fallbackPlan({ template, script, count: segmentDurations.length });
@@ -178,7 +188,7 @@ export async function startVideo(videoId) {
     await ref.update({
       status: 'Processing',
       error: null,
-      plan: { segmentDurations: plan.segmentDurations, voiceOverText: plan.voiceOverText, source: plan.planSource },
+      plan: { segmentDurations: plan.segmentDurations, voiceOverText: plan.voiceOverText, hookText: plan.hookText, captions: plan.captions, source: plan.planSource },
       segments: [],
       progress: { done: 0, total: plan.segmentDurations.length },
       model: adapter.model(),
@@ -250,7 +260,45 @@ async function uploadWithToken(localPath, destination, contentType) {
   return { path: destination, url: tokenDownloadUrl(bucket().name, destination, token) };
 }
 
-/** Save Result URL → Store in Firebase Storage: downloads clips, stitches them, uploads final video + thumbnail. */
+const TRANSITION_SECONDS = 0.35;
+
+/** Cut styles: soft cross-fades; the before/after template reveals the result with a wipe. */
+export function transitionsFor(template, clipCount) {
+  return Array.from({ length: Math.max(0, clipCount - 1) }, (_, i) => (template === 'before_after' && i === clipCount - 2 ? 'wipeleft' : 'fade'));
+}
+
+/** Texts and contact details for the brand template of one video. */
+async function templateContent(video, settings) {
+  const kit = settings.brandKit;
+  const [script, store] = await Promise.all([
+    video.scriptId ? db.doc(`video_scripts/${video.scriptId}`).get().then((s) => (s.exists ? s.data() : null)) : null,
+    video.storeId && video.storeId !== 'ALL' ? db.doc(`stores/${video.storeId}`).get().then((s) => (s.exists ? s.data() : null)) : null,
+  ]);
+  const count = video.segments.length;
+  const planCaptions = Array.isArray(video.plan?.captions) ? video.plan.captions : [];
+  const scriptCaptions = captionsFromScript(script, count);
+  const fullMode = VIDEO_ADAPTERS[video.provider]?.mode === 'full';
+  return {
+    hookText: fullMode ? '' : video.plan?.hookText || script?.hook?.onScreenText || video.title,
+    captions: fullMode ? [] : Array.from({ length: count }, (_, i) => planCaptions[i] || scriptCaptions[i] || ''),
+    cta: script?.cta?.onScreenText || kit.ctaText || templateLabels(settings.contentLanguage).cta,
+    contact: {
+      storeName: store?.storeName ?? '',
+      address: store?.address ?? '',
+      city: store?.city ?? '',
+      whatsapp: kit.whatsapp,
+      instagram: kit.instagram,
+      website: kit.website,
+      hours: kit.hours,
+    },
+  };
+}
+
+/**
+ * Save Result URL → Store in Firebase Storage: downloads the clips, joins them with transitions, applies
+ * the brand template (logo, hook title, captions, end card) and uploads the final video, a clean copy
+ * without branding, and a thumbnail.
+ */
 async function finalizeVideo(ref, video) {
   const dir = await mkdtemp(path.join(tmpdir(), `video-${video.id}-`));
   try {
@@ -263,19 +311,56 @@ async function finalizeVideo(ref, video) {
       inputs.push({ path: file, ...info });
     }
     const finalPath = path.join(dir, 'final.mp4');
+    const cleanPath = path.join(dir, 'clean.mp4');
     const dims = RATIO_RESOLUTION[video.ratio] ?? RATIO_RESOLUTION['9:16'];
-    const info = inputs.length === 1 ? await faststart(inputs[0].path, finalPath) : await stitchClips(inputs, finalPath, dims);
+    const settings = await getAppSettings();
+    const branded = video.brandTemplate ?? settings.brandKit.enabled;
+
+    let info;
+    if (!branded && inputs.length === 1) {
+      info = await faststart(inputs[0].path, finalPath);
+    } else {
+      let template = null;
+      if (branded) {
+        const content = await templateContent(video, settings);
+        template = await buildTemplateAssets({
+          dir,
+          dims,
+          durations: inputs.map((i) => i.duration),
+          transition: TRANSITION_SECONDS,
+          template: video.template,
+          ...content,
+          lang: settings.contentLanguage,
+          options: { captions: settings.brandKit.captions, endCard: settings.brandKit.endCard },
+        });
+      }
+      info = await composeVideo({
+        clips: inputs,
+        dims,
+        transition: TRANSITION_SECONDS,
+        transitions: transitionsFor(video.template, inputs.length),
+        overlays: template?.overlays ?? [],
+        endCard: template?.endCard ?? null,
+        output: finalPath,
+        cleanOutput: branded ? cleanPath : null,
+      });
+    }
 
     const thumbPath = path.join(dir, 'thumbnail.jpg');
-    await extractThumbnail(finalPath, thumbPath, Math.min(1, Math.max(0, info.duration / 3)));
+    // With the template, ~1.2 s shows the hook title: a better cover than the first frame.
+    await extractThumbnail(finalPath, thumbPath, Math.min(branded ? 1.2 : 1, Math.max(0, info.duration / 3)));
 
     const uploadedVideo = await uploadWithToken(finalPath, `videos/${video.id}/final.mp4`, 'video/mp4');
     const uploadedThumb = await uploadWithToken(thumbPath, `videos/${video.id}/thumbnail.jpg`, 'image/jpeg');
+    const uploadedClean = branded ? await uploadWithToken(cleanPath, `videos/${video.id}/clean.mp4`, 'video/mp4') : null;
 
     await ref.update({
       status: 'Completed',
       videoUrl: uploadedVideo.url,
       storagePath: uploadedVideo.path,
+      cleanVideoUrl: uploadedClean?.url ?? null,
+      cleanStoragePath: uploadedClean?.path ?? null,
+      brandTemplateApplied: branded,
       thumbnail: uploadedThumb.url,
       thumbnailPath: uploadedThumb.path,
       actualDurationSec: Math.round(info.duration * 10) / 10,

@@ -19,7 +19,7 @@ SOCIAL MEDIA TREND INPUT → AI TREND ANALYSIS → AI CONTENT STRATEGY → AI SC
 | **2. AI Trend Analyzer** | `analyzeTrend()` menghasilkan nama tren, skor 0-100 dengan rubrik tertulis, growth, viral pattern, audience emotion, hook, visual strategy, marketing opportunity dan rekomendasi. Output berupa JSON terstruktur. |
 | **3. AI Content Generator** | `generateContent()` membuat sampai 20 ide per brief (produk × audiens × objective × platform, opsional berbasis tren). Tiap ide berisi Title, Hook, Storyline, CTA dan Expected impact. Ide bisa difavoritkan, diedit dan dihapus. |
 | **4. AI Script Generator** | `generateScript()` menyusun TITLE → HOOK 0-3 detik → SCENE 1..n (Visual/Voice/Text) → CTA, plus voice-over, caption dan hashtag. Script bisa diedit, di-copy dan diunduh sebagai .txt. |
-| **5. AI Video Generator** | 5 template, durasi 15/30/60 detik, rasio 9:16, style Realistic/Cinematic, dan provider Google Veo (Vertex AI, tanpa API key) / Runway / Kling / Pika / HeyGen. Alurnya: Generate Prompt → Send API Request → Save Result URL → Store in Firebase Storage. Klip 4-10 detik digabung otomatis dengan ffmpeg. Status: Draft → Processing → Completed → Published (atau Failed, bisa Retry). |
+| **5. AI Video Generator** | 5 template, durasi 15/30/60 detik, rasio 9:16, style Realistic/Cinematic, dan provider Google Veo (Vertex AI, tanpa API key) / Runway / Kling / Pika / HeyGen. Alurnya: Generate Prompt → Send API Request → Save Result URL → Store in Firebase Storage. Klip 4-10 detik digabung otomatis dengan transisi halus, lalu diberi **template brand Inti Warna**: logo, judul hook, label SEBELUM/PROSES/SESUDAH, caption per scene, dan end card berisi kontak. Versi tanpa template juga disimpan. Status: Draft → Processing → Completed → Published (atau Failed, bisa Retry). |
 | **Dashboard** | Sapaan dan panduan aplikasi (*Learn the app*), kartu brand Inti Warna, Today's Trend dengan skor dan rekomendasi AI. Stat: Generated Videos, Published Content, Average Engagement, Top Content. Chart: AI Activity 30 hari (bar harian) dengan ringkasan hasil video (Succeeded/Failed/Processing), Content Growth (line), dan Platform Performance (bar). Setiap chart punya tampilan tabel. Sidebar bisa di-collapse, pemilih store ada di sidebar, dan notifikasi aktivitas video tersedia di topbar. |
 | **Campaign Calendar** | Kalender bulanan (desktop) atau agenda (mobile). Entri bisa ditautkan ke ide atau video, dengan status Planned/Scheduled/Published/Cancelled. |
 | **Analytics** | KPI views, engagement, leads dan sales impact. Chart per platform dan tabel performa per video. **Export Excel** memakai formula (ER, sales per lead, SUMIF per platform), validasi data dan conditional formatting. **Import Excel** dari template dengan validasi per baris. |
@@ -119,6 +119,25 @@ Guard rail yang aktif di backend:
 | HeyGen | secret `HEYGEN_API_KEY` + Avatar ID & Voice ID (Settings) | API v3 | Endpoint v1/v2 HeyGen dimatikan 31 Okt 2026, jadi adapter memakai v3. Wajib memilih script karena avatar membacakan voice-over. |
 
 Provider default diatur di **Settings > AI & Integrations** (dokumen `settings/app`). Pengaturan ini menimpa `AI_PROVIDER` / `VIDEO_PROVIDER` di `functions/.env`. Nama model diubah lewat `functions/.env`.
+
+## Template video Inti Warna
+
+Template dipasang otomatis saat video selesai dirakit (`functions/src/video/template/brandTemplate.js` + `composeVideo` di `ffmpeg.js`). Semua grafis dirender sebagai PNG transparan dengan satori + resvg (font Plus Jakarta Sans), lalu digabung ffmpeg dalam satu kali encode.
+
+| Elemen | Waktu tampil | Sumber teks |
+|---|---|---|
+| Logo "Inti Warna" (kiri atas) | Sepanjang video | – |
+| Judul hook + label template (SEBELUM & SESUDAH, TIPS CAT, dst.) | 0,15 - ±3,4 detik | `hookText` dari AI plan, atau hook di script, atau judul video |
+| Label SEBELUM / PROSES / SESUDAH | Per klip (khusus template Before-After) | – |
+| Caption per scene | Per klip | `onScreenText` per klip dari AI plan, atau dari script |
+| Transisi | Antar klip 0,35 detik (fade; reveal Before-After memakai wipe) | – |
+| End card | 3,2 detik terakhir | CTA script, atau CTA default di Settings. Kontak diambil dari Settings → Brand template, alamat dari Settings → Stores |
+
+- Pengaturan ada di **Settings → Brand template**: aktif/nonaktif, caption, end card, Instagram, WhatsApp, website, jam buka, dan CTA default. Tab ini menampilkan preview.
+- Template bisa dimatikan per video di **Video Studio** (toggle *Inti Warna template*).
+- Setiap video menyimpan `final.mp4` (dengan template) dan `clean.mp4` (tanpa template, untuk diedit lanjut), dengan tombol unduh terpisah di library.
+- Layout mengikuti safe zone Reels/TikTok (atas ±8%, bawah ±22%, kanan ±11% dikosongkan untuk UI aplikasi).
+- Audio: klip Veo dibuat tanpa suara. Musik sebaiknya ditambahkan dari library musik Instagram/TikTok saat posting, karena lisensinya aman dan membantu jangkauan.
 
 ## Jalan lokal (emulator, tanpa API key)
 

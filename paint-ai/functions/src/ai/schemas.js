@@ -160,15 +160,18 @@ export const videoPlanSchema = obj({
     description: 'One entry per clip, in order. Exactly the number of clips requested.',
     items: obj({
       prompt: str('English text-to-video prompt for this clip (subject, action, setting, camera, lighting, style). No text/logos.'),
+      onScreenText: str('Short caption shown over this clip, in the content language, max 7 words, no emojis/hashtags. Empty string when not needed.'),
     }),
   },
+  hookText: str('Punchy on-screen hook title for the first 3 seconds, in the content language, max 9 words, no emojis/hashtags.'),
   voiceOverText: str('Voice-over text for the whole video in the content language.'),
 });
 
 export const videoPlanNormalizer = z.object({
   segments: z.preprocess(
     (v) => (Array.isArray(v) ? v : []),
-    z.array(z.object({ prompt: cleanStr(1500) })),
+    z.array(z.object({ prompt: cleanStr(1500), onScreenText: cleanStr(80) })),
   ),
+  hookText: cleanStr(90),
   voiceOverText: cleanStr(5000),
 });

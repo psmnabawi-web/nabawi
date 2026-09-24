@@ -74,6 +74,7 @@ export const videoRequestSchema = z.object({
   provider: z.enum(['veo', 'runway', 'kling', 'pika', 'heygen', 'mock']),
   storeId: storeScope,
   brief: z.string().trim().max(1000),
+  brandTemplate: z.boolean(),
   saveAsDraft: z.boolean(),
 })
 export type VideoRequest = z.infer<typeof videoRequestSchema>

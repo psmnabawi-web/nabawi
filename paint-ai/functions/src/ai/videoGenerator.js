@@ -48,6 +48,7 @@ export async function createVideo(user, input) {
     style: input.style,
     provider,
     brief: input.brief,
+    brandTemplate: input.brandTemplate ?? settings.brandKit.enabled,
     storeId: input.storeId,
     status: 'Draft',
     videoUrl: null,

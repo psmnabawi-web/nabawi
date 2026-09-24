@@ -5,6 +5,23 @@ export const TEXT_PROVIDERS = ['gemini', 'openai', 'claude', 'mock'];
 export const VIDEO_PROVIDERS = ['veo', 'runway', 'kling', 'pika', 'heygen', 'mock'];
 
 const CACHE_MS = 30_000;
+
+const kitStr = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+
+/** Brand template settings (Settings > Brand template). Everything optional; branding is on by default. */
+export function normalizeBrandKit(raw) {
+  const kit = raw && typeof raw === 'object' ? raw : {};
+  return {
+    enabled: kit.enabled !== false,
+    captions: kit.captions !== false,
+    endCard: kit.endCard !== false,
+    instagram: kitStr(kit.instagram, 60),
+    whatsapp: kitStr(kit.whatsapp, 30),
+    website: kitStr(kit.website, 80),
+    hours: kitStr(kit.hours, 60),
+    ctaText: kitStr(kit.ctaText, 80),
+  };
+}
 let cache = { at: 0, value: null };
 
 /**
@@ -22,6 +39,7 @@ export async function getAppSettings({ fresh = false } = {}) {
     brandContext: typeof data.brandContext === 'string' ? data.brandContext.slice(0, 2000) : '',
     heygenAvatarId: typeof data.heygenAvatarId === 'string' && data.heygenAvatarId ? data.heygenAvatarId : config.video.heygenAvatarId,
     heygenVoiceId: typeof data.heygenVoiceId === 'string' && data.heygenVoiceId ? data.heygenVoiceId : config.video.heygenVoiceId,
+    brandKit: normalizeBrandKit(data.brandKit),
   };
   cache = { at: Date.now(), value };
   return value;

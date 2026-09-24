@@ -203,10 +203,15 @@ export interface GeneratedVideo {
   videoUrl: string | null
   thumbnail: string | null
   storagePath?: string
+  /** Inti Warna template requested for this video (logo, hook, captions, end card). */
+  brandTemplate?: boolean
+  brandTemplateApplied?: boolean
+  /** Same video without branding (for further editing). */
+  cleanVideoUrl?: string | null
   actualDurationSec?: number
   segments: VideoSegment[]
   progress: { done: number; total: number }
-  plan?: { segmentDurations: number[]; voiceOverText: string; source: string }
+  plan?: { segmentDurations: number[]; voiceOverText: string; hookText?: string; captions?: string[]; source: string }
   attempts: number
   error: string | null
   platform?: Platform | null
@@ -298,6 +303,17 @@ export interface StatsDoc {
   updatedAt?: TS
 }
 
+export interface BrandKit {
+  enabled: boolean
+  captions: boolean
+  endCard: boolean
+  instagram: string
+  whatsapp: string
+  website: string
+  hours: string
+  ctaText: string
+}
+
 export interface AppSettings {
   textProvider: TextProvider
   videoProvider: VideoProvider
@@ -305,6 +321,7 @@ export interface AppSettings {
   brandContext: string
   heygenAvatarId: string
   heygenVoiceId: string
+  brandKit?: Partial<BrandKit>
   updatedAt?: TS
   updatedBy?: string
 }

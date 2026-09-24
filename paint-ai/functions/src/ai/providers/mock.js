@@ -95,8 +95,10 @@ function mockPlan(ctx) {
     'Interior living room with earth-tone walls, sunlight through windows, slow pan.',
     'Paint store counter with color tinting machine mixing paint, shallow depth of field.',
   ];
+  const captions = ['Dinding kusam & mengelupas', 'Kerok, plamir, lalu cat dasar', 'Dua lapis warna pilihan', 'Hasilnya bikin betah di rumah', 'Warna hangat bikin adem', 'Tinting sesuai kode warna'];
   return {
-    segments: Array.from({ length: n }, (_, i) => ({ prompt: pick(beats, i) })),
+    segments: Array.from({ length: n }, (_, i) => ({ prompt: pick(beats, i), onScreenText: `[DEMO] ${pick(captions, i)}` })),
+    hookText: ctx.script?.hook?.onScreenText || '[DEMO] Rumah kusam jadi kayak baru!',
     voiceOverText: ctx.script?.voiceOver ?? '[DEMO] Rumah lama jadi kayak baru. Konsultasi warna gratis di toko kami.',
   };
 }

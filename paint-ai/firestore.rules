@@ -228,13 +228,28 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    function validBrandKit(k) {
+      return k is map
+        && k.keys().hasOnly(['enabled', 'captions', 'endCard', 'instagram', 'whatsapp', 'website', 'hours', 'ctaText'])
+        && k.get('enabled', true) is bool
+        && k.get('captions', true) is bool
+        && k.get('endCard', true) is bool
+        && str(k.get('instagram', ''), 60)
+        && str(k.get('whatsapp', ''), 30)
+        && str(k.get('website', ''), 80)
+        && str(k.get('hours', ''), 60)
+        && str(k.get('ctaText', ''), 80);
+    }
+
     match /settings/{docId} {
       allow read: if active();
+      // Written with merge from two tabs (AI & Integrations, Brand template): every field is optional.
       allow write: if isAdmin() && docId == 'app'
-        && request.resource.data.keys().hasOnly(['textProvider', 'videoProvider', 'contentLanguage', 'brandContext', 'heygenAvatarId', 'heygenVoiceId', 'updatedAt', 'updatedBy'])
-        && request.resource.data.textProvider in ['gemini', 'openai', 'claude', 'mock']
-        && request.resource.data.videoProvider in ['veo', 'runway', 'kling', 'pika', 'heygen', 'mock']
-        && request.resource.data.contentLanguage in ['id', 'en']
+        && request.resource.data.keys().hasOnly(['textProvider', 'videoProvider', 'contentLanguage', 'brandContext', 'heygenAvatarId', 'heygenVoiceId', 'brandKit', 'updatedAt', 'updatedBy'])
+        && request.resource.data.get('textProvider', 'gemini') in ['gemini', 'openai', 'claude', 'mock']
+        && request.resource.data.get('videoProvider', 'veo') in ['veo', 'runway', 'kling', 'pika', 'heygen', 'mock']
+        && request.resource.data.get('contentLanguage', 'id') in ['id', 'en']
+        && validBrandKit(request.resource.data.get('brandKit', {}))
         && str(request.resource.data.get('brandContext', ''), 2000)
         && str(request.resource.data.get('heygenAvatarId', ''), 200)
         && str(request.resource.data.get('heygenVoiceId', ''), 200)

@@ -267,6 +267,12 @@ describe('settings, usage & audit log', () => {
   it('only super admin writes valid settings', async () => {
     await assertSucceeds(setDoc(doc(db('admin'), 'settings', 'app'), settings));
     await assertSucceeds(setDoc(doc(db('admin'), 'settings', 'app'), { ...settings, videoProvider: 'veo' }));
+    const kit = { enabled: true, captions: true, endCard: false, instagram: '@intiwarna_', whatsapp: '0812', website: '', hours: '07.30 - 17.30', ctaText: 'Datang ke toko' };
+    await assertSucceeds(setDoc(doc(db('admin'), 'settings', 'app'), { brandKit: kit, updatedAt: serverTimestamp(), updatedBy: 'admin' }, { merge: true }));
+    await assertFails(setDoc(doc(db('admin'), 'settings', 'app'), { brandKit: { ...kit, enabled: 'yes' }, updatedAt: serverTimestamp(), updatedBy: 'admin' }, { merge: true }));
+    await assertFails(setDoc(doc(db('admin'), 'settings', 'app'), { brandKit: { ...kit, logoUrl: 'https://evil.test' }, updatedAt: serverTimestamp(), updatedBy: 'admin' }, { merge: true }));
+    await assertFails(setDoc(doc(db('admin'), 'settings', 'app'), { brandKit: { ...kit, ctaText: 'x'.repeat(81) }, updatedAt: serverTimestamp(), updatedBy: 'admin' }, { merge: true }));
+    await assertFails(setDoc(doc(db('mkt'), 'settings', 'app'), { brandKit: kit, updatedAt: serverTimestamp(), updatedBy: 'mkt' }, { merge: true }));
     await assertFails(setDoc(doc(db('admin'), 'settings', 'app'), { ...settings, textProvider: 'skynet' }));
     await assertFails(setDoc(doc(db('mkt'), 'settings', 'app'), { ...settings, updatedBy: 'mkt' }));
     await assertSucceeds(getDoc(doc(db('sm1'), 'settings', 'app')));

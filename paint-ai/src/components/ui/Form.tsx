@@ -113,3 +113,34 @@ export function Segmented<T extends string | number>({
     </fieldset>
   )
 }
+
+/** Accessible on/off switch with a label and optional description. */
+export function Switch({ label, description, checked, onChange, disabled }: { label: string; description?: ReactNode; checked: boolean; onChange: (next: boolean) => void; disabled?: boolean }) {
+  const id = useId()
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <label htmlFor={id} className="text-sm font-medium text-slate-900">
+          {label}
+        </label>
+        {description && (
+          <p id={`${id}-desc`} className="mt-0.5 text-xs text-slate-500">
+            {description}
+          </p>
+        )}
+      </div>
+      <button
+        id={id}
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-describedby={description ? `${id}-desc` : undefined}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={cn('relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition disabled:cursor-not-allowed disabled:opacity-50', checked ? 'bg-brand-800' : 'bg-slate-300')}
+      >
+        <span className={cn('inline-block size-5 rounded-full bg-white shadow transition-transform', checked ? 'translate-x-5.5' : 'translate-x-0.5')} />
+      </button>
+    </div>
+  )
+}

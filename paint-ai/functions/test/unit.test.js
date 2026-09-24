@@ -8,7 +8,7 @@ process.env.KLING_SECRET_KEY = 'sk-test';
 process.env.FAL_KEY = 'fal-test';
 process.env.HEYGEN_API_KEY = 'disabled';
 
-const { planSegments, composeClipPrompt, fallbackPlan, tokenDownloadUrl } = await import('../src/video/pipeline.js');
+const { planSegments, composeClipPrompt, fallbackPlan, tokenDownloadUrl, captionsFromScript, transitionsFor } = await import('../src/video/pipeline.js');
 const { engagementRate, aggregate, lastMonths, monthKey, lastDays, aiActivity } = await import('../src/performance/calculatePerformance.js');
 const { parseJsonLoose, toGeminiSchema } = await import('../src/ai/providers/json.js');
 const { trendAnalysisNormalizer, videoScriptNormalizer, contentIdeasNormalizer, trendAnalysisSchema, contentIdeasSchema, videoScriptSchema, videoPlanSchema } = await import('../src/ai/schemas.js');
@@ -17,7 +17,9 @@ const { runway } = await import('../src/video/adapters/runway.js');
 const { pika } = await import('../src/video/adapters/pika.js');
 const { heygen } = await import('../src/video/adapters/heygen.js');
 const { isPlatformUrl } = await import('../src/ai/socialContext.js');
-const { buildStitchArgs } = await import('../src/video/ffmpeg.js');
+const { buildComposeArgs } = await import('../src/video/ffmpeg.js');
+const { buildTemplateAssets, cleanText, computeTimeline, stageFor } = await import('../src/video/template/brandTemplate.js');
+const { normalizeBrandKit } = await import('../src/lib/settings.js');
 const { parseInput, schemas } = await import('../src/lib/validation.js');
 const { mock } = await import('../src/ai/providers/mock.js');
 const { trendAnalysisPrompt, baseSystemPrompt } = await import('../src/ai/prompts.js');
@@ -491,25 +493,104 @@ describe('video adapters (HTTP contract)', () => {
   });
 });
 
-describe('ffmpeg stitch arguments', () => {
-  it('adds silence for clips without audio when any clip has audio', () => {
-    const args = buildStitchArgs(
-      [
-        { path: 'a.mp4', duration: 5, hasAudio: false },
-        { path: 'b.mp4', duration: 10, hasAudio: true },
-      ],
-      'out.mp4',
-      { width: 720, height: 1280 },
-    );
+describe('ffmpeg compose arguments', () => {
+  const clips = [
+    { path: 'a.mp4', duration: 8, hasAudio: false },
+    { path: 'b.mp4', duration: 8, hasAudio: true },
+    { path: 'c.mp4', duration: 6, hasAudio: false },
+  ];
+  const dims = { width: 720, height: 1280 };
+  it('joins clips with cross-fades at the right offsets and silence for clips without audio', () => {
+    const { args, mainTotal, total } = buildComposeArgs({ clips, dims, transition: 0.35, transitions: ['fade', 'wipeleft'], output: 'o.mp4' });
     const filter = args[args.indexOf('-filter_complex') + 1];
+    assert.match(filter, /xfade=transition=fade:duration=0.35:offset=7.65/);
+    assert.match(filter, /xfade=transition=wipeleft:duration=0.35:offset=15.3/);
     assert.match(filter, /anullsrc/);
-    assert.match(filter, /concat=n=2:v=1:a=1/);
-    assert.ok(args.includes('[outa]'));
+    assert.match(filter, /acrossfade=d=0.35/);
+    assert.equal(mainTotal, 21.3);
+    assert.equal(total, 21.3);
+    assert.ok(args.includes('o.mp4'));
   });
-  it('video-only concat when no clip has audio', () => {
-    const args = buildStitchArgs([{ path: 'a.mp4', duration: 5, hasAudio: false }, { path: 'b.mp4', duration: 5, hasAudio: false }], 'o.mp4', { width: 720, height: 1280 });
-    assert.match(args[args.indexOf('-filter_complex') + 1], /concat=n=2:v=1:a=0/);
-    assert.equal(args.includes('[outa]'), false);
+  it('video only when no clip has audio', () => {
+    const { args } = buildComposeArgs({ clips: clips.map((c) => ({ ...c, hasAudio: false })), dims, output: 'o.mp4' });
+    const filter = args[args.indexOf('-filter_complex') + 1];
+    assert.doesNotMatch(filter, /anullsrc|acrossfade/);
+    assert.equal(args.includes('-c:a'), false);
+  });
+  it('overlays are time-windowed and placed, end card is cross-faded in, clean copy is split off', () => {
+    const { args, total } = buildComposeArgs({
+      clips: clips.map((c) => ({ ...c, hasAudio: false })),
+      dims,
+      transition: 0.35,
+      overlays: [{ path: 'hook.png', x: 12, y: 300, start: 0.15, end: 3.4, fade: true }],
+      endCard: { path: 'end.png', duration: 3.2 },
+      output: 'final.mp4',
+      cleanOutput: 'clean.mp4',
+    });
+    const filter = args[args.indexOf('-filter_complex') + 1];
+    assert.match(filter, /split=2\[main\]\[clean\]/);
+    assert.match(filter, /overlay=12:300:enable='between\(t,0.15,3.4\)'/);
+    assert.match(filter, /fade=t=in:st=0.15:d=0.3:alpha=1/);
+    assert.match(filter, /xfade=transition=fade:duration=0.35:offset=20.95\[final\]/);
+    assert.equal(total, 24.5);
+    const hook = args.indexOf('hook.png');
+    assert.deepEqual(args.slice(hook - 9, hook), ['-loop', '1', '-framerate', '30', '-t', '3.35', '-itsoffset', '0.15', '-i']);
+    assert.ok(args.indexOf('clean.mp4') > args.indexOf('final.mp4'));
+  });
+});
+
+describe('brand template', () => {
+  it('timeline accounts for cross-fades', () => {
+    assert.deepEqual(computeTimeline([8, 8, 8, 6], 0.35), { starts: [0, 7.65, 15.3, 22.95], total: 28.95 });
+    assert.deepEqual(computeTimeline([10], 0.35), { starts: [0], total: 10 });
+  });
+  it('labels before / process / after clips', () => {
+    assert.deepEqual([0, 1, 2, 3].map((i) => stageFor(i, 4)), ['before', 'process', 'process', 'after']);
+    assert.equal(stageFor(0, 1), null);
+    assert.deepEqual(transitionsFor('before_after', 4), ['fade', 'fade', 'wipeleft']);
+    assert.deepEqual(transitionsFor('store_promotion', 3), ['fade', 'fade']);
+  });
+  it('cleans text for the bundled font', () => {
+    assert.equal(cleanText('Hasilnya?  Kamar jadi adem 😍🔥'), 'Hasilnya? Kamar jadi adem');
+    assert.equal(cleanText('Sebelum → sesudah'), 'Sebelum - sesudah');
+    assert.ok(cleanText('kata '.repeat(40), 30).endsWith('…'));
+  });
+  it('spreads script captions over clips and normalises the brand kit', () => {
+    const script = { scenes: [{ onScreenText: 'A' }, { onScreenText: '' }, { onScreenText: 'B' }], cta: { onScreenText: 'C' } };
+    assert.deepEqual(captionsFromScript(script, 4), ['A', 'B', 'B', 'C']);
+    assert.deepEqual(captionsFromScript(null, 3), []);
+    assert.deepEqual(normalizeBrandKit(undefined), { enabled: true, captions: true, endCard: true, instagram: '', whatsapp: '', website: '', hours: '', ctaText: '' });
+    assert.equal(normalizeBrandKit({ enabled: false, instagram: ' @intiwarna_ ' }).instagram, '@intiwarna_');
+  });
+  it('renders the graphics as cropped PNG overlays with the right time windows', async () => {
+    const { mkdtemp, rm, stat } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const path = await import('node:path');
+    const dir = await mkdtemp(path.join(tmpdir(), 'tpl-test-'));
+    try {
+      const r = await buildTemplateAssets({
+        dir,
+        dims: { width: 720, height: 1280 },
+        durations: [8, 8, 6],
+        transition: 0.35,
+        template: 'before_after',
+        hookText: 'Kamar sempit jadi lega',
+        captions: ['Dinding kusam', '', 'Hasil akhir'],
+        cta: '',
+        contact: { instagram: 'intiwarna_' },
+        lang: 'id',
+      });
+      const names = r.overlays.map((o) => path.basename(o.path));
+      assert.deepEqual(names, ['bug.png', 'hook.png', 'stage-0.png', 'stage-1.png', 'stage-2.png', 'caption-0.png', 'caption-2.png']);
+      const hook = r.overlays[1];
+      assert.ok(hook.start === 0.15 && hook.end > 1.5 && hook.x >= 0 && hook.y > 100);
+      const caption0 = r.overlays[5];
+      assert.ok(caption0.start > hook.end, 'first caption waits for the hook title');
+      assert.ok((await stat(r.endCard.path)).size > 10_000);
+      assert.equal(r.endCard.duration, 3.2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 

@@ -14,7 +14,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore'
 import { auth, db } from '../firebase/config'
-import { ALL_STORES, type AppSettings, type Platform, type UserProfile } from '../types'
+import { ALL_STORES, type AppSettings, type BrandKit, type Platform, type UserProfile } from '../types'
 import type { CalendarInput, PerformanceInput, SourceInput, StoreInput } from '../utils/validation'
 import { engagementRate } from '../utils/engagement'
 
@@ -132,7 +132,9 @@ export const updateCalendarEntry = (id: string, input: CalendarInput) =>
 export const deleteCalendarEntry = (id: string) => deleteDoc(doc(db, 'campaign_calendar', id))
 
 // ------------------------------------------------------------------ settings & logs
-export const saveSettings = (s: Omit<AppSettings, 'updatedAt' | 'updatedBy'>) => setDoc(doc(db, 'settings', 'app'), { ...s, updatedAt: serverTimestamp(), updatedBy: uid() })
+// merge: the AI and brand template tabs each save their own fields of settings/app.
+export const saveSettings = (s: Omit<AppSettings, 'updatedAt' | 'updatedBy' | 'brandKit'>) => setDoc(doc(db, 'settings', 'app'), { ...s, updatedAt: serverTimestamp(), updatedBy: uid() }, { merge: true })
+export const saveBrandKit = (brandKit: BrandKit) => setDoc(doc(db, 'settings', 'app'), { brandKit, updatedAt: serverTimestamp(), updatedBy: uid() }, { merge: true })
 export const auditLogQuery = (max = 200) => query(collection(db, 'audit_logs'), orderBy('createdAt', 'desc'), limit(max))
 
 export const statsDocId = (profile: UserProfile | null, selectedStoreId: string) => {
