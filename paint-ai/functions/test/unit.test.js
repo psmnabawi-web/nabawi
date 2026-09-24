@@ -25,6 +25,8 @@ const { secretValue } = await import('../src/config.js');
 const { buildDemoDocuments } = await import('../src/seed/demoData.js');
 const { ApiError } = await import('@google/genai');
 const { gemini, __setGeminiTestHooks } = await import('../src/ai/providers/gemini.js');
+const { veo, __setVeoTestHooks } = await import('../src/video/adapters/veo.js');
+const { VIDEO_ADAPTERS } = await import('../src/video/adapters/index.js');
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -270,6 +272,108 @@ describe('validation', () => {
   it('treats "disabled" secrets as missing', () => {
     assert.equal(secretValue('HEYGEN_API_KEY'), '');
     assert.equal(secretValue('RUNWAY_API_KEY'), 'test-runway-key');
+  });
+});
+
+describe('veo adapter (Vertex AI)', () => {
+  const fakeVeo = ({ create, poll } = {}) => {
+    const calls = { create: [], poll: [] };
+    return {
+      calls,
+      models: {
+        generateVideos: async (req) => {
+          calls.create.push(req);
+          if (create instanceof Error) throw create;
+          return create ?? { name: 'projects/p/locations/us-central1/publishers/google/models/veo-3.1-lite-generate-001/operations/op-1' };
+        },
+      },
+      operations: {
+        getVideosOperation: async ({ operation }) => {
+          calls.poll.push(operation.name);
+          if (poll instanceof Error) throw poll;
+          return poll;
+        },
+      },
+    };
+  };
+  const fakeBucket = () => {
+    const saved = [];
+    const copied = [];
+    const make = (name = 'demo-paint-ai.firebasestorage.app') => ({
+      name,
+      file: (p) => ({
+        path: p,
+        save: async (buf, opts) => saved.push({ path: p, bytes: buf.toString(), contentType: opts.metadata.contentType }),
+        copy: async (dest) => copied.push({ from: `${name}/${p}`, to: dest.path }),
+      }),
+    });
+    return { saved, copied, bucket: (name) => make(name) };
+  };
+  afterEach(() => __setVeoTestHooks());
+
+  it('is registered first, needs no API key and uses 4/6/8s clips', () => {
+    assert.equal(Object.keys(VIDEO_ADAPTERS)[0], 'veo');
+    assert.equal(veo.isConfigured(), true);
+    assert.equal(veo.model(), 'veo-3.1-lite-generate-001');
+    assert.deepEqual(veo.clipDurations(), [8, 6, 4]);
+    assert.deepEqual(planSegments(30, veo.clipDurations()), [8, 8, 8, 6]);
+    assert.equal(planSegments(15, veo.clipDurations()).reduce((a, b) => a + b, 0), 16);
+  });
+  it('submits one 720p silent 9:16 clip and stores the operation name', async () => {
+    const c = fakeVeo();
+    __setVeoTestHooks({ client: c });
+    const job = await veo.createJob({ prompt: 'p'.repeat(2500), duration: 8, ratio: '9:16', videoId: 'vid1', index: 2 });
+    assert.match(job.jobId, /operations\/op-1$/);
+    assert.deepEqual(job.meta, { storagePath: 'videos/vid1/segments/2.mp4' });
+    const req = c.calls.create[0];
+    assert.equal(req.model, 'veo-3.1-lite-generate-001');
+    assert.equal(req.source.prompt.length, 2000);
+    assert.deepEqual(
+      { n: req.config.numberOfVideos, d: req.config.durationSeconds, r: req.config.aspectRatio, res: req.config.resolution, audio: req.config.generateAudio },
+      { n: 1, d: 8, r: '9:16', res: '720p', audio: false },
+    );
+  });
+  it('rejects unsupported ratios before calling the API', async () => {
+    const c = fakeVeo();
+    __setVeoTestHooks({ client: c });
+    await assert.rejects(veo.createJob({ prompt: 'x', duration: 8, ratio: '1:1', videoId: 'v', index: 0 }), (err) => err.code === 'invalid-argument');
+    assert.equal(c.calls.create.length, 0);
+  });
+  it('maps a disabled Vertex AI API to an actionable error', async () => {
+    __setVeoTestHooks({ client: fakeVeo({ create: new ApiError({ message: 'SERVICE_DISABLED: Vertex AI API has not been used in project', status: 403 }) }) });
+    await assert.rejects(
+      veo.createJob({ prompt: 'x', duration: 8, ratio: '9:16', videoId: 'v', index: 0 }),
+      (err) => err.code === 'failed-precondition' && /aiplatform\.googleapis\.com/.test(err.message),
+    );
+    __setVeoTestHooks({ client: fakeVeo({ create: new ApiError({ message: 'Permission denied', status: 403 }) }) });
+    await assert.rejects(veo.createJob({ prompt: 'x', duration: 8, ratio: '9:16', videoId: 'v', index: 0 }), (err) => /Vertex AI User/.test(err.message));
+  });
+  it('polls by operation name and reports running', async () => {
+    const c = fakeVeo({ poll: { name: 'ops/1', done: false } });
+    __setVeoTestHooks({ client: c });
+    assert.deepEqual(await veo.getJob('ops/1', { storagePath: 'videos/v/segments/0.mp4' }), { status: 'running' });
+    assert.deepEqual(c.calls.poll, ['ops/1']);
+  });
+  it('saves returned video bytes to Firebase Storage', async () => {
+    const b = fakeBucket();
+    const bytes = Buffer.from('fake-mp4').toString('base64');
+    __setVeoTestHooks({ client: fakeVeo({ poll: { done: true, response: { generatedVideos: [{ video: { videoBytes: bytes, mimeType: 'video/mp4' } }] } } }), bucket: b.bucket });
+    assert.deepEqual(await veo.getJob('ops/1', { storagePath: 'videos/v/segments/0.mp4' }), { status: 'succeeded', storagePath: 'videos/v/segments/0.mp4' });
+    assert.deepEqual(b.saved, [{ path: 'videos/v/segments/0.mp4', bytes: 'fake-mp4', contentType: 'video/mp4' }]);
+  });
+  it('copies a gs:// result from another bucket', async () => {
+    const b = fakeBucket();
+    __setVeoTestHooks({ client: fakeVeo({ poll: { done: true, response: { generatedVideos: [{ video: { uri: 'gs://other/out/sample_0.mp4' } }] } } }), bucket: b.bucket });
+    assert.deepEqual(await veo.getJob('ops/1', { storagePath: 'videos/v/segments/1.mp4' }), { status: 'succeeded', storagePath: 'videos/v/segments/1.mp4' });
+    assert.deepEqual(b.copied, [{ from: 'other/out/sample_0.mp4', to: 'videos/v/segments/1.mp4' }]);
+  });
+  it('fails the clip on operation errors and safety filtering', async () => {
+    __setVeoTestHooks({ client: fakeVeo({ poll: { done: true, error: { code: 3, message: 'bad prompt' } } }) });
+    assert.deepEqual(await veo.getJob('ops/1', { storagePath: 's' }), { status: 'failed', error: 'Veo: bad prompt' });
+    __setVeoTestHooks({ client: fakeVeo({ poll: { done: true, response: { raiMediaFilteredCount: 1, raiMediaFilteredReasons: ['celebrity'] } } }) });
+    const r = await veo.getJob('ops/1', { storagePath: 's' });
+    assert.equal(r.status, 'failed');
+    assert.match(r.error, /safety filter.*celebrity/);
   });
 });
 

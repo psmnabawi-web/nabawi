@@ -71,7 +71,7 @@ export const videoRequestSchema = z.object({
   duration: z.union(DURATIONS.map((d) => z.literal(d)) as [z.ZodLiteral<15>, z.ZodLiteral<30>, z.ZodLiteral<60>]),
   ratio: z.literal('9:16'),
   style: z.enum(VIDEO_STYLES),
-  provider: z.enum(['runway', 'kling', 'pika', 'heygen', 'mock']),
+  provider: z.enum(['veo', 'runway', 'kling', 'pika', 'heygen', 'mock']),
   storeId: storeScope,
   brief: z.string().trim().max(1000),
   saveAsDraft: z.boolean(),

@@ -2,7 +2,7 @@ import { config } from '../config.js';
 import { db } from './firebase.js';
 
 export const TEXT_PROVIDERS = ['gemini', 'openai', 'claude', 'mock'];
-export const VIDEO_PROVIDERS = ['runway', 'kling', 'pika', 'heygen', 'mock'];
+export const VIDEO_PROVIDERS = ['veo', 'runway', 'kling', 'pika', 'heygen', 'mock'];
 
 const CACHE_MS = 30_000;
 let cache = { at: 0, value: null };

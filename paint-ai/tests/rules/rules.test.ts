@@ -266,6 +266,7 @@ describe('settings, usage & audit log', () => {
   const settings = { textProvider: 'gemini', videoProvider: 'runway', contentLanguage: 'id', brandContext: 'Toko cat', heygenAvatarId: '', heygenVoiceId: '', updatedAt: serverTimestamp(), updatedBy: 'admin' };
   it('only super admin writes valid settings', async () => {
     await assertSucceeds(setDoc(doc(db('admin'), 'settings', 'app'), settings));
+    await assertSucceeds(setDoc(doc(db('admin'), 'settings', 'app'), { ...settings, videoProvider: 'veo' }));
     await assertFails(setDoc(doc(db('admin'), 'settings', 'app'), { ...settings, textProvider: 'skynet' }));
     await assertFails(setDoc(doc(db('mkt'), 'settings', 'app'), { ...settings, updatedBy: 'mkt' }));
     await assertSucceeds(getDoc(doc(db('sm1'), 'settings', 'app')));

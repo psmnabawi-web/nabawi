@@ -64,7 +64,7 @@ set_env() {
 get_env() { grep -E "^$2=" "$1" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' || true; }
 
 # Every Google API the platform uses. A brand-new Cloud project has none of them enabled.
-REQUIRED_APIS="firestore.googleapis.com,firebaserules.googleapis.com,firebasestorage.googleapis.com,storage.googleapis.com,firebasehosting.googleapis.com,identitytoolkit.googleapis.com,cloudfunctions.googleapis.com,run.googleapis.com,cloudbuild.googleapis.com,artifactregistry.googleapis.com,eventarc.googleapis.com,pubsub.googleapis.com,cloudscheduler.googleapis.com,secretmanager.googleapis.com"
+REQUIRED_APIS="firestore.googleapis.com,firebaserules.googleapis.com,firebasestorage.googleapis.com,storage.googleapis.com,firebasehosting.googleapis.com,identitytoolkit.googleapis.com,cloudfunctions.googleapis.com,run.googleapis.com,cloudbuild.googleapis.com,artifactregistry.googleapis.com,eventarc.googleapis.com,pubsub.googleapis.com,cloudscheduler.googleapis.com,secretmanager.googleapis.com,aiplatform.googleapis.com"
 ENABLE_APIS_URL="https://console.cloud.google.com/flows/enableapi?apiid=${REQUIRED_APIS}&project=${PROJECT_ID}"
 
 api_disabled() { printf '%s' "$1" | grep -qiE 'has not been used in project|SERVICE_DISABLED|is disabled|API has not been enabled'; }

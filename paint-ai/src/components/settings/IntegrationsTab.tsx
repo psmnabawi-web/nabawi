@@ -35,7 +35,7 @@ export function IntegrationsTab() {
   const d = status.data?.defaults
   const initial: SettingsForm = {
     textProvider: s?.textProvider ?? d?.textProvider ?? 'gemini',
-    videoProvider: s?.videoProvider ?? d?.videoProvider ?? 'runway',
+    videoProvider: s?.videoProvider ?? d?.videoProvider ?? 'veo',
     contentLanguage: s?.contentLanguage ?? d?.contentLanguage ?? 'id',
     brandContext: s?.brandContext ?? '',
     heygenAvatarId: s?.heygenAvatarId ?? '',

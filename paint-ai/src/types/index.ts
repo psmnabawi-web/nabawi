@@ -30,7 +30,7 @@ export type VideoStyle = 'Realistic' | 'Cinematic'
 export type VideoRatio = '9:16'
 export type VideoDuration = 15 | 30 | 60
 export type TextProvider = 'gemini' | 'openai' | 'claude' | 'mock'
-export type VideoProvider = 'runway' | 'kling' | 'pika' | 'heygen' | 'mock'
+export type VideoProvider = 'veo' | 'runway' | 'kling' | 'pika' | 'heygen' | 'mock'
 export type CalendarStatus = 'Planned' | 'Scheduled' | 'Published' | 'Cancelled'
 
 /** Brand-wide scope value for storeId. */

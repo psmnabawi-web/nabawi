@@ -19,7 +19,7 @@ SOCIAL MEDIA TREND INPUT → AI TREND ANALYSIS → AI CONTENT STRATEGY → AI SC
 | **2. AI Trend Analyzer** | `analyzeTrend()` menghasilkan nama tren, skor 0-100 dengan rubrik tertulis, growth, viral pattern, audience emotion, hook, visual strategy, marketing opportunity dan rekomendasi. Output berupa JSON terstruktur. |
 | **3. AI Content Generator** | `generateContent()` membuat sampai 20 ide per brief (produk × audiens × objective × platform, opsional berbasis tren). Tiap ide berisi Title, Hook, Storyline, CTA dan Expected impact. Ide bisa difavoritkan, diedit dan dihapus. |
 | **4. AI Script Generator** | `generateScript()` menyusun TITLE → HOOK 0-3 detik → SCENE 1..n (Visual/Voice/Text) → CTA, plus voice-over, caption dan hashtag. Script bisa diedit, di-copy dan diunduh sebagai .txt. |
-| **5. AI Video Generator** | 5 template, durasi 15/30/60 detik, rasio 9:16, style Realistic/Cinematic, dan provider Runway / Kling / Pika / HeyGen. Alurnya: Generate Prompt → Send API Request → Save Result URL → Store in Firebase Storage. Klip 5-10 detik digabung otomatis dengan ffmpeg. Status: Draft → Processing → Completed → Published (atau Failed, bisa Retry). |
+| **5. AI Video Generator** | 5 template, durasi 15/30/60 detik, rasio 9:16, style Realistic/Cinematic, dan provider Google Veo (Vertex AI, tanpa API key) / Runway / Kling / Pika / HeyGen. Alurnya: Generate Prompt → Send API Request → Save Result URL → Store in Firebase Storage. Klip 4-10 detik digabung otomatis dengan ffmpeg. Status: Draft → Processing → Completed → Published (atau Failed, bisa Retry). |
 | **Dashboard** | Today's Trend dengan skor dan rekomendasi AI. Stat: Total Generated Video, Published Content, Average Engagement, Top Content. Chart: Content Growth (line) dan Platform Performance (bar). Setiap chart punya tampilan tabel. |
 | **Campaign Calendar** | Kalender bulanan (desktop) atau agenda (mobile). Entri bisa ditautkan ke ide atau video, dengan status Planned/Scheduled/Published/Cancelled. |
 | **Analytics** | KPI views, engagement, leads dan sales impact. Chart per platform dan tabel performa per video. **Export Excel** memakai formula (ER, sales per lead, SUMIF per platform), validasi data dan conditional formatting. **Import Excel** dari template dengan validasi per baris. |
@@ -30,7 +30,7 @@ SOCIAL MEDIA TREND INPUT → AI TREND ANALYSIS → AI CONTENT STRATEGY → AI SC
 - **Frontend:** React 19, Vite 8, TypeScript, Tailwind CSS 4, React Router 7, Recharts, Firebase Web SDK 12, zod, ExcelJS (lazy-load).
 - **Backend:** Cloud Functions for Firebase v2 (Node.js 22, ESM), Firestore, Firebase Storage, Firebase Auth, Firebase Hosting, Secret Manager, Cloud Scheduler.
 - **AI teks:** Google Gemini (API key atau Vertex AI), OpenAI (Responses API + Structured Outputs), Anthropic Claude (Messages API + structured outputs + refusal fallback). Tersedia juga provider `mock` untuk demo offline.
-- **AI video:** Runway (text_to_video), Kling (text2video, JWT atau API key), Pika via fal.ai (queue API), HeyGen API **v3**, dan renderer `mock` offline.
+- **AI video:** Google Veo 3.1 Lite via Vertex AI (tanpa API key), Runway (text_to_video), Kling (text2video, JWT atau API key), Pika via fal.ai (queue API), HeyGen API **v3**, dan renderer `mock` offline.
 
 ## Struktur
 
@@ -49,7 +49,7 @@ paint-ai/
 │  └─ src/
 │     ├─ ai/        trendAnalyzer.js, contentGenerator.js, scriptGenerator.js, videoGenerator.js,
 │     │             prompts.js, schemas.js, socialContext.js, providers/{gemini,openai,claude,mock}.js
-│     ├─ video/     pipeline.js (plan → jobs → poll → stitch → Storage), ffmpeg.js, adapters/{runway,kling,pika,heygen,mock}.js
+│     ├─ video/     pipeline.js (plan → jobs → poll → stitch → Storage), ffmpeg.js, adapters/{veo,runway,kling,pika,heygen,mock}.js
 │     ├─ performance/calculatePerformance.js
 │     ├─ users/users.js, seed/demoData.js, lib/ (auth, validation, quota, audit, settings, errors)
 │     ├─ scripts/seed-emulator.js
@@ -112,6 +112,7 @@ Guard rail yang aktif di backend:
 | Gemini | secret `GEMINI_API_KEY` atau `GOOGLE_GENAI_USE_VERTEXAI=true` | `gemini-3.8-flash` | Vertex AI memakai service account Functions (beri role *Vertex AI User*). |
 | OpenAI | secret `OPENAI_API_KEY` | `gpt-6-sol` | `gpt-6-luna` lebih murah. |
 | Claude | secret `ANTHROPIC_API_KEY` | `claude-opus-5` | Server-side refusal fallback aktif untuk model Opus 5/Fable. |
+| **Google Veo** (default video) | **Tanpa API key.** Memakai service account Functions dan ditagih ke project Firebase; kredit free trial Google Cloud ikut terpakai. Wajib mengaktifkan Vertex AI API. | `veo-3.1-lite-generate-001`, 720p, tanpa audio, `us-central1` | Klip 4/6/8 detik (30 detik = 8+8+8+6). Harga referensi Veo 3.1 Lite: ±$0,03/detik (720p tanpa audio) sampai $0,05/detik (dengan audio). Diatur lewat `VEO_MODEL`, `VEO_LOCATION`, `VEO_RESOLUTION`, `VEO_GENERATE_AUDIO`, `VEO_ENABLED`. |
 | Runway | secret `RUNWAY_API_KEY` | `gen4.5` | Klip 2-10 detik (dipakai 10+5). `veo3.1*` memakai 4/6/8 detik. URL output kedaluwarsa, sehingga langsung disalin ke Storage. |
 | Kling | secret `KLING_ACCESS_KEY` (+ `KLING_SECRET_KEY` untuk JWT) | `kling-v2-5-turbo`, mode `pro` | Durasi dikirim sebagai string "5"/"10". Base `https://api-singapore.klingai.com`. |
 | Pika | secret `FAL_KEY` | `fal-ai/pika/v2.2/text-to-video` | Lewat fal.ai queue. Key hanya dikirim ke `queue.fal.run`. |
@@ -226,6 +227,10 @@ Workflow `.github/workflows/paint-ai.yml` menjalankan semuanya ketika ada peruba
 | Deploy storage rules meminta grant IAM | Ini untuk cross-service rules (Storage membaca Firestore). Jawab **Yes**. |
 | Tombol AI menampilkan `internal [0]` (status 0 / CORS) untuk function tertentu | Function itu gagal di **create** pertama, lalu di retry hanya di-**update**. Firebase CLI hanya memasang izin publik (`allUsers` invoker) untuk callable saat create. Hapus dan deploy ulang function tersebut: `npx firebase-tools functions:delete paint-ai:<nama> --region <region> --project <id> --force`, lalu `npx firebase-tools deploy --only functions:paint-ai:<nama> --project <id>`. |
 | Callable error `not-found` / CORS | Region function berbeda dari `VITE_FUNCTIONS_REGION`. Samakan keduanya, lalu build ulang. |
+| Veo: `Vertex AI API is not enabled` | Aktifkan API-nya lewat `https://console.cloud.google.com/flows/enableapi?apiid=aiplatform.googleapis.com&project=<id>`, tunggu 1-2 menit, lalu klik **Retry** di video. |
+| Veo: `Permission denied on Vertex AI` | Buka IAM (`https://console.cloud.google.com/iam-admin/iam?project=<id>`). Beri role **Vertex AI User** ke `<PROJECT_NUMBER>-compute@developer.gserviceaccount.com` (service account Cloud Functions), lalu Retry. |
+| Veo: `model … is not available` / `quota reached` | Model belum tersedia di region tersebut: ubah `VEO_MODEL` atau `VEO_LOCATION` di `functions/.env`, lalu deploy functions. Untuk quota per menit: tunggu 1 menit lalu Retry, atau pakai durasi 15/30 detik (klipnya lebih sedikit). |
+| Veo: `safety filter blocked this clip` | Prompt klip terkena filter keamanan Google (misalnya orang terkenal atau merek). Ubah brief/script, lalu Retry. |
 | "X is not configured" | Secret provider belum diisi, atau masih `disabled`. Set dengan `firebase functions:secrets:set`, lalu deploy ulang functions. |
 | Store Manager melihat layar "Waiting for access" | Belum di-assign store. Buka Settings → Users & roles. |
 | Login email tidak menjadi Super Admin | Email belum diverifikasi. Klik link verifikasi, lalu klik **I have verified** di banner. |

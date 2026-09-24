@@ -110,7 +110,7 @@ Writer: server. Client (marketing/admin) boleh mengedit title, hook, scenes, cta
 | duration | 15 \| 30 \| 60 | server |
 | ratio | `9:16` | server |
 | style | `Realistic` \| `Cinematic` | server |
-| provider | `runway` \| `kling` \| `pika` \| `heygen` \| `mock` | server |
+| provider | `veo` \| `runway` \| `kling` \| `pika` \| `heygen` \| `mock` | server |
 | model | | server |
 | status | `Draft` → `Processing` → `Completed` → `Published` (atau `Failed`) | server; client hanya `Completed` ⇄ `Published` |
 | plan | `{segmentDurations[], voiceOverText, source}` | server |

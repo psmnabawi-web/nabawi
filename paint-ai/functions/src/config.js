@@ -12,6 +12,22 @@ const env = (name, fallback = '') => {
   return v === undefined || v === '' ? fallback : v;
 };
 
+const boolEnv = (name, fallback) => {
+  const v = (process.env[name] ?? '').trim().toLowerCase();
+  if (['true', '1', 'yes'].includes(v)) return true;
+  if (['false', '0', 'no'].includes(v)) return false;
+  return fallback;
+};
+
+/** Project id of the running Firebase project (Cloud Functions sets GCLOUD_PROJECT / FIREBASE_CONFIG). */
+function firebaseProjectId() {
+  try {
+    return JSON.parse(process.env.FIREBASE_CONFIG ?? '{}').projectId ?? '';
+  } catch {
+    return '';
+  }
+}
+
 const intEnv = (name, fallback) => {
   const n = Number.parseInt(process.env[name] ?? '', 10);
   return Number.isFinite(n) && n > 0 ? n : fallback;
@@ -81,16 +97,22 @@ export const config = Object.freeze({
     openaiModel: env('OPENAI_MODEL', 'gpt-6-sol'),
     claudeModel: env('CLAUDE_MODEL', 'claude-opus-5'),
     geminiUseVertex: env('GOOGLE_GENAI_USE_VERTEXAI', 'false').toLowerCase() === 'true',
-    googleCloudProject: env('GOOGLE_CLOUD_PROJECT', env('GCLOUD_PROJECT')),
+    googleCloudProject: env('GOOGLE_CLOUD_PROJECT', env('GCLOUD_PROJECT', firebaseProjectId())),
     googleCloudLocation: env('GOOGLE_CLOUD_LOCATION', 'global'),
   },
   video: {
-    provider: env('VIDEO_PROVIDER', 'runway'),
+    provider: env('VIDEO_PROVIDER', 'veo'),
     runwayModel: env('RUNWAY_MODEL', 'gen4.5'),
     klingModel: env('KLING_MODEL', 'kling-v2-5-turbo'),
     klingMode: env('KLING_MODE', 'pro'),
     klingApiBase: env('KLING_API_BASE', 'https://api-singapore.klingai.com'),
     pikaFalEndpoint: env('PIKA_FAL_ENDPOINT', 'fal-ai/pika/v2.2/text-to-video'),
+    // Google Veo on Vertex AI (no API key; uses the Functions service account + project billing).
+    veoEnabled: boolEnv('VEO_ENABLED', true),
+    veoModel: env('VEO_MODEL', 'veo-3.1-lite-generate-001'),
+    veoLocation: env('VEO_LOCATION', 'us-central1'),
+    veoResolution: env('VEO_RESOLUTION', '720p') === '1080p' ? '1080p' : '720p',
+    veoGenerateAudio: boolEnv('VEO_GENERATE_AUDIO', false),
     heygenAvatarId: env('HEYGEN_AVATAR_ID'),
     heygenVoiceId: env('HEYGEN_VOICE_ID'),
     timeoutMinutes: intEnv('VIDEO_TIMEOUT_MINUTES', 60),

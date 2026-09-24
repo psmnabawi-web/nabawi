@@ -233,7 +233,7 @@ service cloud.firestore {
       allow write: if isAdmin() && docId == 'app'
         && request.resource.data.keys().hasOnly(['textProvider', 'videoProvider', 'contentLanguage', 'brandContext', 'heygenAvatarId', 'heygenVoiceId', 'updatedAt', 'updatedBy'])
         && request.resource.data.textProvider in ['gemini', 'openai', 'claude', 'mock']
-        && request.resource.data.videoProvider in ['runway', 'kling', 'pika', 'heygen', 'mock']
+        && request.resource.data.videoProvider in ['veo', 'runway', 'kling', 'pika', 'heygen', 'mock']
         && request.resource.data.contentLanguage in ['id', 'en']
         && str(request.resource.data.get('brandContext', ''), 2000)
         && str(request.resource.data.get('heygenAvatarId', ''), 200)

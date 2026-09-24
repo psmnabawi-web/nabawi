@@ -81,7 +81,7 @@ export default function LoginPage() {
   const features = [
     { icon: TrendingUp, title: 'Trend intelligence', text: 'Score TikTok, Instagram & YouTube trends for paint retail.' },
     { icon: Sparkles, title: 'AI content & scripts', text: '20 ideas per brief and ready-to-shoot scripts.' },
-    { icon: Clapperboard, title: 'AI video studio', text: 'Runway, Kling, Pika & HeyGen in one workflow.' },
+    { icon: Clapperboard, title: 'AI video studio', text: 'Google Veo, Runway, Kling, Pika & HeyGen in one workflow.' },
     { icon: BarChart3, title: 'Performance analytics', text: 'Engagement, leads and sales impact per content.' },
   ]
 

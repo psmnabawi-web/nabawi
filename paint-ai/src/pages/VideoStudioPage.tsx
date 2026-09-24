@@ -138,7 +138,7 @@ export default function VideoStudioPage() {
 
   return (
     <>
-      <PageHeader title="Video Studio" description="Generate vertical marketing videos with Runway, Kling, Pika or HeyGen — stored automatically in Firebase Storage." />
+      <PageHeader title="Video Studio" description="Generate vertical marketing videos with Google Veo, Runway, Kling, Pika or HeyGen — stored automatically in Firebase Storage." />
       <Tabs<Tab> value={tab} onChange={setTab} tabs={[...(canEdit ? [{ id: 'create' as Tab, label: 'Create video' }] : []), { id: 'library', label: 'Video library', count: videos.data.length }]} />
 
       <div className="mt-5">

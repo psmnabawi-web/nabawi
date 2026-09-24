@@ -78,6 +78,7 @@ export const TEXT_PROVIDERS: { id: TextProvider; label: string }[] = [
   { id: 'mock', label: 'Demo (offline mock)' },
 ]
 export const VIDEO_PROVIDERS: { id: VideoProvider; label: string; note: string }[] = [
+  { id: 'veo', label: 'Google Veo (Vertex AI)', note: 'Veo 3.1 Lite clips (4/6/8s), stitched · no API key, billed to the Firebase project' },
   { id: 'runway', label: 'Runway', note: 'Text-to-video clips, stitched to 15/30/60s' },
   { id: 'kling', label: 'Kling AI', note: 'Text-to-video clips (5/10s), stitched' },
   { id: 'pika', label: 'Pika (fal.ai)', note: 'Text-to-video clips (5/10s), stitched' },

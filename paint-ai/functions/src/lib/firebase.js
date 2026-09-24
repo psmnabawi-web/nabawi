@@ -9,7 +9,8 @@ export const db = getFirestore();
 db.settings({ ignoreUndefinedProperties: true });
 
 export const auth = getAuth();
-export const bucket = () => getStorage().bucket();
+/** Default Firebase Storage bucket, or a named bucket. */
+export const bucket = (name) => getStorage().bucket(name);
 export { FieldValue, Timestamp };
 
 export const serverTimestamp = () => FieldValue.serverTimestamp();
