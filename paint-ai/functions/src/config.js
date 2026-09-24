@@ -76,6 +76,8 @@ export const config = Object.freeze({
   ai: {
     provider: env('AI_PROVIDER', 'gemini'),
     geminiModel: env('GEMINI_MODEL', 'gemini-3.8-flash'),
+    // Used when GEMINI_MODEL is overloaded (503) / rate limited after retries, or not found. Empty = no fallback.
+    geminiFallbackModel: env('GEMINI_FALLBACK_MODEL', 'gemini-3.6-flash'),
     openaiModel: env('OPENAI_MODEL', 'gpt-6-sol'),
     claudeModel: env('CLAUDE_MODEL', 'claude-opus-5'),
     geminiUseVertex: env('GOOGLE_GENAI_USE_VERTEXAI', 'false').toLowerCase() === 'true',

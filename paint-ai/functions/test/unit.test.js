@@ -23,6 +23,8 @@ const { mock } = await import('../src/ai/providers/mock.js');
 const { trendAnalysisPrompt, baseSystemPrompt } = await import('../src/ai/prompts.js');
 const { secretValue } = await import('../src/config.js');
 const { buildDemoDocuments } = await import('../src/seed/demoData.js');
+const { ApiError } = await import('@google/genai');
+const { gemini, __setGeminiTestHooks } = await import('../src/ai/providers/gemini.js');
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -179,6 +181,60 @@ describe('AI output handling', () => {
     const ideas = contentIdeasNormalizer.parse(r.data).ideas;
     assert.equal(ideas.length, 7);
     assert.ok(ideas.every((i) => i.title && i.hook && i.cta));
+  });
+});
+
+describe('gemini resilience', () => {
+  const okResponse = (text) => ({ text, candidates: [{ finishReason: 'STOP' }], usageMetadata: {} });
+  const fakeClient = (script) => {
+    const calls = [];
+    return {
+      calls,
+      models: {
+        generateContent: async (req) => {
+          calls.push(req.model);
+          const next = script.shift();
+          if (next instanceof Error) throw next;
+          return next;
+        },
+      },
+    };
+  };
+  const req = { system: 's', prompt: 'p', schema: { type: 'object', properties: {}, required: [], additionalProperties: false } };
+  afterEach(() => __setGeminiTestHooks());
+
+  it('retries 503 on the primary model then succeeds', async () => {
+    const c = fakeClient([new ApiError({ message: 'overloaded', status: 503 }), okResponse('{"a":1}')]);
+    __setGeminiTestHooks({ client: c, sleep: async () => {} });
+    const r = await gemini.generate(req);
+    assert.deepEqual(r.data, { a: 1 });
+    assert.deepEqual(c.calls, ['gemini-3.8-flash', 'gemini-3.8-flash']);
+  });
+  it('falls back to the second model after repeated 503s', async () => {
+    const overloaded = () => new ApiError({ message: 'The model is overloaded', status: 503 });
+    const c = fakeClient([overloaded(), overloaded(), overloaded(), overloaded(), okResponse('{"ok":true}')]);
+    __setGeminiTestHooks({ client: c, sleep: async () => {} });
+    const r = await gemini.generate(req);
+    assert.deepEqual(r.data, { ok: true });
+    assert.deepEqual(c.calls, ['gemini-3.8-flash', 'gemini-3.8-flash', 'gemini-3.8-flash', 'gemini-3.8-flash', 'gemini-3.6-flash']);
+  });
+  it('falls back when the primary model is not found', async () => {
+    const c = fakeClient([new ApiError({ message: 'not found', status: 404 }), okResponse('{"x":2}')]);
+    __setGeminiTestHooks({ client: c, sleep: async () => {} });
+    assert.deepEqual((await gemini.generate(req)).data, { x: 2 });
+    assert.deepEqual(c.calls, ['gemini-3.8-flash', 'gemini-3.6-flash']);
+  });
+  it('reports a clear overload error when every model stays unavailable', async () => {
+    const c = fakeClient(Array.from({ length: 6 }, () => new ApiError({ message: 'overloaded', status: 503 })));
+    __setGeminiTestHooks({ client: c, sleep: async () => {} });
+    await assert.rejects(gemini.generate(req), (err) => err.code === 'unavailable' && /overloaded/.test(err.message));
+    assert.equal(c.calls.length, 6);
+  });
+  it('does not retry client errors', async () => {
+    const c = fakeClient([new ApiError({ message: 'bad schema', status: 400 })]);
+    __setGeminiTestHooks({ client: c, sleep: async () => {} });
+    await assert.rejects(gemini.generate(req), (err) => err.code === 'invalid-argument');
+    assert.equal(c.calls.length, 1);
   });
 });
 
