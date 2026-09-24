@@ -66,7 +66,16 @@ export default function VideoStudioPage() {
 
   const providerStatus = (id: string) => integrations.data?.video.find((v) => v.id === id)
   const selectedScript = scripts.data.find((s) => s.id === form.scriptId)
-  const provider: VideoProvider = form.provider ?? integrations.data?.defaults.videoProvider ?? 'mock'
+  // Default = the backend default when it is configured, otherwise the first configured provider
+  // (the offline demo renderer is always available), so users never start on an unusable provider.
+  const defaultProvider = useMemo<VideoProvider | undefined>(() => {
+    const d = integrations.data
+    if (!d) return undefined
+    const configured = (id: string) => d.video.find((v) => v.id === id)?.configured
+    if (configured(d.defaults.videoProvider)) return d.defaults.videoProvider
+    return VIDEO_PROVIDERS.map((p) => p.id).find(configured)
+  }, [integrations.data])
+  const provider: VideoProvider = form.provider ?? defaultProvider ?? 'mock'
   const duration: VideoDuration = form.duration ?? selectedScript?.duration ?? 30
   const storeId = form.storeId ?? selectedScript?.storeId ?? defaultScope
   const title = form.title || selectedScript?.title || ''
