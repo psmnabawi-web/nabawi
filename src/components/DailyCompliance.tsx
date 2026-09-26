@@ -78,12 +78,12 @@ export function DailyCompliance({ stores, audits }: { stores: Store[]; audits: A
   const short = (n: string) => n.replace(/^Almaz Fried Chicken\s*-\s*/i, '');
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid gap-5 lg:grid-cols-2">
     <Card>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-bold text-ink">Kepatuhan scoring harian</h2>
-          <p className="text-[11px] text-muted">Store yang belum melakukan scoring pada tanggal terpilih.</p>
+          <h2 className="text-lg font-bold text-ink">Kepatuhan scoring harian</h2>
+          <p className="mt-0.5 text-sm text-muted">Store yang belum melakukan scoring pada tanggal terpilih.</p>
         </div>
         <Input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className="!w-auto" aria-label="Tanggal" />
       </div>
@@ -121,12 +121,24 @@ export function DailyCompliance({ stores, audits }: { stores: Store[]; audits: A
       </Group>
     </Card>
 
-    <Card>
-      <h2 className="text-sm font-bold text-ink">Peringkat store berdasarkan skor</h2>
-      <p className="mb-3 text-[11px] text-muted">
-        {fmtDate(date)} · {rank.length} dari {stores.filter((s) => s.active).length} store · rata-rata {rankAvg === null ? '-' : `${rankAvg.toLocaleString('id-ID')}%`} · garis putus-putus target 90% · batang pudar = draft (skor sementara)
-      </p>
-      <RankBars data={rank} target={90} />
+    <Card className="flex flex-col">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-ink">Peringkat store berdasarkan skor</h2>
+          <p className="mt-0.5 text-sm text-muted">
+            {fmtDate(date)} · {rank.length} dari {stores.filter((s) => s.active).length} store sudah scoring
+          </p>
+        </div>
+        {rankAvg !== null && (
+          <div className="shrink-0 rounded-2xl bg-surface px-3 py-2 text-right">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-muted">Rata-rata</div>
+            <div className="text-xl font-black" style={{ color: scoreColor((rankAvg / 100) * 5) }}>{rankAvg.toLocaleString('id-ID')}%</div>
+          </div>
+        )}
+      </div>
+      <div className="flex-1">
+        <RankBars data={rank} target={90} />
+      </div>
     </Card>
     </div>
   );

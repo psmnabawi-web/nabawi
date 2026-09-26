@@ -248,9 +248,11 @@ export default function DashboardPage() {
               )}
 
               <div className="mb-5 grid gap-5 lg:grid-cols-3">
-                <Card className="lg:col-span-2">
+                <Card className="flex flex-col lg:col-span-2">
                   <CardHeader title="Skor per tanggal" desc={`Rata-rata audit selesai per hari · ${days} hari terakhir`} right={<span className="rounded-full bg-brand/10 px-3 py-1 text-xs font-bold text-brand">{data.submitted.length} audit</span>} />
-                  <DateBars data={data.dateBars} target={TARGET} />
+                  <div className="flex min-h-[300px] flex-1 flex-col">
+                    <DateBars data={data.dateBars} target={TARGET} minHeight={280} />
+                  </div>
                 </Card>
                 <Card>
                   <CardHeader title="Aktivitas terakhir" desc={isAdmin ? 'Aktivitas terbaru yang tercatat.' : 'Audit terbaru di store Anda.'} />

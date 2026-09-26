@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { scoreColor } from '@/lib/utils';
+import { useEffect, useRef, useState } from 'react';
+import { cn, scoreColor } from '@/lib/utils';
 
 /** Bar horizontal per kategori: target vs aktual. */
 export function CategoryBars({ data, target = 90 }: { data: { label: string; pct: number | null; scored: number }[]; target?: number }) {
@@ -149,21 +149,34 @@ export interface DateBarDatum {
   critical: number;
 }
 
-/** Batang vertikal per tanggal: rata-rata skor audit submitted hari itu. Tanggal tanpa audit tampil kosong. */
-export function DateBars({ data, target = 90 }: { data: DateBarDatum[]; target?: number }) {
+/** Batang vertikal per tanggal: rata-rata skor audit submitted hari itu. Tanggal tanpa audit tampil sebagai titik tipis. */
+export function DateBars({ data, target = 90, minHeight = 260 }: { data: DateBarDatum[]; target?: number; minHeight?: number }) {
   const [hover, setHover] = useState<number | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState<{ w: number; h: number }>({ w: 720, h: minHeight });
+  // ukuran mengikuti kontainer (mengisi kartu), teks tetap tajam karena viewBox = piksel
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect;
+      if (r && r.width > 0) setSize({ w: Math.round(r.width), h: Math.max(minHeight, Math.round(r.height)) });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [minHeight]);
   if (data.length === 0) return <p className="p-4 text-center text-sm text-muted">Belum ada data.</p>;
-  const W = 640;
-  const H = 220;
-  const padL = 36;
-  const padR = 8;
-  const padT = 16;
+  const W = size.w;
+  const H = size.h;
+  const padL = 40;
+  const padR = 12;
+  const padT = 22;
   const padB = 30;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
   const n = data.length;
   const slot = innerW / n;
-  const barW = Math.max(3, Math.min(28, slot * 0.7));
+  const barW = Math.max(4, Math.min(18, slot * 0.55));
   const x = (i: number) => padL + slot * i + (slot - barW) / 2;
   const y = (v: number) => padT + innerH - (Math.max(0, Math.min(100, v)) / 100) * innerH;
   const ticks = [0, 25, 50, 75, 100];
@@ -171,55 +184,86 @@ export function DateBars({ data, target = 90 }: { data: DateBarDatum[]; target?:
   const showValues = n <= 14;
   const fmt = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
   const withData = data.filter((d) => d.pct !== null).length;
+  const avg = withData ? data.reduce((s, d) => s + (d.pct ?? 0), 0) / withData : null;
+  const hv = hover !== null ? data[hover] : null;
   return (
-    <div className="relative">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Skor kebersihan per tanggal">
+    <div className="relative flex h-full flex-col">
+      <div ref={boxRef} className="relative min-h-0 flex-1" style={{ minHeight }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="absolute inset-0" role="img" aria-label="Skor kebersihan per tanggal">
+        <defs>
+          {['#008300', '#2a78d6', '#eda100', '#e34948'].map((c) => (
+            <linearGradient key={c} id={`db-${c.slice(1)}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={c} stopOpacity={1} />
+              <stop offset="100%" stopColor={c} stopOpacity={0.55} />
+            </linearGradient>
+          ))}
+        </defs>
         {ticks.map((t) => (
           <g key={t}>
-            <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="#dededa" strokeWidth={1} />
-            <text x={padL - 6} y={y(t) + 4} textAnchor="end" fontSize={10} fill="#5f5e5a">
+            <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="#ecebe7" strokeWidth={1} />
+            <text x={padL - 8} y={y(t) + 4} textAnchor="end" fontSize={10} fill="#8a8985">
               {t}%
             </text>
           </g>
         ))}
-        <line x1={padL} x2={W - padR} y1={y(target)} y2={y(target)} stroke="#0b0b0b" strokeWidth={1} strokeDasharray="4 4" opacity={0.5} />
+        {hover !== null && <rect x={padL + slot * hover} y={padT - 6} width={slot} height={innerH + 6} rx={6} fill="#F26522" opacity={0.06} />}
+        <line x1={padL} x2={W - padR} y1={y(target)} y2={y(target)} stroke="#0b0b0b" strokeWidth={1} strokeDasharray="5 4" opacity={0.35} />
+        {avg !== null && <line x1={padL} x2={W - padR} y1={y(avg)} y2={y(avg)} stroke="#F26522" strokeWidth={1} strokeDasharray="2 4" opacity={0.6} />}
         {data.map((d, i) => {
           const has = d.pct !== null;
           const top = has ? y(d.pct as number) : y(0);
           const color = has ? scoreColor(((d.pct as number) / 100) * 5) : '#dededa';
           const active = hover === i;
+          const r = Math.min(barW / 2, 6);
+          const bx = x(i);
+          const path = `M${bx},${y(0)} V${top + r} Q${bx},${top} ${bx + r},${top} H${bx + barW - r} Q${bx + barW},${top} ${bx + barW},${top + r} V${y(0)} Z`;
           return (
             <g key={d.date} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)} onTouchStart={() => setHover(i)}>
-              <rect x={padL + slot * i} y={padT} width={slot} height={innerH} fill="transparent" />
+              <rect x={padL + slot * i} y={padT - 6} width={slot} height={innerH + 12} fill="transparent" />
               {has ? (
-                <rect x={x(i)} y={top} width={barW} height={Math.max(2, y(0) - top)} rx={3} fill={color} opacity={hover === null || active ? 1 : 0.6} />
+                <path d={path} fill={`url(#db-${color.slice(1)})`} opacity={hover === null || active ? 1 : 0.55} style={{ transition: 'opacity 120ms' }} />
               ) : (
-                <rect x={x(i)} y={y(0) - 2} width={barW} height={2} fill="#dededa" />
+                <circle cx={bx + barW / 2} cy={y(0) - 3} r={2} fill="#d3d2cd" />
               )}
               {has && showValues && (
-                <text x={x(i) + barW / 2} y={top - 4} textAnchor="middle" fontSize={10} fontWeight={700} fill="#0b0b0b">
+                <text x={bx + barW / 2} y={top - 6} textAnchor="middle" fontSize={10} fontWeight={700} fill="#0b0b0b">
                   {Math.round(d.pct as number)}
                 </text>
               )}
               {(i % labelEvery === 0 || i === n - 1) && (
-                <text x={x(i) + barW / 2} y={H - padB + 14} textAnchor="middle" fontSize={10} fill="#5f5e5a">
+                <text x={bx + barW / 2} y={H - padB + 16} textAnchor="middle" fontSize={10} fill="#8a8985">
                   {fmt(d.date)}
                 </text>
               )}
+              <line x1={bx + barW / 2} x2={bx + barW / 2} y1={y(0)} y2={y(0) + 4} stroke="#d3d2cd" strokeWidth={1} />
             </g>
           );
         })}
+        <line x1={padL} x2={W - padR} y1={y(0)} y2={y(0)} stroke="#cfcec9" strokeWidth={1} />
       </svg>
-      <div className="mt-1 flex flex-wrap justify-between gap-2 text-[11px] text-muted">
-        <span>Garis putus-putus = target {target}%</span>
-        <span>{withData} dari {n} hari ada audit submitted</span>
-      </div>
-      {hover !== null && (
-        <div className="pointer-events-none absolute left-1/2 top-1 -translate-x-1/2 rounded-lg border border-line bg-white px-3 py-1.5 text-xs shadow">
-          <b>{fmt(data[hover].date)}</b>:{' '}
-          {data[hover].pct === null ? 'tidak ada audit submitted' : `${(data[hover].pct as number).toLocaleString('id-ID')}% · ${data[hover].audits} audit · ${data[hover].critical} kritikal`}
+      {hv && hover !== null && (
+        <div
+          className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-xl border border-line bg-white px-3 py-2 text-xs shadow-lg"
+          style={{ left: x(hover) + barW / 2, top: (hv.pct === null ? y(0) : y(hv.pct)) - 8 }}
+        >
+          <div className="font-bold text-ink">{fmt(hv.date)}</div>
+          {hv.pct === null ? (
+            <div className="text-muted">tidak ada audit selesai</div>
+          ) : (
+            <div className="whitespace-nowrap">
+              <span className="font-bold" style={{ color: scoreColor((hv.pct / 100) * 5) }}>{hv.pct.toLocaleString('id-ID')}%</span> · {hv.audits} audit · {hv.critical} kritikal
+            </div>
+          )}
         </div>
       )}
+      </div>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted">
+        <span className="inline-flex items-center gap-3">
+          <span className="inline-flex items-center gap-1.5"><span className="inline-block h-0 w-4 border-t border-dashed border-ink/60" /> target {target}%</span>
+          {avg !== null && <span className="inline-flex items-center gap-1.5"><span className="inline-block h-0 w-4 border-t border-dotted border-brand" /> rata-rata {avg.toLocaleString('id-ID', { maximumFractionDigits: 1 })}%</span>}
+        </span>
+        <span>{withData} dari {n} hari ada audit selesai</span>
+      </div>
     </div>
   );
 }
@@ -235,75 +279,82 @@ export interface RankBarDatum {
 }
 
 /**
- * Peringkat horizontal (gaya "ranking outlet"): batang terurut dari tertinggi, satu hue oranye brand dengan gradasi
- * (makin gelap makin tinggi), label nilai di ujung batang, sumbu 0-100% dengan grid, garis target.
+ * Peringkat horizontal (gaya "ranking outlet"): nomor peringkat (medali 3 besar), nama, track dengan isi bergradasi
+ * oranye brand (makin gelap makin tinggi), chip grade, garis target, sumbu 0-100%. Draft: pola garis + border putus.
  */
 export function RankBars({ data, target = 90, unit = '%' }: { data: RankBarDatum[]; target?: number; unit?: string }) {
-  const [hover, setHover] = useState<string | null>(null);
-  if (data.length === 0) return <p className="p-4 text-center text-sm text-muted">Belum ada data.</p>;
+  if (data.length === 0) return <p className="p-6 text-center text-sm text-muted">Belum ada store yang scoring di tanggal ini.</p>;
   const sorted = [...data].sort((a, b) => b.value - a.value);
-  const W = 780;
-  const rowH = 34;
-  const padL = 185;
-  const padR = 140;
-  const padT = 8;
-  const padB = 28;
-  const H = padT + rowH * sorted.length + padB;
-  const innerW = W - padL - padR;
-  const x = (v: number) => padL + (Math.max(0, Math.min(100, v)) / 100) * innerW;
   const shade = (i: number) => {
-    // gradasi oranye brand: #C94E14 (peringkat 1) -> #F9A57A (terakhir)
     const t = sorted.length <= 1 ? 0 : i / (sorted.length - 1);
     const from = [201, 78, 20];
     const to = [249, 165, 122];
-    const c = from.map((f, k) => Math.round(f + (to[k] - f) * t));
-    return `rgb(${c[0]},${c[1]},${c[2]})`;
+    return '#' + from.map((f, k) => Math.round(f + (to[k] - f) * t).toString(16).padStart(2, '0')).join('');
   };
-  const ticks = [0, 20, 40, 60, 80, 100];
+  const medal = ['#E8B923', '#B4B7BF', '#C8853F'];
+  const gradeColor = (g: string | null) => (g === 'A' ? '#008300' : g === 'B' ? '#2a78d6' : g === 'C' ? '#eda100' : g === 'D' ? '#e34948' : '#9a9994');
+  const ticks = [0, 25, 50, 75, 100];
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Peringkat store berdasarkan skor">
-      {ticks.map((t) => (
-        <g key={t}>
-          <line x1={x(t)} x2={x(t)} y1={padT} y2={H - padB + 4} stroke="#e6e6e2" strokeWidth={1} />
-          <text x={x(t)} y={H - padB + 18} textAnchor="middle" fontSize={11} fill="#7a7975">
-            {t}
-            {unit}
-          </text>
-        </g>
-      ))}
-      <line x1={x(target)} x2={x(target)} y1={padT} y2={H - padB + 4} stroke="#0b0b0b" strokeWidth={1} strokeDasharray="4 4" opacity={0.45} />
-      {sorted.map((d, i) => {
-        const y = padT + rowH * i + 6;
-        const h = rowH - 12;
-        const active = hover === d.id;
-        const barEnd = x(d.value);
-        return (
-          <g key={d.id} onMouseEnter={() => setHover(d.id)} onMouseLeave={() => setHover(null)} onTouchStart={() => setHover(d.id)}>
-            <rect x={0} y={padT + rowH * i} width={W} height={rowH} fill={active ? '#f6f6f4' : 'transparent'} />
-            <text x={padL - 10} y={y + h / 2 + 4} textAnchor="end" fontSize={12} fill="#5f5e5a">
-              {d.label.length > 26 ? `${d.label.slice(0, 25)}…` : d.label}
-            </text>
-            <rect
-              x={padL}
-              y={y}
-              width={Math.max(4, barEnd - padL)}
-              height={h}
-              rx={h / 2}
-              fill={shade(i)}
-              fillOpacity={d.draft ? 0.35 : 1}
-              stroke={d.draft ? shade(i) : 'none'}
-              strokeWidth={d.draft ? 1.5 : 0}
-              strokeDasharray={d.draft ? '5 4' : undefined}
-            />
-            <text x={barEnd + 8} y={y + h / 2 + 4} fontSize={12} fontWeight={600} fill={d.draft ? '#5f5e5a' : '#0b0b0b'}>
-              {d.value.toLocaleString('id-ID', { maximumFractionDigits: 1 })}
+    <div>
+      <div className="space-y-2">
+        {sorted.map((d, i) => {
+          const color = shade(i);
+          const w = Math.max(0, Math.min(100, d.value));
+          return (
+            <div key={d.id} className="group flex items-center gap-3">
+              <span
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black"
+                style={i < 3 ? { backgroundColor: medal[i], color: '#fff' } : { backgroundColor: '#eeece7', color: '#5f5e5a' }}
+              >
+                {i + 1}
+              </span>
+              <div className="w-[6.5rem] shrink-0 truncate text-right text-xs font-semibold text-ink sm:w-[9.5rem] sm:text-sm" title={d.label}>
+                {d.label}
+              </div>
+              <div className="relative h-8 flex-1 rounded-full bg-surface-2" title={`${d.label}: ${d.value.toLocaleString('id-ID')}${unit}${d.grade ? ` · ${d.grade}` : ''}${d.sub ? ` · ${d.sub}` : ''}`}>
+                <div
+                  className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500"
+                  style={
+                    d.draft
+                      ? { width: `${w}%`, backgroundImage: `repeating-linear-gradient(135deg, ${color}55 0 6px, ${color}22 6px 12px)`, border: `1.5px dashed ${color}` }
+                      : { width: `${w}%`, background: `linear-gradient(90deg, ${color}cc, ${color})`, boxShadow: `inset 0 -2px 0 rgba(0,0,0,0.08)` }
+                  }
+                />
+                <div className="pointer-events-none absolute inset-y-[-3px] border-l-2 border-dashed border-ink/40" style={{ left: `${target}%` }} />
+              </div>
+              <div className="flex w-[5.5rem] shrink-0 items-center gap-1.5 sm:w-[6rem] xl:w-[10rem]">
+                <span className={cn('text-sm font-black tabular-nums', d.draft ? 'text-muted' : 'text-ink')}>
+                  {d.value.toLocaleString('id-ID', { maximumFractionDigits: 1 })}
+                  {unit}
+                </span>
+                {d.grade && (
+                  <span className="rounded-full px-1.5 py-0.5 text-[10px] font-black text-white" style={{ backgroundColor: gradeColor(d.grade) }}>
+                    {d.grade}
+                  </span>
+                )}
+                {d.sub && <span className="hidden truncate text-[11px] text-muted xl:inline">{d.sub}</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex items-center gap-3">
+        <span className="w-7 shrink-0" />
+        <span className="w-[6.5rem] shrink-0 sm:w-[9.5rem]" />
+        <div className="relative h-4 flex-1">
+          {ticks.map((t) => (
+            <span key={t} className="absolute -translate-x-1/2 text-[10px] text-muted" style={{ left: `${t}%` }}>
+              {t}
               {unit}
-              {d.grade ? ` · ${d.grade}` : ''}
-              {d.sub ? ` · ${d.sub}` : ''}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
+            </span>
+          ))}
+        </div>
+        <span className="w-[5.5rem] shrink-0 sm:w-[6rem] xl:w-[10rem]" />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-0 w-4 border-t-2 border-dashed border-ink/40" /> target {target}%</span>
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-3 w-5 rounded-full border border-dashed border-brand bg-[repeating-linear-gradient(135deg,#F2652255_0_4px,#F2652222_4px_8px)]" /> draft (skor sementara)</span>
+      </div>
+    </div>
   );
 }
