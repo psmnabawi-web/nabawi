@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/AppShell';
 import { useAuth } from '@/components/AuthProvider';
 import { GradeBadge } from '@/components/ScoreBadge';
@@ -11,11 +12,13 @@ import { useAudits, useStores } from '@/lib/hooks';
 import { SHIFTS } from '@/lib/types';
 import { fmtDate } from '@/lib/utils';
 
-export default function AuditsPage() {
+function AuditsInner() {
+  const params = useSearchParams();
   const { profile } = useAuth();
   const { stores } = useStores(true);
   const [storeFilter, setStoreFilter] = useState<string>('all');
-  const [status, setStatus] = useState<'all' | 'draft' | 'submitted'>('all');
+  const initial = params.get('status');
+  const [status, setStatus] = useState<'all' | 'draft' | 'submitted'>(initial === 'draft' || initial === 'submitted' ? initial : 'all');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const { audits, loading, error } = useAudits(profile, storeFilter);
@@ -113,5 +116,13 @@ export default function AuditsPage() {
         </div>
       )}
     </AppShell>
+  );
+}
+
+export default function AuditsPage() {
+  return (
+    <Suspense>
+      <AuditsInner />
+    </Suspense>
   );
 }

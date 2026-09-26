@@ -35,8 +35,8 @@ export function DailyCompliance({ stores, audits }: { stores: Store[]; audits: A
         const draft = list.find((a) => a.status === 'draft');
         if (done) return { store, state: 'done', audit: done, progress: 100 };
         if (draft) {
-          const total = draft.summary.itemCount + draft.summary.skippedCount;
-          const finished = draft.summary.lockedCount + draft.summary.skippedCount;
+          const total = (draft.summary.itemCount ?? 0) + (draft.summary.skippedCount ?? 0);
+          const finished = (draft.summary.lockedCount ?? 0) + (draft.summary.skippedCount ?? 0);
           return { store, state: 'draft', audit: draft, progress: total ? Math.round((finished / total) * 100) : 0 };
         }
         return { store, state: 'none', audit: null, progress: null };
@@ -55,8 +55,8 @@ export function DailyCompliance({ stores, audits }: { stores: Store[]; audits: A
       g.grade = a.summary.grade;
       if (a.status === 'draft') {
         g.drafts += 1;
-        g.locked += a.summary.lockedCount;
-        g.total += a.summary.itemCount;
+        g.locked += a.summary.lockedCount ?? 0;
+        g.total += a.summary.itemCount ?? 0;
       }
       agg.set(a.storeId, g);
     }
@@ -85,7 +85,7 @@ export function DailyCompliance({ stores, audits }: { stores: Store[]; audits: A
           <h2 className="text-sm font-bold text-ink">Kepatuhan scoring harian</h2>
           <p className="text-[11px] text-muted">Store yang belum melakukan scoring pada tanggal terpilih.</p>
         </div>
-        <Input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className="w-auto" aria-label="Tanggal" />
+        <Input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className="!w-auto" aria-label="Tanggal" />
       </div>
 
       <div className="mb-3 grid grid-cols-3 gap-2 text-center">

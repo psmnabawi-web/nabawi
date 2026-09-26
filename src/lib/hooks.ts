@@ -1,10 +1,10 @@
 'use client';
 
-import { collection, doc, onSnapshot, orderBy, query, where, type DocumentData, type Query } from 'firebase/firestore';
+import { collection, doc, limit, onSnapshot, orderBy, query, where, type DocumentData, type Query } from 'firebase/firestore';
 import { useEffect, useMemo, useState } from 'react';
 import { db } from './firebase/client';
 import { DEFAULT_INDICATORS, type Indicator } from './indicators';
-import type { Audit, AuditItem, Store, UserProfile } from './types';
+import type { Audit, AuditItem, AuditLog, Store, UserProfile } from './types';
 
 /** Realtime daftar store aktif. */
 export function useStores(includeInactive = false) {
@@ -108,4 +108,15 @@ export function useAudit(id: string | null) {
   }, [id]);
 
   return { audit, items, loading, error };
+}
+
+/** Aktivitas terakhir (audit trail) untuk admin; user lain mendapat [] tanpa error. */
+export function useRecentLogs(enabled: boolean, max = 8) {
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  useEffect(() => {
+    if (!enabled) return;
+    const q = query(collection(db(), 'auditLogs'), orderBy('at', 'desc'), limit(max));
+    return onSnapshot(q, (snap) => setLogs(snap.docs.map((d) => d.data() as AuditLog)), () => setLogs([]));
+  }, [enabled, max]);
+  return enabled ? logs : [];
 }
