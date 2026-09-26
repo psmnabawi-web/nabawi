@@ -230,6 +230,8 @@ export interface RankBarDatum {
   value: number; // 0-100
   grade: string | null;
   sub?: string;
+  /** Audit masih draft: batang pudar & bergaris putus (skor sementara). */
+  draft?: boolean;
 }
 
 /**
@@ -281,8 +283,19 @@ export function RankBars({ data, target = 90, unit = '%' }: { data: RankBarDatum
             <text x={padL - 10} y={y + h / 2 + 4} textAnchor="end" fontSize={12} fill="#5f5e5a">
               {d.label.length > 26 ? `${d.label.slice(0, 25)}…` : d.label}
             </text>
-            <rect x={padL} y={y} width={Math.max(4, barEnd - padL)} height={h} rx={h / 2} fill={shade(i)} />
-            <text x={barEnd + 8} y={y + h / 2 + 4} fontSize={12} fontWeight={600} fill="#0b0b0b">
+            <rect
+              x={padL}
+              y={y}
+              width={Math.max(4, barEnd - padL)}
+              height={h}
+              rx={h / 2}
+              fill={shade(i)}
+              fillOpacity={d.draft ? 0.35 : 1}
+              stroke={d.draft ? shade(i) : 'none'}
+              strokeWidth={d.draft ? 1.5 : 0}
+              strokeDasharray={d.draft ? '5 4' : undefined}
+            />
+            <text x={barEnd + 8} y={y + h / 2 + 4} fontSize={12} fontWeight={600} fill={d.draft ? '#5f5e5a' : '#0b0b0b'}>
               {d.value.toLocaleString('id-ID', { maximumFractionDigits: 1 })}
               {unit}
               {d.grade ? ` · ${d.grade}` : ''}

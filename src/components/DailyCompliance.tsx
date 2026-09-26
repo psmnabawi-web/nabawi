@@ -44,20 +44,31 @@ export function DailyCompliance({ stores, audits }: { stores: Store[]; audits: A
       .sort((a, b) => a.store.name.localeCompare(b.store.name));
   }, [stores, audits, date]);
 
-  // peringkat skor hari itu: rata-rata semua audit submitted per store
+  // peringkat skor hari itu: audit submitted (final) dan draft (skor sementara, ditandai)
   const rank = useMemo<RankBarDatum[]>(() => {
-    const agg = new Map<string, { name: string; sum: number; n: number; grade: string | null }>();
+    const agg = new Map<string, { name: string; sum: number; n: number; grade: string | null; drafts: number; locked: number; total: number }>();
     for (const a of audits) {
-      if (a.date !== date || a.status !== 'submitted' || a.summary.pct === null) continue;
-      const g = agg.get(a.storeId) ?? { name: a.storeName, sum: 0, n: 0, grade: null };
+      if (a.date !== date || a.summary.pct === null) continue;
+      const g = agg.get(a.storeId) ?? { name: a.storeName, sum: 0, n: 0, grade: null, drafts: 0, locked: 0, total: 0 };
       g.sum += a.summary.pct;
       g.n += 1;
       g.grade = a.summary.grade;
+      if (a.status === 'draft') {
+        g.drafts += 1;
+        g.locked += a.summary.lockedCount;
+        g.total += a.summary.itemCount;
+      }
       agg.set(a.storeId, g);
     }
     return [...agg.entries()]
       .filter(([id]) => stores.some((s) => s.id === id))
-      .map(([id, g]) => ({ id, label: g.name.replace(/^Almaz Fried Chicken\s*-\s*/i, ''), value: round1(g.sum / g.n), grade: g.grade, sub: g.n > 1 ? `${g.n} audit` : undefined }));
+      .map(([id, g]) => {
+        const draft = g.drafts > 0;
+        const parts: string[] = [];
+        if (g.n > 1) parts.push(`${g.n} audit`);
+        if (draft) parts.push(`draft ${g.locked}/${g.total} area`);
+        return { id, label: g.name.replace(/^Almaz Fried Chicken\s*-\s*/i, ''), value: round1(g.sum / g.n), grade: g.grade, sub: parts.join(' · ') || undefined, draft };
+      });
   }, [audits, date, stores]);
   const rankAvg = rank.length ? round1(rank.reduce((s, r) => s + r.value, 0) / rank.length) : null;
 
@@ -113,7 +124,7 @@ export function DailyCompliance({ stores, audits }: { stores: Store[]; audits: A
     <Card>
       <h2 className="text-sm font-bold text-ink">Peringkat store berdasarkan skor</h2>
       <p className="mb-3 text-[11px] text-muted">
-        {fmtDate(date)} · {rank.length} dari {stores.filter((s) => s.active).length} store · rata-rata {rankAvg === null ? '-' : `${rankAvg.toLocaleString('id-ID')}%`} · garis putus-putus target 90%
+        {fmtDate(date)} · {rank.length} dari {stores.filter((s) => s.active).length} store · rata-rata {rankAvg === null ? '-' : `${rankAvg.toLocaleString('id-ID')}%`} · garis putus-putus target 90% · batang pudar = draft (skor sementara)
       </p>
       <RankBars data={rank} target={90} />
     </Card>
