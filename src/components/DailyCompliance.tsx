@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { RankBars, type RankBarDatum } from './Charts';
 import { Card, Input } from './ui';
 import type { Audit, Store } from '@/lib/types';
 import { cn, fmtDate, scoreColor, todayISO } from '@/lib/utils';
+import { round1 } from '@/lib/scoring';
 
 interface Row {
   store: Store;
@@ -42,12 +44,30 @@ export function DailyCompliance({ stores, audits }: { stores: Store[]; audits: A
       .sort((a, b) => a.store.name.localeCompare(b.store.name));
   }, [stores, audits, date]);
 
+  // peringkat skor hari itu: rata-rata semua audit submitted per store
+  const rank = useMemo<RankBarDatum[]>(() => {
+    const agg = new Map<string, { name: string; sum: number; n: number; grade: string | null }>();
+    for (const a of audits) {
+      if (a.date !== date || a.status !== 'submitted' || a.summary.pct === null) continue;
+      const g = agg.get(a.storeId) ?? { name: a.storeName, sum: 0, n: 0, grade: null };
+      g.sum += a.summary.pct;
+      g.n += 1;
+      g.grade = a.summary.grade;
+      agg.set(a.storeId, g);
+    }
+    return [...agg.entries()]
+      .filter(([id]) => stores.some((s) => s.id === id))
+      .map(([id, g]) => ({ id, label: g.name.replace(/^Almaz Fried Chicken\s*-\s*/i, ''), value: round1(g.sum / g.n), grade: g.grade, sub: g.n > 1 ? `${g.n} audit` : undefined }));
+  }, [audits, date, stores]);
+  const rankAvg = rank.length ? round1(rank.reduce((s, r) => s + r.value, 0) / rank.length) : null;
+
   const none = rows.filter((r) => r.state === 'none');
   const draft = rows.filter((r) => r.state === 'draft');
   const done = rows.filter((r) => r.state === 'done');
   const short = (n: string) => n.replace(/^Almaz Fried Chicken\s*-\s*/i, '');
 
   return (
+    <div className="grid gap-4 lg:grid-cols-2">
     <Card>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -89,6 +109,15 @@ export function DailyCompliance({ stores, audits }: { stores: Store[]; audits: A
         ))}
       </Group>
     </Card>
+
+    <Card>
+      <h2 className="text-sm font-bold text-ink">Peringkat store berdasarkan skor</h2>
+      <p className="mb-3 text-[11px] text-muted">
+        {fmtDate(date)} · {rank.length} dari {stores.filter((s) => s.active).length} store · rata-rata {rankAvg === null ? '-' : `${rankAvg.toLocaleString('id-ID')}%`} · garis putus-putus target 90%
+      </p>
+      <RankBars data={rank} target={90} />
+    </Card>
+    </div>
   );
 }
 

@@ -223,3 +223,74 @@ export function DateBars({ data, target = 90 }: { data: DateBarDatum[]; target?:
     </div>
   );
 }
+
+export interface RankBarDatum {
+  id: string;
+  label: string;
+  value: number; // 0-100
+  grade: string | null;
+  sub?: string;
+}
+
+/**
+ * Peringkat horizontal (gaya "ranking outlet"): batang terurut dari tertinggi, satu hue oranye brand dengan gradasi
+ * (makin gelap makin tinggi), label nilai di ujung batang, sumbu 0-100% dengan grid, garis target.
+ */
+export function RankBars({ data, target = 90, unit = '%' }: { data: RankBarDatum[]; target?: number; unit?: string }) {
+  const [hover, setHover] = useState<string | null>(null);
+  if (data.length === 0) return <p className="p-4 text-center text-sm text-muted">Belum ada data.</p>;
+  const sorted = [...data].sort((a, b) => b.value - a.value);
+  const W = 780;
+  const rowH = 34;
+  const padL = 185;
+  const padR = 140;
+  const padT = 8;
+  const padB = 28;
+  const H = padT + rowH * sorted.length + padB;
+  const innerW = W - padL - padR;
+  const x = (v: number) => padL + (Math.max(0, Math.min(100, v)) / 100) * innerW;
+  const shade = (i: number) => {
+    // gradasi oranye brand: #C94E14 (peringkat 1) -> #F9A57A (terakhir)
+    const t = sorted.length <= 1 ? 0 : i / (sorted.length - 1);
+    const from = [201, 78, 20];
+    const to = [249, 165, 122];
+    const c = from.map((f, k) => Math.round(f + (to[k] - f) * t));
+    return `rgb(${c[0]},${c[1]},${c[2]})`;
+  };
+  const ticks = [0, 20, 40, 60, 80, 100];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Peringkat store berdasarkan skor">
+      {ticks.map((t) => (
+        <g key={t}>
+          <line x1={x(t)} x2={x(t)} y1={padT} y2={H - padB + 4} stroke="#e6e6e2" strokeWidth={1} />
+          <text x={x(t)} y={H - padB + 18} textAnchor="middle" fontSize={11} fill="#7a7975">
+            {t}
+            {unit}
+          </text>
+        </g>
+      ))}
+      <line x1={x(target)} x2={x(target)} y1={padT} y2={H - padB + 4} stroke="#0b0b0b" strokeWidth={1} strokeDasharray="4 4" opacity={0.45} />
+      {sorted.map((d, i) => {
+        const y = padT + rowH * i + 6;
+        const h = rowH - 12;
+        const active = hover === d.id;
+        const barEnd = x(d.value);
+        return (
+          <g key={d.id} onMouseEnter={() => setHover(d.id)} onMouseLeave={() => setHover(null)} onTouchStart={() => setHover(d.id)}>
+            <rect x={0} y={padT + rowH * i} width={W} height={rowH} fill={active ? '#f6f6f4' : 'transparent'} />
+            <text x={padL - 10} y={y + h / 2 + 4} textAnchor="end" fontSize={12} fill="#5f5e5a">
+              {d.label.length > 26 ? `${d.label.slice(0, 25)}…` : d.label}
+            </text>
+            <rect x={padL} y={y} width={Math.max(4, barEnd - padL)} height={h} rx={h / 2} fill={shade(i)} />
+            <text x={barEnd + 8} y={y + h / 2 + 4} fontSize={12} fontWeight={600} fill="#0b0b0b">
+              {d.value.toLocaleString('id-ID', { maximumFractionDigits: 1 })}
+              {unit}
+              {d.grade ? ` · ${d.grade}` : ''}
+              {d.sub ? ` · ${d.sub}` : ''}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
