@@ -1,5 +1,5 @@
 import 'server-only';
-import { ApiError, GoogleGenAI, type GoogleGenAIOptions } from '@google/genai';
+import { ApiError, GoogleGenAI, MediaResolution, ThinkingLevel, type GoogleGenAIOptions } from '@google/genai';
 import { HttpError } from '../utils';
 import { buildUserText, SYSTEM_PROMPT, type AnalyzeInput, type RawAiOutput } from './prompt';
 
@@ -23,6 +23,8 @@ const RESPONSE_SCHEMA = {
     issues: { type: 'array', items: { type: 'string' }, description: 'Temuan spesifik yang TIDAK memenuhi standar (kosong jika tidak ada).' },
     metCriteria: { type: 'array', items: { type: 'string' }, description: 'Kriteria standar yang terlihat TERPENUHI di foto.' },
     recommendation: { type: 'string', description: 'Ringkasan tindakan perbaikan (1-2 kalimat). Jika skor 5 tulis "Pertahankan kondisi."' },
+    coverage: { type: 'string', enum: ['full', 'partial', 'unclear'], description: 'full = seluruh area terlihat jelas & dekat; partial = ada bagian tidak terlihat/terlalu jauh/terlalu zoom/tertutup; unclear = tidak bisa dipastikan.' },
+    hiddenZones: { type: 'array', items: { type: 'string' }, description: 'Bagian area yang tidak terlihat di foto dan wajib difoto (kosong jika coverage=full).' },
     actionPlan: {
       type: 'array',
       description: 'Langkah perbaikan berurutan dan rinci agar skor mencapai batas lolos. Kosong jika sudah lolos.',
@@ -42,8 +44,8 @@ const RESPONSE_SCHEMA = {
     estimatedMinutes: { type: 'integer', minimum: 0, maximum: 600, description: 'Perkiraan total menit pengerjaan. 0 jika sudah lolos.' },
     confidence: { type: 'string', enum: ['high', 'medium', 'low'], description: 'Keyakinan penilaian berdasarkan kejelasan foto.' },
   },
-  required: ['photoValid', 'photoIssue', 'score', 'findings', 'issues', 'metCriteria', 'recommendation', 'actionPlan', 'passChecklist', 'estimatedMinutes', 'confidence'],
-  propertyOrdering: ['photoValid', 'photoIssue', 'score', 'findings', 'issues', 'metCriteria', 'recommendation', 'actionPlan', 'passChecklist', 'estimatedMinutes', 'confidence'],
+  required: ['photoValid', 'photoIssue', 'score', 'findings', 'issues', 'metCriteria', 'recommendation', 'coverage', 'hiddenZones', 'actionPlan', 'passChecklist', 'estimatedMinutes', 'confidence'],
+  propertyOrdering: ['photoValid', 'photoIssue', 'score', 'findings', 'issues', 'metCriteria', 'recommendation', 'coverage', 'hiddenZones', 'actionPlan', 'passChecklist', 'estimatedMinutes', 'confidence'],
 } as const;
 
 interface ServiceAccount {
@@ -93,8 +95,11 @@ export async function analyzeWithGoogle(input: AnalyzeInput, model: string): Pro
       systemInstruction: SYSTEM_PROMPT,
       responseMimeType: 'application/json',
       responseJsonSchema: RESPONSE_SCHEMA,
-      temperature: 0.2,
-      maxOutputTokens: 12288, // termasuk token thinking pada Gemini 3.x; rencana perbaikan bisa panjang
+      temperature: 0,
+      // resolusi media tinggi + thinking HIGH: AI memeriksa detail kecil (kilap minyak, nat, sudut) lebih teliti
+      mediaResolution: MediaResolution.MEDIA_RESOLUTION_HIGH,
+      thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
+      maxOutputTokens: 16384, // termasuk token thinking pada Gemini 3.x; rencana perbaikan bisa panjang
     },
   };
 
@@ -187,6 +192,8 @@ function normalize(o: Record<string, unknown>, model: string): RawAiOutput {
     issues: strArr(o.issues),
     metCriteria: strArr(o.metCriteria),
     recommendation: typeof o.recommendation === 'string' ? o.recommendation.trim() : '',
+    coverage: o.coverage === 'full' || o.coverage === 'partial' || o.coverage === 'unclear' ? o.coverage : 'unclear',
+    hiddenZones: strArr(o.hiddenZones),
     actionPlan: plan,
     passChecklist: strArr(o.passChecklist),
     estimatedMinutes: minutes,

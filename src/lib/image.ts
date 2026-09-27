@@ -4,8 +4,8 @@
  * - JPEG quality 0.82
  * Mengurangi payload dan biaya token vision tanpa menghilangkan detail kebersihan.
  */
-const MAX_SIDE = 1280;
-const QUALITY = 0.82;
+const MAX_SIDE = 1600;
+const QUALITY = 0.86;
 
 export interface CompressedImage {
   base64: string; // tanpa prefix data:

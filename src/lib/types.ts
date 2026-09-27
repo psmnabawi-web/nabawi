@@ -45,6 +45,12 @@ export interface AiResult {
   issues: string[];
   metCriteria: string[];
   recommendation: string;
+  /** Apakah foto memperlihatkan seluruh area. partial/unclear -> skor dibatasi maksimal 3. */
+  coverage?: 'full' | 'partial' | 'unclear';
+  /** Bagian area yang tidak terlihat di foto dan wajib difoto. */
+  hiddenZones?: string[];
+  /** Penyesuaian ketat yang diterapkan server (mis. skor diturunkan karena coverage parsial). */
+  adjustments?: string[];
   /** Rencana perbaikan rinci (hanya diisi jika skor di bawah batas lolos atau foto tidak valid). */
   actionPlan?: ActionStep[];
   /** Ciri yang harus terlihat di foto ulang agar lolos batas. */

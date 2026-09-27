@@ -16,6 +16,8 @@ const ResultSchema = z.object({
   issues: z.array(z.string()).describe('Daftar temuan spesifik yang TIDAK memenuhi standar (kosong jika tidak ada).'),
   metCriteria: z.array(z.string()).describe('Daftar kriteria standar yang terlihat TERPENUHI di foto.'),
   recommendation: z.string().describe('Ringkasan tindakan perbaikan (1-2 kalimat). Jika skor 5, tulis "Pertahankan kondisi."'),
+  coverage: z.enum(['full', 'partial', 'unclear']).describe('full = seluruh area terlihat jelas & dekat; partial = ada bagian tidak terlihat; unclear = tidak bisa dipastikan.'),
+  hiddenZones: z.array(z.string()).describe('Bagian area yang tidak terlihat di foto dan wajib difoto (kosong jika full).'),
   actionPlan: z
     .array(z.object({ step: z.string(), detail: z.string(), tool: z.string(), check: z.string() }))
     .describe('Langkah perbaikan berurutan dan rinci agar skor mencapai batas lolos. Kosong jika sudah lolos.'),
@@ -73,6 +75,8 @@ export async function analyzeWithAnthropic(input: AnalyzeInput, model: string): 
     issues: parsed.issues,
     metCriteria: parsed.metCriteria,
     recommendation: parsed.recommendation,
+    coverage: parsed.coverage,
+    hiddenZones: parsed.hiddenZones,
     actionPlan: parsed.actionPlan,
     passChecklist: parsed.passChecklist,
     estimatedMinutes: parsed.estimatedMinutes,
