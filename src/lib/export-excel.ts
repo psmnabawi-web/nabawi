@@ -54,7 +54,7 @@ export async function exportAuditExcel(audit: Audit, items: AuditItem[]) {
       standard: it.standard,
       score: score ?? null,
       findings: it.ai ? [it.ai.findings, ...it.ai.issues.map((i) => `- ${i}`)].join('\n') : '',
-      recommendation: it.ai?.recommendation ?? '',
+      recommendation: it.ai ? [it.ai.recommendation, ...(it.ai.actionPlan ?? []).map((st, i) => `${i + 1}. ${st.step}: ${st.detail}${st.tool ? ` (${st.tool})` : ''}`)].filter(Boolean).join('\n') : '',
       aiScore: it.ai?.score ?? null,
       firstScore: it.firstAiScore ?? null,
       retries: Math.max(0, (it.attempts ?? (it.ai ? 1 : 0)) - 1),

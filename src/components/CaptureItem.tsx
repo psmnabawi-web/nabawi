@@ -235,6 +235,52 @@ export function CaptureItem({ item, auditId, editable, role, isActive, isBlocked
                 <span className="font-semibold text-ink">Rekomendasi: </span>
                 {item.ai.recommendation}
               </div>
+              {!locked && !passes && (item.ai.actionPlan?.length || item.ai.passChecklist?.length) ? (
+                <div className="mt-2 overflow-hidden rounded-xl border border-brand/30 bg-white">
+                  <div className="flex items-center justify-between gap-2 bg-brand/10 px-3 py-2">
+                    <div className="text-sm font-bold text-brand">Panduan agar lolos ≥ {MIN_SUBMIT_PCT}%</div>
+                    {item.ai.estimatedMinutes ? <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-brand">± {item.ai.estimatedMinutes} menit</span> : null}
+                  </div>
+                  {item.ai.actionPlan && item.ai.actionPlan.length > 0 && (
+                    <ol className="divide-y divide-line/70">
+                      {item.ai.actionPlan.map((st, idx) => (
+                        <li key={idx} className="flex gap-3 px-3 py-2.5">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-black text-white">{idx + 1}</span>
+                          <div className="min-w-0 text-sm">
+                            <div className="font-semibold text-ink">{st.step}</div>
+                            {st.detail && <div className="mt-0.5 text-ink/90">{st.detail}</div>}
+                            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted">
+                              {st.tool && (
+                                <span>
+                                  <b className="text-ink">Alat/bahan:</b> {st.tool}
+                                </span>
+                              )}
+                              {st.check && (
+                                <span>
+                                  <b className="text-ink">Cek:</b> {st.check}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                  {item.ai.passChecklist && item.ai.passChecklist.length > 0 && (
+                    <div className="border-t border-line/70 bg-green-50/60 px-3 py-2.5">
+                      <div className="mb-1 text-xs font-bold uppercase tracking-wide text-good">Yang harus terlihat di foto ulang</div>
+                      <ul className="space-y-1 text-sm text-ink">
+                        {item.ai.passChecklist.map((c, idx) => (
+                          <li key={idx} className="flex items-start gap-2">
+                            <span className="mt-0.5 text-good">✓</span>
+                            <span>{c}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ) : null}
               <div className="text-[11px] text-muted">
                 Skor AI: <b>{item.ai.score ?? '-'}</b> · percobaan ke-{attempts}
                 {item.firstAiScore !== null && item.firstAiScore !== undefined && attempts > 1 && <> · skor awal <b>{item.firstAiScore}</b></>} · {item.capturedByName} ·{' '}

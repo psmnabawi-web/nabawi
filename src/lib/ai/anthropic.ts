@@ -15,7 +15,12 @@ const ResultSchema = z.object({
   findings: z.string().describe('Ringkasan temuan audit 1-3 kalimat, Bahasa Indonesia, gaya laporan lapangan.'),
   issues: z.array(z.string()).describe('Daftar temuan spesifik yang TIDAK memenuhi standar (kosong jika tidak ada).'),
   metCriteria: z.array(z.string()).describe('Daftar kriteria standar yang terlihat TERPENUHI di foto.'),
-  recommendation: z.string().describe('Tindakan perbaikan konkret untuk crew (1-2 kalimat). Jika skor 5, tulis "Pertahankan kondisi."'),
+  recommendation: z.string().describe('Ringkasan tindakan perbaikan (1-2 kalimat). Jika skor 5, tulis "Pertahankan kondisi."'),
+  actionPlan: z
+    .array(z.object({ step: z.string(), detail: z.string(), tool: z.string(), check: z.string() }))
+    .describe('Langkah perbaikan berurutan dan rinci agar skor mencapai batas lolos. Kosong jika sudah lolos.'),
+  passChecklist: z.array(z.string()).describe('Ciri visual yang harus terlihat di foto ulang agar lolos, termasuk cara memotret. Kosong jika sudah lolos.'),
+  estimatedMinutes: z.number().int().min(0).max(600).describe('Perkiraan total menit pengerjaan. 0 jika sudah lolos.'),
   confidence: z.enum(['high', 'medium', 'low']).describe('Keyakinan penilaian berdasarkan kejelasan foto.'),
 });
 
@@ -68,6 +73,9 @@ export async function analyzeWithAnthropic(input: AnalyzeInput, model: string): 
     issues: parsed.issues,
     metCriteria: parsed.metCriteria,
     recommendation: parsed.recommendation,
+    actionPlan: parsed.actionPlan,
+    passChecklist: parsed.passChecklist,
+    estimatedMinutes: parsed.estimatedMinutes,
     confidence: parsed.confidence,
     model: response.model,
   };

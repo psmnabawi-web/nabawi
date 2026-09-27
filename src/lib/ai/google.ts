@@ -22,11 +22,28 @@ const RESPONSE_SCHEMA = {
     findings: { type: 'string', description: 'Ringkasan temuan 1-3 kalimat, Bahasa Indonesia, gaya laporan lapangan.' },
     issues: { type: 'array', items: { type: 'string' }, description: 'Temuan spesifik yang TIDAK memenuhi standar (kosong jika tidak ada).' },
     metCriteria: { type: 'array', items: { type: 'string' }, description: 'Kriteria standar yang terlihat TERPENUHI di foto.' },
-    recommendation: { type: 'string', description: 'Tindakan perbaikan konkret untuk crew (1-2 kalimat). Jika skor 5 tulis "Pertahankan kondisi."' },
+    recommendation: { type: 'string', description: 'Ringkasan tindakan perbaikan (1-2 kalimat). Jika skor 5 tulis "Pertahankan kondisi."' },
+    actionPlan: {
+      type: 'array',
+      description: 'Langkah perbaikan berurutan dan rinci agar skor mencapai batas lolos. Kosong jika sudah lolos.',
+      items: {
+        type: 'object',
+        properties: {
+          step: { type: 'string', description: 'Judul langkah singkat, mis. "Kerok grease tebal".' },
+          detail: { type: 'string', description: 'Cara mengerjakan secara spesifik: bagian mana, gerakan, arah, durasi, apa yang dilepas.' },
+          tool: { type: 'string', description: 'Alat dan bahan yang dipakai.' },
+          check: { type: 'string', description: 'Cara memastikan langkah ini selesai.' },
+        },
+        required: ['step', 'detail', 'tool', 'check'],
+        propertyOrdering: ['step', 'detail', 'tool', 'check'],
+      },
+    },
+    passChecklist: { type: 'array', items: { type: 'string' }, description: 'Ciri visual yang harus terlihat di foto ulang agar lolos, termasuk cara memotret. Kosong jika sudah lolos.' },
+    estimatedMinutes: { type: 'integer', minimum: 0, maximum: 600, description: 'Perkiraan total menit pengerjaan. 0 jika sudah lolos.' },
     confidence: { type: 'string', enum: ['high', 'medium', 'low'], description: 'Keyakinan penilaian berdasarkan kejelasan foto.' },
   },
-  required: ['photoValid', 'photoIssue', 'score', 'findings', 'issues', 'metCriteria', 'recommendation', 'confidence'],
-  propertyOrdering: ['photoValid', 'photoIssue', 'score', 'findings', 'issues', 'metCriteria', 'recommendation', 'confidence'],
+  required: ['photoValid', 'photoIssue', 'score', 'findings', 'issues', 'metCriteria', 'recommendation', 'actionPlan', 'passChecklist', 'estimatedMinutes', 'confidence'],
+  propertyOrdering: ['photoValid', 'photoIssue', 'score', 'findings', 'issues', 'metCriteria', 'recommendation', 'actionPlan', 'passChecklist', 'estimatedMinutes', 'confidence'],
 } as const;
 
 interface ServiceAccount {
@@ -77,7 +94,7 @@ export async function analyzeWithGoogle(input: AnalyzeInput, model: string): Pro
       responseMimeType: 'application/json',
       responseJsonSchema: RESPONSE_SCHEMA,
       temperature: 0.2,
-      maxOutputTokens: 8192, // termasuk token thinking pada Gemini 3.x
+      maxOutputTokens: 12288, // termasuk token thinking pada Gemini 3.x; rencana perbaikan bisa panjang
     },
   };
 
@@ -150,6 +167,18 @@ function normalize(o: Record<string, unknown>, model: string): RawAiOutput {
   const score = Number.isFinite(scoreRaw) && scoreRaw >= 1 && scoreRaw <= 5 ? scoreRaw : null;
   const photoValid = o.photoValid === true && score !== null;
   const conf = o.confidence === 'high' || o.confidence === 'medium' || o.confidence === 'low' ? o.confidence : 'medium';
+  const plan = Array.isArray(o.actionPlan)
+    ? o.actionPlan
+        .filter((x): x is Record<string, unknown> => !!x && typeof x === 'object')
+        .map((x) => ({
+          step: typeof x.step === 'string' ? x.step.trim() : '',
+          detail: typeof x.detail === 'string' ? x.detail.trim() : '',
+          tool: typeof x.tool === 'string' ? x.tool.trim() : '',
+          check: typeof x.check === 'string' ? x.check.trim() : '',
+        }))
+        .filter((x) => x.step || x.detail)
+    : [];
+  const minutes = typeof o.estimatedMinutes === 'number' && Number.isFinite(o.estimatedMinutes) ? Math.max(0, Math.round(o.estimatedMinutes)) : null;
   return {
     photoValid,
     photoIssue: photoValid ? null : (typeof o.photoIssue === 'string' && o.photoIssue.trim()) || 'Foto tidak dapat dinilai.',
@@ -158,6 +187,9 @@ function normalize(o: Record<string, unknown>, model: string): RawAiOutput {
     issues: strArr(o.issues),
     metCriteria: strArr(o.metCriteria),
     recommendation: typeof o.recommendation === 'string' ? o.recommendation.trim() : '',
+    actionPlan: plan,
+    passChecklist: strArr(o.passChecklist),
+    estimatedMinutes: minutes,
     confidence: conf,
     model,
   };

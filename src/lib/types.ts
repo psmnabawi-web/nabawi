@@ -30,6 +30,13 @@ export type Shift = 'PAGI' | 'SIANG' | 'MALAM';
 export type AuditStatus = 'draft' | 'submitted';
 export type ItemStatus = 'pending' | 'scored' | 'invalid' | 'override' | 'skipped';
 
+export interface ActionStep {
+  step: string;
+  detail: string;
+  tool: string;
+  check: string;
+}
+
 export interface AiResult {
   photoValid: boolean;
   photoIssue: string | null;
@@ -38,6 +45,12 @@ export interface AiResult {
   issues: string[];
   metCriteria: string[];
   recommendation: string;
+  /** Rencana perbaikan rinci (hanya diisi jika skor di bawah batas lolos atau foto tidak valid). */
+  actionPlan?: ActionStep[];
+  /** Ciri yang harus terlihat di foto ulang agar lolos batas. */
+  passChecklist?: string[];
+  /** Perkiraan waktu pengerjaan (menit). */
+  estimatedMinutes?: number | null;
   confidence: 'high' | 'medium' | 'low';
   model: string;
   analyzedAt: number;
