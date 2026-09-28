@@ -102,8 +102,13 @@
     if (hr < 0) return null;
     const header = rows[hr];
     const map = {}; // key -> {act:col, tgt:col}
+    // Nama toko bisa berada di baris merge DI ATAS header (header hanya "AKTUAL | TARGET | %"): cari ke atas sampai 3 baris.
+    const above = (c) => { for (let r = hr - 1; r >= Math.max(0, hr - 3); r--) { const v = rows[r] && rows[r][c]; if (v != null && String(v).trim() !== "") return v; } return null; };
+    const generic = (h) => /^(AKTUAL|ACTUAL|OMSET|REALISASI|PENJUALAN)$/.test(norm(h));
     header.forEach((h, c) => {
-      const s = findStore(h); if (!s || map[s.key]) return;
+      let s = findStore(h);
+      if (!s && (generic(h) || !norm(h)) && c > 1) { const up = above(c); if (up) s = findStore(up) || findStore(String(up).replace(/^AKTUAL\s+/i, "")); }
+      if (!s || map[s.key]) return;
       let tgt = null;
       for (let k = c + 1; k <= c + 3 && k < header.length; k++) { if (norm(header[k]) === "TARGET") { tgt = k; break; } if (findStore(header[k])) break; }
       map[s.key] = { act: c, tgt };
@@ -130,7 +135,8 @@
       const visit = {}; for (const k in vmap) { const o = {}; let any = false; for (const c of VC) { const col = vmap[k][c]; const v = col == null ? null : num(row[col]); o[c] = v; if (v != null) any = true; } if (any) visit[k] = o; }
       days.push({ d: d.getDate(), total: totalCol >= 0 ? num(row[totalCol]) : null, act, tgt, visit });
     }
-    return { idx, storesFound: Object.keys(map), visitStores: Object.keys(vmap), days };
+    const headerRaw = header.filter(v => v != null && String(v).trim() !== "").slice(0, 40).map(v => String(v).trim());
+    return { idx, storesFound: Object.keys(map), visitStores: Object.keys(vmap), days, headerRaw, headerRow: hr };
   }
 
   // Baseline 2025 per toko: header TOKO | JANUARI ... DESEMBER
@@ -1630,7 +1636,13 @@
     try { history.replaceState(null, "", "#" + v); localStorage.setItem("sssg.view", v); } catch (e) { }
     if (state.months.length) render(); window.scrollTo({ top: 0 });
   }
+  function renderDiag() {
+    const box = $("diagBox"); if (!box) return; const y = Y(); const ms = state.years[y] || [];
+    const rows = MONTH_NAMES.map((n, i) => { const m = ms[i]; if (!m) return `<tr><td>${n}</td><td colspan="5" class="muted">tidak terbaca / tab tidak ada</td></tr>`; const tot = monthTotal(m), tgt = m.days.reduce((x, d) => x + dayTarget(d, null), 0); const everFound = new Set(ms.filter(Boolean).flatMap(x => x.storesFound)); const miss = activeStores().filter(s => everFound.has(s.key) && !m.storesFound.includes(s.key)).map(s => s.short); return `<tr><td>${n}</td><td>${m.days.length}</td><td>${m.storesFound.length}${miss.length ? ` <span class="bad" title="kolom toko tidak ditemukan">(tanpa: ${miss.join(", ")})</span>` : ""}</td><td>${fmtRpS(tot)}</td><td>${tgt ? fmtRpS(tgt) : "—"}</td><td class="muted" style="text-align:left;font-size:11px">${(m.headerRaw || []).join(" | ").slice(0, 160)}</td></tr>`; });
+    box.innerHTML = `<table class="tbl diag"><tr><th style="text-align:left">Bulan</th><th>Hari</th><th>Toko dikenali</th><th>Omset</th><th>Target</th><th style="text-align:left">Header yang terbaca</th></tr>${rows.join("")}</table><div class="muted" style="margin-top:6px">Bila "Toko dikenali" kurang dari ${activeStores().length}, nama kolom toko di tab itu belum ada di daftar alias <code>STORES</code> pada config.js. Kirim tangkapan layar tabel ini untuk diperbaiki.</div>`;
+  }
   function updateStatus() {
+    try { renderDiag(); } catch (e) { console.warn("diag", e); }
     setStatus(`Data ${state.months.filter(Boolean).length} bulan terbaca · tahun ${Y()}${state.baseMonths.some(Boolean) ? " · pembanding " + BY() + " harian: " + state.baseMonths.filter(Boolean).length + " bulan" : (state.year === C.YEAR && state.baseline) ? " · baseline " + BY() + " per toko: ADA" : " · data " + BY() + ": BELUM ADA"} · diperbarui ${state.fetchedAt.toLocaleString("id-ID")}`);
   }
   function render() {
