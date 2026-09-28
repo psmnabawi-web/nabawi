@@ -67,7 +67,7 @@ export async function DELETE(req: Request, { params }: Params) {
     }
 
     const itemsSnap = await ref.collection('items').get();
-    const paths = itemsSnap.docs.map((d) => (d.data() as AuditItem).photoPath).filter((p): p is string => !!p);
+    const paths = itemsSnap.docs.flatMap((d) => { const it = d.data() as AuditItem; return [...(it.photoPaths ?? []), ...(it.photoPath ? [it.photoPath] : [])]; }).filter((p, i, arr) => !!p && arr.indexOf(p) === i);
     const bucket = adminBucket();
     await Promise.allSettled(paths.map((p) => bucket.file(p).delete()));
 

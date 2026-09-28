@@ -79,6 +79,7 @@ export function summarize(items: AuditItem[]): AuditSummary {
   let firstSum = 0;
   let firstN = 0;
   let sum = 0;
+  const reviewItems: { id: string; no: number; area: string; note: string | null }[] = [];
 
   for (const item of items) {
     if (item.status === 'skipped') {
@@ -88,6 +89,7 @@ export function summarize(items: AuditItem[]): AuditSummary {
     const cat = byCode.get(item.categoryCode);
     if (cat) cat.total += 1;
     if (item.locked) lockedCount += 1;
+    if (item.reviewRequested && !item.locked) reviewItems.push({ id: item.id, no: item.no, area: item.area, note: item.reviewNote ?? null });
     const attempts = item.attempts ?? (item.ai ? 1 : 0);
     if (attempts > 1) retryCount += attempts - 1;
     const first = item.firstAiScore ?? (item.ai?.photoValid ? item.ai.score : null);
@@ -135,6 +137,8 @@ export function summarize(items: AuditItem[]): AuditSummary {
     retryCount,
     firstPassCount,
     firstPassPct: firstN > 0 ? round1((firstSum / (firstN * MAX_SCORE)) * 100) : null,
+    reviewCount: reviewItems.length,
+    reviewItems,
     sum,
     max,
     avg,
@@ -156,6 +160,8 @@ export function emptySummary(): AuditSummary {
     retryCount: 0,
     firstPassCount: 0,
     firstPassPct: null,
+    reviewCount: 0,
+    reviewItems: [],
     sum: 0,
     max: 0,
     avg: null,

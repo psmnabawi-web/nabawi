@@ -58,5 +58,5 @@ export async function analyzeCleanliness(input: AnalyzeInput): Promise<AiResult>
   const model = aiModel();
   const raw = aiProvider() === 'anthropic' ? await analyzeWithAnthropic(input, model) : await analyzeWithGoogle(input, model);
   const strict = applyStrictness(raw);
-  return { ...strict, analyzedAt: Date.now() };
+  return { ...strict, photoCount: input.images.length, analyzedAt: Date.now() };
 }

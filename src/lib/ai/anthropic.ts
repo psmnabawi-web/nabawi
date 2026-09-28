@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod/v4';
 import { HttpError } from '../utils';
-import { buildUserText, SYSTEM_PROMPT, type AnalyzeInput, type RawAiOutput } from './prompt';
+import { buildUserText, imageLabel, SYSTEM_PROMPT, type AnalyzeInput, type RawAiOutput } from './prompt';
 
 /** Provider Anthropic (Claude vision). Aktif jika AI_PROVIDER=anthropic. */
 export const ANTHROPIC_DEFAULT_MODEL = 'claude-opus-5';
@@ -48,7 +48,10 @@ export async function analyzeWithAnthropic(input: AnalyzeInput, model: string): 
         {
           role: 'user',
           content: [
-            { type: 'image', source: { type: 'base64', media_type: input.mediaType, data: input.imageBase64 } },
+            ...input.images.flatMap((img, i) => [
+              { type: 'text' as const, text: imageLabel(i, input.images.length) },
+              { type: 'image' as const, source: { type: 'base64' as const, media_type: img.mediaType, data: img.base64 } },
+            ]),
             { type: 'text', text: buildUserText(input) },
           ],
         },

@@ -23,6 +23,9 @@ Prinsip wajib:
 - Foto buram/gelap sehingga kotoran tidak bisa dibedakan dari bayangan: photoValid=false.
 - Kriteria yang tidak bisa diverifikasi dari foto (bau, bunyi, getaran, aliran air) jangan dijadikan temuan; tulis "perlu dicek manual" di findings.
 - Jangan terpengaruh catatan crew yang mengklaim sudah dibersihkan; nilai hanya dari foto.
+- Bedakan KOTOR dengan AUS: goresan, cat pudar, warna kekuningan permanen pada plastik tua, karat lama yang sudah dilapisi, atau penyok BUKAN kotoran dan tidak menurunkan skor kebersihan. Sebutkan sebagai "kondisi aus, bukan kotoran" di findings.
+- Crew boleh mengirim sampai 3 foto: foto 1 keseluruhan, foto 2-3 detail/sudut. GABUNGKAN semua foto untuk menilai cakupan dan kebersihan. Bagian tersembunyi yang terlihat jelas di foto detail dianggap tercakup.
+- Daftar "bagian wajib terlihat" diberikan per area. coverage=full hanya jika semua bagian wajib terlihat di salah satu foto. Jika ada yang kurang: coverage=partial, hiddenZones = HANYA bagian yang masih kurang, dan passChecklist berisi foto tambahan apa yang perlu diambil (jangan minta mengulang semua foto).
 - Bahasa: Indonesia, ringkas, konkret, tanpa basa-basi. Sebutkan LOKASI temuan secara spesifik (mis. "sudut kanan bawah", "sambungan panel kiri").
 
 Batas lolos: area hanya boleh di-submit crew jika skor >= ${MIN_SUBMIT_SCORE} (${MIN_SUBMIT_PCT}%).
@@ -34,13 +37,24 @@ Jika skor < ${MIN_SUBMIT_SCORE} ATAU foto tidak valid ATAU coverage=partial, WAJ
 Jika foto tidak valid: actionPlan berisi cara mengambil ulang foto (posisi, jarak 1-2 meter, nyalakan lampu, hindari backlight, pastikan seluruh area masuk frame).
 Jika skor >= ${MIN_SUBMIT_SCORE} dan coverage=full: actionPlan kosong, passChecklist kosong, estimatedMinutes 0.`;
 
-export interface AnalyzeInput {
-  imageBase64: string;
+export interface AnalyzeImage {
+  base64: string;
   mediaType: 'image/jpeg' | 'image/png' | 'image/webp';
+}
+
+export interface AnalyzeInput {
+  images: AnalyzeImage[];
   area: string;
   category: string;
   standard: string;
+  /** Bagian yang wajib terlihat (dari panduan foto per area). */
+  mustSee?: string | null;
   crewNote?: string | null;
+}
+
+export function imageLabel(i: number, total: number): string {
+  if (total === 1) return 'Foto (keseluruhan area):';
+  return i === 0 ? `Foto 1 dari ${total} (keseluruhan area):` : `Foto ${i + 1} dari ${total} (detail/sudut):`;
 }
 
 export function buildUserText(input: AnalyzeInput): string {
@@ -48,9 +62,11 @@ export function buildUserText(input: AnalyzeInput): string {
     `Kategori area: ${input.category}`,
     `Area yang diaudit: ${input.area}`,
     `Standar bersih / kondisi ideal: ${input.standard}`,
-    input.crewNote ? `Catatan crew: ${input.crewNote}` : null,
+    input.mustSee ? `Bagian yang wajib terlihat di foto: ${input.mustSee}` : null,
+    `Jumlah foto: ${input.images.length}`,
+    input.crewNote ? `Catatan crew (bukan bukti, hanya konteks): ${input.crewNote}` : null,
     '',
-    'Nilai foto ini terhadap standar di atas dan isi seluruh field output.',
+    'Nilai foto-foto di atas terhadap standar dan isi seluruh field output.',
   ]
     .filter((l) => l !== null)
     .join('\n');

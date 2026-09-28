@@ -63,10 +63,10 @@ export async function exportAuditExcel(audit: Audit, items: AuditItem[]) {
       status: it.status,
       by: it.capturedByName ?? '',
       at: it.capturedAt ? new Date(it.capturedAt) : null,
-      photo: it.photoUrl ?? '',
+      photo: (it.photoUrls?.length ? it.photoUrls : it.photoUrl ? [it.photoUrl] : []).join('\n'),
     });
     row.alignment = { vertical: 'top', wrapText: true };
-    if (it.photoUrl) row.getCell('photo').value = { text: 'Buka foto', hyperlink: it.photoUrl };
+    if (it.photoUrl) row.getCell('photo').value = { text: `Buka foto${it.photoUrls && it.photoUrls.length > 1 ? ` (1 dari ${it.photoUrls.length})` : ''}`, hyperlink: it.photoUrl };
     row.getCell('at').numFmt = 'dd/mm/yyyy hh:mm';
   }
   const last = ws.rowCount;

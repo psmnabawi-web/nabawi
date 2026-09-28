@@ -176,8 +176,8 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">Selamat datang kembali, {firstName}</h1>
           <p className="mt-1 text-muted">Pantau kondisi kebersihan store dan lanjutkan pekerjaan Anda.</p>
         </div>
-        <LinkButton href="/audits/new" variant="secondary" size="md">
-          <IconBook size={18} /> Cara audit
+        <LinkButton href="/panduan-foto" variant="secondary" size="md">
+          <IconBook size={18} /> Panduan foto
         </LinkButton>
       </div>
 
@@ -230,6 +230,34 @@ export default function DashboardPage() {
             <StatCard icon={<IconAlert size={24} />} value={data.critical} label="Temuan kritikal" sub="skor ≤ 2, wajib tindak lanjut" tint={data.critical ? '#e34948' : '#008300'} />
             <StatCard icon={<IconCheck size={24} />} value={data.belowTarget} label="Audit di bawah target" sub={`dari ${data.submitted.length} audit selesai`} tint={data.belowTarget ? '#eda100' : '#008300'} />
           </div>
+
+          {/* Menunggu verifikasi manager */}
+          {(() => {
+            const pending = audits.filter((a) => a.status === 'draft' && (a.summary.reviewCount ?? 0) > 0);
+            if (pending.length === 0) return null;
+            return (
+              <Card className="mb-5 border-[#7a4ac7]/40">
+                <CardHeader title="Menunggu verifikasi manager" desc="Crew sudah berulang kali foto ulang dan minta area diperiksa langsung." right={<span className="rounded-full bg-[#7a4ac7]/10 px-3 py-1 text-xs font-bold text-[#7a4ac7]">{pending.reduce((s, a) => s + (a.summary.reviewCount ?? 0), 0)} area</span>} />
+                <div className="space-y-2">
+                  {pending.map((a) => (
+                    <Link key={a.id} href={`/audits/${a.id}`} className="block rounded-2xl bg-surface p-3 hover:bg-surface-2">
+                      <div className="text-sm font-semibold text-ink">
+                        {a.storeName} · {fmtDate(a.date)} · {a.shift}
+                      </div>
+                      <ul className="mt-1 space-y-0.5 text-xs text-muted">
+                        {(a.summary.reviewItems ?? []).map((it) => (
+                          <li key={it.id}>
+                            #{it.no} <b className="text-ink">{it.area}</b>
+                            {it.note ? ` · "${it.note}"` : ''}
+                          </li>
+                        ))}
+                      </ul>
+                    </Link>
+                  ))}
+                </div>
+              </Card>
+            );
+          })()}
 
           {/* Perjalanan audit hari ini */}
           <Card className="mb-5">

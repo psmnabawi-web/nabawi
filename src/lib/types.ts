@@ -51,6 +51,8 @@ export interface AiResult {
   hiddenZones?: string[];
   /** Penyesuaian ketat yang diterapkan server (mis. skor diturunkan karena coverage parsial). */
   adjustments?: string[];
+  /** Jumlah foto yang dinilai bersama. */
+  photoCount?: number;
   /** Rencana perbaikan rinci (hanya diisi jika skor di bawah batas lolos atau foto tidak valid). */
   actionPlan?: ActionStep[];
   /** Ciri yang harus terlihat di foto ulang agar lolos batas. */
@@ -67,6 +69,7 @@ export interface AttemptRecord {
   score: number | null;
   photoValid: boolean;
   photoUrl: string | null;
+  photoUrls?: string[];
   byName: string | null;
 }
 
@@ -82,6 +85,9 @@ export interface AuditItem {
   status: ItemStatus;
   photoUrl: string | null;
   photoPath: string | null;
+  /** Sampai 3 foto per area (foto 1 = keseluruhan, berikutnya detail). photoUrl = foto pertama. */
+  photoUrls?: string[];
+  photoPaths?: string[];
   capturedAt: number | null;
   capturedByUid: string | null;
   capturedByName: string | null;
@@ -103,6 +109,11 @@ export interface AuditItem {
   /** Skor AI pada percobaan pertama: kondisi awal sebelum dibersihkan. */
   firstAiScore?: number | null;
   history?: AttemptRecord[];
+  /** Crew minta verifikasi manager setelah berulang kali gagal. */
+  reviewRequested?: boolean;
+  reviewNote?: string | null;
+  reviewRequestedAt?: number | null;
+  reviewRequestedByName?: string | null;
   /** Area dilewati oleh manager/admin (mis. renovasi). Tidak dihitung dalam skor. */
   skipNote?: string | null;
   skippedByName?: string | null;
@@ -134,6 +145,9 @@ export interface AuditSummary {
   firstPassCount: number;
   /** Rata-rata skor AI percobaan pertama (%), kondisi awal sebelum dibersihkan. */
   firstPassPct: number | null;
+  /** Area yang menunggu verifikasi manager. */
+  reviewCount: number;
+  reviewItems: { id: string; no: number; area: string; note: string | null }[];
   sum: number;
   max: number;
   avg: number | null;

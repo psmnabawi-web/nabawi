@@ -1,7 +1,7 @@
 import 'server-only';
 import { ApiError, GoogleGenAI, MediaResolution, ThinkingLevel, type GoogleGenAIOptions } from '@google/genai';
 import { HttpError } from '../utils';
-import { buildUserText, SYSTEM_PROMPT, type AnalyzeInput, type RawAiOutput } from './prompt';
+import { buildUserText, imageLabel, SYSTEM_PROMPT, type AnalyzeInput, type RawAiOutput } from './prompt';
 
 /**
  * Provider Google:
@@ -88,7 +88,10 @@ export async function analyzeWithGoogle(input: AnalyzeInput, model: string): Pro
     contents: [
       {
         role: 'user',
-        parts: [{ inlineData: { mimeType: input.mediaType, data: input.imageBase64 } }, { text: buildUserText(input) }],
+        parts: [
+          ...input.images.flatMap((img, i) => [{ text: imageLabel(i, input.images.length) }, { inlineData: { mimeType: img.mediaType, data: img.base64 } }]),
+          { text: buildUserText(input) },
+        ],
       },
     ],
     config: {

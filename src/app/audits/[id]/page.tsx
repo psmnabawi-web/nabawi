@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { AppShell } from '@/components/AppShell';
@@ -15,7 +16,7 @@ import { findInProgress, isDone, MIN_SUBMIT_PCT } from '@/lib/scoring';
 import { SHIFTS } from '@/lib/types';
 import { cn, fmtDate, fmtDateTime, scoreColor } from '@/lib/utils';
 
-type Filter = 'all' | 'pending' | 'done' | 'critical' | 'invalid';
+type Filter = 'all' | 'pending' | 'done' | 'review' | 'critical' | 'invalid';
 
 export default function AuditDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -37,6 +38,7 @@ export default function AuditDetailPage() {
       if (cat !== 'ALL' && it.categoryCode !== cat) return false;
       if (filter === 'pending') return !isDone(it);
       if (filter === 'done') return isDone(it);
+      if (filter === 'review') return !!it.reviewRequested && !isDone(it);
       if (filter === 'invalid') return it.status === 'invalid';
       if (filter === 'critical') return (it.finalScore ?? 99) <= 2;
       return true;
@@ -121,7 +123,10 @@ export default function AuditDetailPage() {
       {msg && <Alert kind={msg.includes('berhasil') || msg.includes('dibuka') || msg.includes('otomatis') ? 'success' : 'error'} className="mb-3">{msg}</Alert>}
       {editable && !activeItem && items.some((it) => !isDone(it)) && (
         <Alert kind="info" className="mb-3">
-          Pilih area mana saja untuk difoto. Satu area harus selesai (Submit Area, skor ≥ {MIN_SUBMIT_PCT}%) sebelum memulai area lain. Setelah semua area selesai, audit otomatis tersubmit.
+          Pilih area mana saja untuk difoto. Satu area harus selesai (Submit Area, skor ≥ {MIN_SUBMIT_PCT}%) sebelum memulai area lain. Setelah semua area selesai, audit otomatis tersubmit.{' '}
+          <Link href="/panduan-foto" className="font-semibold underline">
+            Baca panduan foto
+          </Link>
         </Alert>
       )}
       {editable && activeItem && (
@@ -180,6 +185,7 @@ export default function AuditDetailPage() {
             ['all', `Semua (${items.length})`],
             ['pending', `Belum selesai (${items.length - doneCount})`],
             ['done', `Selesai (${doneCount})`],
+            ['review', `Verifikasi (${items.filter((it) => it.reviewRequested && !isDone(it)).length})`],
             ['critical', `Kritikal (${s.criticalCount})`],
             ['invalid', `Foto tidak valid (${s.invalidCount})`],
           ] as [Filter, string][]
