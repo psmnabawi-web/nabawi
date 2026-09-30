@@ -180,8 +180,8 @@ export function round2(n: number) {
 
 export const SCORE_RUBRIC: { score: number; label: string; desc: string }[] = [
   { score: 5, label: 'Sangat Bersih', desc: 'Sepenuhnya sesuai standar, tidak ada temuan.' },
-  { score: 4, label: 'Bersih', desc: 'Ada 1 temuan minor, tidak mempengaruhi higienitas.' },
-  { score: 3, label: 'Cukup', desc: 'Beberapa temuan yang perlu dibersihkan segera.' },
-  { score: 2, label: 'Kotor', desc: 'Temuan signifikan: grease/kerak/noda/bau jelas terlihat.' },
+  { score: 4, label: 'Bersih', desc: 'Bersih keseluruhan, boleh ada 1-3 temuan kosmetik minor (debu tipis, bekas lap, sidik jari) yang tidak mempengaruhi higienitas.' },
+  { score: 3, label: 'Cukup', desc: 'Kotoran nyata terlihat jelas tetapi terbatas: noda menempel, residu lengket, beberapa titik kotor.' },
+  { score: 2, label: 'Kotor', desc: 'Grease/kerak/sisa makanan/sampah/genangan/jamur menumpuk atau meluas.' },
   { score: 1, label: 'Sangat Kotor', desc: 'Tidak sesuai standar, risiko higienitas atau keselamatan.' },
 ];

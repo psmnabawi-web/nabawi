@@ -284,16 +284,16 @@ export function CaptureItem({ item, auditId, editable, role, isActive, isBlocked
                   Foto tidak dapat dinilai: {item.ai.photoIssue ?? 'tidak jelas'}. Ambil ulang sesuai panduan foto di atas.
                 </Alert>
               )}
-              {item.ai.coverage && item.ai.coverage !== 'full' && item.ai.photoValid && (
+              {item.ai.coverage === 'unclear' && item.ai.photoValid && (
                 <Alert kind="warning">
-                  <b>Foto belum memperlihatkan seluruh area</b> (skor dibatasi maksimal 3).
-                  {item.ai.hiddenZones && item.ai.hiddenZones.length > 0 && (
-                    <>
-                      {' '}
-                      Saat foto ulang, <b>tambahkan foto detail</b> untuk: {item.ai.hiddenZones.join(', ')}.
-                    </>
-                  )}
+                  <b>Foto tidak memperlihatkan sebagian besar area</b> (skor dibatasi maksimal 3). Ambil foto keseluruhan dari 1-2 m
+                  {item.ai.hiddenZones && item.ai.hiddenZones.length > 0 && <> dan foto detail untuk: {item.ai.hiddenZones.join(', ')}</>}.
                 </Alert>
+              )}
+              {item.ai.coverage === 'partial' && item.ai.photoValid && item.ai.hiddenZones && item.ai.hiddenZones.length > 0 && (
+                <div className="rounded-lg border border-line bg-white px-3 py-2 text-xs text-muted">
+                  <b className="text-ink">Saran:</b> bagian ini belum terlihat di foto: {item.ai.hiddenZones.join(', ')}. Tidak mengurangi skor, tetapi manager mungkin memeriksanya.
+                </div>
               )}
               {item.ai.adjustments && item.ai.adjustments.length > 0 && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -328,7 +328,7 @@ export function CaptureItem({ item, auditId, editable, role, isActive, isBlocked
                 <span className="font-semibold text-ink">Rekomendasi: </span>
                 {item.ai.recommendation}
               </div>
-              {!locked && (!passes || item.ai.coverage === 'partial') && (item.ai.actionPlan?.length || item.ai.passChecklist?.length) ? (
+              {!locked && !passes && (item.ai.actionPlan?.length || item.ai.passChecklist?.length) ? (
                 <div className="mt-2 overflow-hidden rounded-xl border border-brand/30 bg-white">
                   <div className="flex items-center justify-between gap-2 bg-brand/10 px-3 py-2">
                     <div className="text-sm font-bold text-brand">Panduan agar lolos ≥ {MIN_SUBMIT_PCT}%</div>

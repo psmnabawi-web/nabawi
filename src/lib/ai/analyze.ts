@@ -22,34 +22,32 @@ export function aiModel(): string {
   return aiProvider() === 'anthropic' ? ANTHROPIC_DEFAULT_MODEL : GOOGLE_DEFAULT_MODEL;
 }
 
-/** Kata kunci temuan berat: jika muncul di daftar temuan, skor tidak boleh di atas 2. */
-const HEAVY_PATTERNS = [/grease/i, /lemak/i, /kerak/i, /jamur/i, /sisa makanan/i, /remah/i, /sampah/i, /genangan/i, /tikus/i, /kecoa/i, /hama/i, /lendir/i, /darah/i, /debu tebal/i, /menumpuk/i, /berkarat/i, /karat/i];
-/** Kata kunci residu/noda: skor tidak boleh di atas 3. */
-const MEDIUM_PATTERNS = [/noda/i, /residu/i, /minyak/i, /berminyak/i, /lengket/i, /cipratan/i, /bercak/i, /kotor/i, /bekas lem/i, /selotip/i, /jelaga/i, /kusam/i];
+/** Temuan berat yang tidak boleh lolos apa pun skor modelnya: hama, dan kotoran yang secara eksplisit menumpuk/tebal/meluas. */
+const HEAVY_PATTERNS = [/tikus/i, /kecoa/i, /hama/i, /belatung/i, /lalat banyak/i, /(grease|lemak|kerak|jamur|sisa makanan|sampah|genangan|debu)[^.|]*(menumpuk|tebal|meluas|banyak|menggenang|tercecer)/i, /(menumpuk|tebal|meluas)[^.|]*(grease|lemak|kerak|jamur|sisa makanan|sampah|debu)/i];
 
 /**
- * Pengaman ketat di sisi server, terlepas dari model:
- * - coverage bukan "full" -> maks 3
- * - ada temuan berat -> maks 2; ada temuan residu/noda -> maks 3
- * - skor 5 dengan temuan apa pun -> turun ke 4
- * Setiap penyesuaian dicatat di `adjustments` agar transparan untuk manager.
+ * Pengaman di sisi server (versi longgar, setelah kalibrasi lapangan):
+ * - coverage "unclear" (mayoritas area tidak terlihat / zoom sempit) -> maks 3
+ * - temuan berat eksplisit (hama, kotoran menumpuk) -> maks 2
+ * - skor 5 dengan temuan non-minor -> 4
+ * Temuan kosmetik "(minor)" tidak menurunkan skor. Setiap penyesuaian dicatat di `adjustments`.
  */
 export function applyStrictness(raw: RawAiOutput): RawAiOutput & { adjustments: string[] } {
   const adjustments: string[] = [];
   if (!raw.photoValid || raw.score === null) return { ...raw, adjustments };
   let score = raw.score;
-  const issuesText = raw.issues.join(' | ');
+  const nonMinor = raw.issues.filter((i) => !/^\s*\(?minor\)?/i.test(i) && !/kondisi aus/i.test(i) && !/perlu dicek manual/i.test(i));
+  const issuesText = nonMinor.join(' | ');
   const cap = (max: number, reason: string) => {
     if (score > max) {
       adjustments.push(`${reason}: skor ${score} → ${max}`);
       score = max;
     }
   };
-  if (raw.coverage !== 'full') cap(3, raw.coverage === 'partial' ? 'Foto tidak memperlihatkan seluruh area' : 'Cakupan foto tidak dapat dipastikan');
-  if (raw.issues.length > 0) {
-    if (HEAVY_PATTERNS.some((re) => re.test(issuesText))) cap(2, 'Ada temuan berat (grease/kerak/sisa makanan/sampah/genangan/hama)');
-    else if (MEDIUM_PATTERNS.some((re) => re.test(issuesText))) cap(3, 'Ada temuan noda/residu');
-    else cap(4, 'Masih ada temuan minor');
+  if (raw.coverage === 'unclear') cap(3, 'Mayoritas area tidak terlihat di foto');
+  if (nonMinor.length > 0) {
+    if (HEAVY_PATTERNS.some((re) => re.test(issuesText))) cap(2, 'Ada temuan berat (hama / kotoran menumpuk)');
+    else cap(4, 'Masih ada temuan yang perlu dibersihkan');
   }
   return { ...raw, score, adjustments };
 }
