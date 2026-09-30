@@ -4,7 +4,7 @@ import { collection, doc, limit, onSnapshot, orderBy, query, where, type Documen
 import { useEffect, useMemo, useState } from 'react';
 import { db } from './firebase/client';
 import { DEFAULT_INDICATORS, type Indicator } from './indicators';
-import type { Audit, AuditItem, AuditLog, Store, UserProfile } from './types';
+import type { Audit, AuditItem, AuditLog, ProductAudit, Store, UserProfile } from './types';
 
 /** Realtime daftar store aktif. */
 export function useStores(includeInactive = false) {
@@ -119,4 +119,56 @@ export function useRecentLogs(enabled: boolean, max = 8) {
     return onSnapshot(q, (snap) => setLogs(snap.docs.map((d) => d.data() as AuditLog)), () => setLogs([]));
   }, [enabled, max]);
   return enabled ? logs : [];
+}
+
+/** Realtime daftar audit kualitas produk (super admin). Dibatasi 600 terakhir; rekap bulanan difilter di client. */
+export function useProductAudits(enabled: boolean) {
+  const [audits, setAudits] = useState<ProductAudit[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    const q = query(collection(db(), 'productAudits'), orderBy('createdAt', 'desc'), limit(600));
+    return onSnapshot(
+      q,
+      (snap) => {
+        setAudits(snap.docs.map((d) => d.data() as ProductAudit));
+        setLoading(false);
+        setError(null);
+      },
+      (err) => {
+        setError(err.message);
+        setLoading(false);
+      },
+    );
+  }, [enabled]);
+  return { audits: enabled ? audits : [], loading: enabled && loading, error };
+}
+
+/** Realtime satu audit kualitas produk. */
+export function useProductAudit(id: string | null) {
+  const [audit, setAudit] = useState<ProductAudit | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!id) return;
+    return onSnapshot(
+      doc(db(), 'productAudits', id),
+      (snap) => {
+        if (!snap.exists()) {
+          setError('Audit produk tidak ditemukan atau Anda tidak memiliki akses.');
+          setAudit(null);
+        } else {
+          setAudit(snap.data() as ProductAudit);
+          setError(null);
+        }
+        setLoading(false);
+      },
+      (err) => {
+        setError(err.message);
+        setLoading(false);
+      },
+    );
+  }, [id]);
+  return { audit, loading, error };
 }

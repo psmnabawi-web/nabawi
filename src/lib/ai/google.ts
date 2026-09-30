@@ -81,28 +81,34 @@ const RETRY_DELAYS_MS = [12_000, 24_000]; // free tier Gemini dibatasi per menit
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function analyzeWithGoogle(input: AnalyzeInput, model: string): Promise<RawAiOutput> {
+export interface GeminiJsonRequest {
+  model: string;
+  systemInstruction: string;
+  /** Urutan parts: label + gambar, lalu teks. */
+  parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }>;
+  schema: Record<string, unknown>;
+  maxOutputTokens?: number;
+  thinkingLevel?: ThinkingLevel;
+}
+
+/**
+ * Panggilan generik Gemini dengan structured output (JSON schema), retry rate-limit, dan pemetaan error.
+ * Dipakai oleh analisa kebersihan dan audit kualitas produk.
+ */
+export async function generateJsonWithGoogle(req: GeminiJsonRequest): Promise<{ data: Record<string, unknown>; model: string }> {
   const ai = getClient();
   const request = {
-    model,
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          ...input.images.flatMap((img, i) => [{ text: imageLabel(i, input.images.length) }, { inlineData: { mimeType: img.mediaType, data: img.base64 } }]),
-          { text: buildUserText(input) },
-        ],
-      },
-    ],
+    model: req.model,
+    contents: [{ role: 'user', parts: req.parts }],
     config: {
-      systemInstruction: SYSTEM_PROMPT,
+      systemInstruction: req.systemInstruction,
       responseMimeType: 'application/json',
-      responseJsonSchema: RESPONSE_SCHEMA,
+      responseJsonSchema: req.schema,
       temperature: 0,
       // resolusi media tinggi + thinking HIGH: AI memeriksa detail kecil (kilap minyak, nat, sudut) lebih teliti
       mediaResolution: MediaResolution.MEDIA_RESOLUTION_HIGH,
-      thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
-      maxOutputTokens: 16384, // termasuk token thinking pada Gemini 3.x; rencana perbaikan bisa panjang
+      thinkingConfig: { thinkingLevel: req.thinkingLevel ?? ThinkingLevel.HIGH },
+      maxOutputTokens: req.maxOutputTokens ?? 16384, // termasuk token thinking pada Gemini 3.x; rencana perbaikan bisa panjang
     },
   };
 
@@ -122,7 +128,7 @@ export async function analyzeWithGoogle(input: AnalyzeInput, model: string): Pro
         throw new HttpError(502, 'AI tidak mengembalikan hasil. Coba analisa ulang.');
       }
       try {
-        return normalize(parseJson(text), response.modelVersion ?? model);
+        return { data: parseJson(text), model: response.modelVersion ?? req.model };
       } catch (e) {
         console.error('[ai/google] output bukan JSON', JSON.stringify({ finish, usage: response.usageMetadata, head: text.slice(0, 400) }));
         if (finish === 'MAX_TOKENS') throw new HttpError(502, 'Output AI terpotong (batas token). Coba analisa ulang.');
@@ -143,13 +149,26 @@ export async function analyzeWithGoogle(input: AnalyzeInput, model: string): Pro
         }
         if (err.status === 429) throw new HttpError(429, `Kuota AI sementara habis (rate limit). Tunggu 1 menit lalu coba lagi. Pesan Google: ${msg}`);
         if (err.status === 401 || err.status === 403) throw new HttpError(500, 'Kredensial Google AI tidak valid atau API belum diaktifkan.');
-        if (err.status === 404) throw new HttpError(500, `Model ${model} tidak ditemukan di provider Google. Cek AI_MODEL.`);
+        if (err.status === 404) throw new HttpError(500, `Model ${req.model} tidak ditemukan di provider Google. Cek AI_MODEL.`);
         throw new HttpError(502, `Layanan AI Google error (${err.status}): ${err.message}`);
       }
       throw err;
     }
   }
   throw new HttpError(429, `Kuota AI habis: ${lastErr instanceof Error ? lastErr.message : 'rate limit'}`);
+}
+
+export async function analyzeWithGoogle(input: AnalyzeInput, model: string): Promise<RawAiOutput> {
+  const { data, model: used } = await generateJsonWithGoogle({
+    model,
+    systemInstruction: SYSTEM_PROMPT,
+    parts: [
+      ...input.images.flatMap((img, i) => [{ text: imageLabel(i, input.images.length) }, { inlineData: { mimeType: img.mediaType, data: img.base64 } }]),
+      { text: buildUserText(input) },
+    ],
+    schema: RESPONSE_SCHEMA as unknown as Record<string, unknown>,
+  });
+  return normalize(data, used);
 }
 
 function parseJson(text: string): Record<string, unknown> {

@@ -5,15 +5,17 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useAuth } from './AuthProvider';
 import { LogoMark } from './brand/Logo';
-import { IconBell, IconChevron, IconClipboard, IconDashboard, IconHistory, IconList, IconLogout, IconPlus, IconStore, IconUser, IconUsers } from './icons';
+import { IconBell, IconChevron, IconClipboard, IconDashboard, IconHistory, IconList, IconLogout, IconPlus, IconQuality, IconStore, IconUser, IconUsers } from './icons';
 import { Alert, Spinner } from './ui';
 import { useAudits } from '@/lib/hooks';
+import { isSuperAdmin } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 const NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: IconDashboard, roles: ['crew', 'manager', 'admin'] },
   { href: '/audits', label: 'Audit', icon: IconClipboard, roles: ['crew', 'manager', 'admin'] },
   { href: '/audits/new', label: 'Mulai Audit', icon: IconPlus, roles: ['crew', 'manager', 'admin'], primary: true },
+  { href: '/product-audit', label: 'Audit Produk', icon: IconQuality, roles: ['admin'], superOnly: true },
   { href: '/admin/stores', label: 'Store', icon: IconStore, roles: ['admin'] },
   { href: '/admin/users', label: 'User & Role', icon: IconUsers, roles: ['admin'] },
   { href: '/admin/indicators', label: 'Indikator', icon: IconList, roles: ['admin'] },
@@ -66,10 +68,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
   const role = profile?.role ?? 'crew';
-  const nav = NAV.filter((n) => n.roles.includes(role));
+  const superAdmin = isSuperAdmin(profile);
+  const nav = NAV.filter((n) => n.roles.includes(role) && (!('superOnly' in n) || superAdmin));
   const isActive = (href: string) =>
     href === '/audits' ? pathname === '/audits' || /^\/audits\/(?!new)/.test(pathname) : href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(href);
-  const roleLabel = role === 'admin' ? 'Admin' : role === 'manager' ? 'Manager Store' : 'Crew';
+  const roleLabel = superAdmin ? 'Super Admin' : role === 'admin' ? 'Admin' : role === 'manager' ? 'Manager Store' : 'Crew';
 
   return (
     <div className="flex min-h-screen bg-surface">

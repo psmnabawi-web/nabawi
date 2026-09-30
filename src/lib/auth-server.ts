@@ -1,7 +1,7 @@
 import 'server-only';
 import { NextResponse } from 'next/server';
 import { adminAuth, adminDb } from './firebase/admin';
-import type { AuditLog, Role, UserProfile } from './types';
+import { isSuperAdmin, type AuditLog, type Role, type UserProfile } from './types';
 import { HttpError } from './utils';
 
 export interface AuthContext {
@@ -46,8 +46,8 @@ export async function requireProfile(req: Request): Promise<AuthContext> {
   let profile: UserProfile;
   if (snap.exists) {
     profile = snap.data() as UserProfile;
-    if (isBootstrapAdmin(email) && profile.role !== 'admin') {
-      profile = { ...profile, role: 'admin', updatedAt: Date.now() };
+    if (isBootstrapAdmin(email) && (profile.role !== 'admin' || profile.superAdmin !== true)) {
+      profile = { ...profile, role: 'admin', superAdmin: true, updatedAt: Date.now() };
       await ref.set(profile, { merge: true });
     }
   } else {
@@ -57,6 +57,7 @@ export async function requireProfile(req: Request): Promise<AuthContext> {
       email,
       name,
       role: isBootstrapAdmin(email) ? 'admin' : 'crew',
+      superAdmin: isBootstrapAdmin(email),
       storeId: null,
       storeName: null,
       active: true,
@@ -73,6 +74,11 @@ export function requireRole(ctx: AuthContext, roles: Role[]) {
   if (!roles.includes(ctx.profile.role)) {
     throw new HttpError(403, 'Anda tidak memiliki akses untuk aksi ini.');
   }
+}
+
+/** Audit Kualitas Produk hanya untuk super admin (email di ADMIN_EMAILS). */
+export function requireSuperAdmin(ctx: AuthContext) {
+  if (!isSuperAdmin(ctx.profile)) throw new HttpError(403, 'Fitur ini hanya untuk super admin.');
 }
 
 /** Manager/crew hanya boleh mengakses store mereka sendiri; admin bebas. */

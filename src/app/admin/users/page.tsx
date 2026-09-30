@@ -88,7 +88,7 @@ export default function AdminUsersPage() {
               <div className="truncate text-sm font-bold text-ink">{u.name}</div>
               <div className="truncate text-xs text-muted">{u.email}</div>
               <div className="mt-1 flex flex-wrap gap-1">
-                <Badge color={u.role === 'admin' ? '#7a4ac7' : u.role === 'manager' ? '#2a78d6' : '#5f5e5a'}>{ROLES.find((r) => r.value === u.role)?.label}</Badge>
+                <Badge color={u.role === 'admin' ? '#7a4ac7' : u.role === 'manager' ? '#2a78d6' : '#5f5e5a'}>{u.superAdmin && u.role === 'admin' ? 'Super Admin' : ROLES.find((r) => r.value === u.role)?.label}</Badge>
                 <Badge color="#5f5e5a">{u.storeName ?? 'Tanpa store'}</Badge>
                 {!u.active && <Badge color="#e34948">Nonaktif</Badge>}
               </div>

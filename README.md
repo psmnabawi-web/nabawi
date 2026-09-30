@@ -12,7 +12,7 @@ Indikator mengikuti **Form Audit Cleaning** (57 area, 6 kategori): Kitchen, Serv
 
 | Modul | Detail |
 |---|---|
-| Auth & Role | Firebase Auth (email/password). Role `crew`, `manager`, `admin`. Email di `ADMIN_EMAILS` otomatis admin. |
+| Auth & Role | Firebase Auth (email/password). Role `crew`, `manager`, `admin`. Email di `ADMIN_EMAILS` otomatis admin **dan super admin** (`superAdmin: true`, tidak bisa diberikan lewat UI). |
 | Audit | Buat audit per store/tanggal/shift → 57 item. Capture foto per item, AI scoring otomatis, submit. Cegah duplikasi audit. |
 | AI Scoring | Google Gemini (default) atau Claude, structured JSON output, rubrik 1-5 seragam. Foto buram/salah objek ditolak (`photoValid=false`). Retry otomatis saat kena rate limit free tier. |
 | Koreksi manager | Manager/admin dapat override skor AI dengan alasan wajib → tercatat di audit trail. |
@@ -23,6 +23,7 @@ Indikator mengikuti **Form Audit Cleaning** (57 area, 6 kategori): Kitchen, Serv
 | Dashboard | KPI (skor rata-rata, audit, kritikal, di bawah target), tren per audit, skor per kategori vs target, ranking store. |
 | Export Excel | Per audit (Form Audit + Summary berformula + Action Plan) dan rekap multi-audit. |
 | Admin | CRUD store, user & role (buat akun, reset password, nonaktifkan), indikator (edit/tambah/nonaktifkan/reset default), audit trail. |
+| Audit Kualitas Produk (super admin) | Menu **Audit Produk** hanya untuk super admin. Checklist dari *Cheklist Audit Kwalitas V3.1*: Nasi Kebuli (26 item), Ayam Saudi (27), Ayam ORI/Crispy (27), gate CRITICAL/MAJOR/CONTROL. Inspector mengunggah sampai 6 foto, mengisi pengukuran (suhu inti, holding, berat porsi, dll.) dan catatan proses/sensori/label; AI memutuskan **Ya/Tidak/N/A per item** beserta alasan dan bukti yang kurang. Nilai = Ya ÷ (Ya+Tidak); keputusan mengikuti formula Excel: CRITICAL Tidak → HOLD - TIDAK AMAN, MAJOR Tidak → JANGAN DISAJIKAN, CONTROL Tidak → BOLEH DISAJIKAN - CATAT DEVIASI. Koreksi inspector wajib beralasan (audit trail). Rekap bulanan store × produk (target 4 pemeriksaan) + export Excel per pemeriksaan dan rekap. Data di koleksi `productAudits`, foto di `productAudits/` Storage. |
 | Keamanan | Semua tulis data lewat API server (Admin SDK) dengan verifikasi ID token; Firestore rules read-only per store/role; Storage tertutup (akses via URL bertoken). |
 
 ## Struktur

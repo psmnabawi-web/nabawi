@@ -7,11 +7,17 @@ export interface UserProfile {
   email: string;
   name: string;
   role: Role;
+  /** Super admin: admin dari ADMIN_EMAILS (env). Hanya super admin yang bisa memakai Audit Kualitas Produk. Tidak bisa diberikan lewat UI. */
+  superAdmin?: boolean;
   storeId: string | null;
   storeName: string | null;
   active: boolean;
   createdAt: number;
   updatedAt: number;
+}
+
+export function isSuperAdmin(p: UserProfile | null | undefined): boolean {
+  return !!p && p.role === 'admin' && p.superAdmin === true;
 }
 
 export interface Store {
@@ -197,3 +203,81 @@ export const ROLES: { value: Role; label: string }[] = [
   { value: 'manager', label: 'Manager Store' },
   { value: 'admin', label: 'Admin' },
 ];
+
+// ===================== Audit Kualitas Produk (super admin) =====================
+import type { CheckSummary, EvidenceType, Gate, ProductId, Verdict } from './productChecklists';
+
+export type ProductAuditStatus = 'draft' | 'submitted';
+/** Sumber bukti yang dipakai AI untuk memutuskan satu item. */
+export type EvidenceSource = 'photo' | 'measure' | 'note' | 'none';
+
+export interface ProductItemAi {
+  verdict: Verdict;
+  /** Alasan singkat (Bahasa Indonesia), menyebut bukti yang dilihat/diukur. */
+  reason: string;
+  evidenceSource: EvidenceSource;
+  /** Bukti yang masih kurang agar item bisa dinilai Ya (kosong jika sudah cukup). */
+  missing: string;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface ProductAuditItem {
+  no: number;
+  gate: Gate;
+  stage: string;
+  parameter: string;
+  standard: string;
+  evidence: EvidenceType;
+  ai: ProductItemAi | null;
+  /** Keputusan akhir yang dihitung ke skor: dari AI, atau koreksi inspector. */
+  final: Verdict | null;
+  finalSource: 'ai' | 'inspector' | null;
+  inspectorNote: string | null;
+  inspectorAt: number | null;
+}
+
+export interface ProductAuditAi {
+  model: string;
+  analyzedAt: number;
+  /** Ringkasan temuan keseluruhan 2-4 kalimat. */
+  summary: string;
+  /** Risiko keamanan/kualitas yang perlu ditindak segera. */
+  risks: string[];
+  /** Rekomendasi perbaikan berurutan. */
+  recommendations: string[];
+  /** Bukti yang perlu ditambahkan agar audit bisa lengkap. */
+  missingEvidence: string[];
+  photoCount: number;
+  adjustments: string[];
+}
+
+export interface ProductAudit {
+  id: string;
+  storeId: string;
+  storeCode: string;
+  storeName: string;
+  productId: ProductId;
+  productName: string;
+  date: string; // YYYY-MM-DD
+  month: string; // YYYY-MM
+  /** Pemeriksaan ke-n di bulan itu (target 4x per produk per bulan). */
+  checkNo: number;
+  inspectorUid: string;
+  inspectorName: string;
+  status: ProductAuditStatus;
+  photoUrls: string[];
+  photoPaths: string[];
+  photoLabels: string[];
+  /** Hasil pengukuran inspector (key = MEASURE_FIELDS.key). */
+  measures: Record<string, number | null>;
+  /** Catatan pengamatan inspector: proses, sensori (aroma/rasa/tekstur), label/traceability. */
+  notes: { process: string | null; sensory: string | null; label: string | null };
+  items: ProductAuditItem[];
+  ai: ProductAuditAi | null;
+  summary: CheckSummary;
+  attempts: number;
+  createdAt: number;
+  updatedAt: number;
+  submittedAt: number | null;
+  submittedByName: string | null;
+}

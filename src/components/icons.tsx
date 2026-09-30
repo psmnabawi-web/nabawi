@@ -101,3 +101,18 @@ export const IconBook = ({ size = 20, ...p }: P) => (
     <path d="M4 5a2 2 0 012-2h13v16H6a2 2 0 00-2 2zM4 19V5M8 3v16" />
   </svg>
 );
+export const IconQuality = ({ size = 20, ...p }: P) => (
+  <svg {...base(size, p)}>
+    <path d="M12 3l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.3 7.2 17.9l.9-5.4L4.2 8.7l5.4-.8L12 3z" />
+  </svg>
+);
+export const IconDownload = ({ size = 20, ...p }: P) => (
+  <svg {...base(size, p)}>
+    <path d="M12 4v11M7 10l5 5 5-5M4 19h16" />
+  </svg>
+);
+export const IconTrash = ({ size = 20, ...p }: P) => (
+  <svg {...base(size, p)}>
+    <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" />
+  </svg>
+);
