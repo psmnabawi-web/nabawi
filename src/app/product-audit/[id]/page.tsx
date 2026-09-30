@@ -282,6 +282,23 @@ export default function ProductAuditDetailPage() {
                 </div>
               ))}
             </div>
+            {!audit.ai && editable && (
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                {[
+                  ['1', 'Unggah foto produk', `Maks ${MAX_PHOTOS} foto: produk utuh, dibelah, display/label, alat.`],
+                  ['2', 'Isi pengukuran & catatan', 'Suhu, waktu, berat; catatan proses, sensori, label.'],
+                  ['3', 'Tekan Analisa AI', 'AI mengisi Ya/Tidak/N/A semua item, skor & keputusan muncul.'],
+                ].map(([n, t, d]) => (
+                  <div key={n} className="flex gap-2 rounded-xl border border-brand/30 bg-orange-50 px-3 py-2">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-black text-white">{n}</span>
+                    <div>
+                      <div className="text-sm font-semibold text-ink">{t}</div>
+                      <div className="text-xs text-muted">{d}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             <p className="mt-2 text-xs text-muted">
               Nilai = Ya ÷ (Ya + Tidak). CRITICAL Tidak → HOLD - TIDAK AMAN; MAJOR Tidak → JANGAN DISAJIKAN; CONTROL Tidak → BOLEH DISAJIKAN - CATAT DEVIASI.
               {s.unanswered > 0 && ` Masih ${s.unanswered} item belum dinilai.`}
@@ -292,7 +309,7 @@ export default function ProductAuditDetailPage() {
 
       <div className="grid gap-5 lg:grid-cols-[1.1fr_1fr]">
         {/* ===== Input: foto + pengukuran + catatan ===== */}
-        <Card>
+        <Card className="scroll-mt-20" id="bukti">
           <CardHeader title="Bukti Pemeriksaan" desc={editable ? 'Foto produk (maks 6), hasil ukur, dan catatan pengamatan. AI menilai semuanya sekaligus.' : 'Bukti yang dipakai pada pemeriksaan ini.'} />
           <div className="grid grid-cols-3 gap-2">
             {audit.photoUrls.map((url, i) => (
@@ -446,6 +463,16 @@ export default function ProductAuditDetailPage() {
             </Select>
           </div>
         </div>
+        {!audit.ai && editable && (
+          <div className="mx-5 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand/30 bg-orange-50 px-4 py-3">
+            <p className="text-sm text-orange-950">
+              Item di bawah <b>dinilai otomatis oleh AI dari foto</b>. Unggah foto produk dan tekan <b>Analisa AI</b> di kartu Bukti Pemeriksaan; jangan isi manual satu per satu.
+            </p>
+            <Button size="sm" onClick={() => document.getElementById('bukti')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>
+              <IconCamera size={16} /> Unggah foto & Analisa AI
+            </Button>
+          </div>
+        )}
         {stages.length === 0 ? (
           <p className="px-5 pb-5 text-sm text-muted">Tidak ada item untuk filter ini.</p>
         ) : (
@@ -475,7 +502,7 @@ export default function ProductAuditDetailPage() {
                           </div>
                         </div>
                       ) : (
-                        <div className="mt-1 text-xs text-muted">Belum dinilai AI.</div>
+                        <div className="mt-1 text-xs text-muted">Belum dinilai AI. Unggah foto lalu tekan Analisa AI.</div>
                       )}
                       {it.finalSource === 'inspector' && (
                         <div className="mt-1 text-xs text-[#7a4ac7]">
