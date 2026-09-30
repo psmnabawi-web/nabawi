@@ -59,8 +59,8 @@ export function Spinner({ className }: { className?: string }) {
   );
 }
 
-export function Card({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <div className={cn('rounded-2xl border border-line/60 bg-white p-5 shadow-[0_1px_2px_rgba(16,16,16,0.04),0_8px_24px_-12px_rgba(16,16,16,0.12)]', className)}>{children}</div>;
+export function Card({ className, children, id }: { className?: string; children: React.ReactNode; id?: string }) {
+  return <div id={id} className={cn('rounded-2xl border border-line/60 bg-white p-5 shadow-[0_1px_2px_rgba(16,16,16,0.04),0_8px_24px_-12px_rgba(16,16,16,0.12)]', className)}>{children}</div>;
 }
 
 /** Judul kartu gaya dashboard: judul tebal + deskripsi kecil + slot kanan. */
