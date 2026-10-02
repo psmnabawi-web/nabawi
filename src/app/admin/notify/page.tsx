@@ -30,8 +30,8 @@ const PROVIDERS: { value: NotifyProvider; label: string; tokenLabel: string; tar
     help: [
       'Daftar di fonnte.com, tambah Device, klik Connect, scan QR dari WhatsApp nomor KHUSUS bot (bukan nomor pribadi) lewat menu Perangkat Tertaut.',
       'Masukkan nomor bot itu ke grup WhatsApp tujuan.',
-      'Di Fonnte: menu Device → Groups (atau API fetch-group / get-whatsapp-group) → salin ID grup yang berakhiran @g.us.',
-      'Salin Token dari halaman Device, tempel di bawah, lalu tekan "Kirim tes".',
+      'Salin Token dari halaman Device di Fonnte, tempel di kolom token.',
+      'Tekan "Ambil daftar grup dari Fonnte", pilih grupnya, Simpan, lalu "Kirim tes sekarang".',
     ],
   },
   {
@@ -55,6 +55,7 @@ export default function NotifySettingsPage() {
   const [data, setData] = useState<Resp | null>(null);
   const [form, setForm] = useState({ enabled: false, provider: 'fonnte' as NotifyProvider, token: '', target: '', baseUrl: '' });
   const [report, setReport] = useState<Report | null>(null);
+  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ kind: 'error' | 'success' | 'info'; text: string } | null>(null);
 
@@ -85,6 +86,21 @@ export default function NotifySettingsPage() {
       setMsg({ kind: 'success', text: 'Pengaturan tersimpan.' });
     } catch (e) {
       setMsg({ kind: 'error', text: e instanceof Error ? e.message : 'Gagal menyimpan.' });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function fetchGroups() {
+    setBusy('groups');
+    setMsg(null);
+    try {
+      const r = await apiFetch<{ groups: { id: string; name: string }[] }>('/api/admin/notify/groups', { method: 'POST', body: JSON.stringify({ token: form.token || undefined }) });
+      setGroups(r.groups);
+      if (r.groups.length === 0) setMsg({ kind: 'info', text: 'Tidak ada grup ditemukan. Pastikan nomor bot sudah dimasukkan ke grup dan perangkat Fonnte tersambung.' });
+      else if (r.groups.length === 1) setForm((f) => ({ ...f, target: r.groups[0].id }));
+    } catch (e) {
+      setMsg({ kind: 'error', text: e instanceof Error ? e.message : 'Gagal mengambil daftar grup.' });
     } finally {
       setBusy(null);
     }
@@ -153,6 +169,23 @@ export default function NotifySettingsPage() {
             <div>
               <Label htmlFor="target">{prov.targetLabel}</Label>
               <Input id="target" value={form.target} onChange={(e) => setForm((f) => ({ ...f, target: e.target.value }))} />
+              {form.provider === 'fonnte' && (
+                <div className="mt-2 space-y-2">
+                  <Button type="button" size="sm" variant="secondary" loading={busy === 'groups'} onClick={fetchGroups} disabled={!form.token && !data?.settings.token}>
+                    Ambil daftar grup dari Fonnte
+                  </Button>
+                  {groups.length > 0 && (
+                    <Select value={form.target} onChange={(e) => setForm((f) => ({ ...f, target: e.target.value }))}>
+                      <option value="">— Pilih grup —</option>
+                      {groups.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name || g.id} · {g.id}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </div>
+              )}
             </div>
             {form.provider === 'wablas' && (
               <div>
