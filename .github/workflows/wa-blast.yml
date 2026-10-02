@@ -1,0 +1,59 @@
+name: WA Blast Pencapaian
+
+# Jadwal dalam UTC. 02:00 UTC = 09:00 WIB, 07:00 UTC = 14:00 WIB.
+# GitHub bisa menunda jadwal beberapa menit saat antrean padat; itu normal.
+on:
+  schedule:
+    - cron: "0 2,7 * * *"
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "send = kirim ke grup · dry_run = susun pesan saja (lihat artifact) · list_groups = cetak ID grup (Fonnte)"
+        type: choice
+        default: dry_run
+        options: [dry_run, send, list_groups]
+
+concurrency:
+  group: wa-blast
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  blast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Pasang Playwright (Chromium)
+        if: ${{ inputs.action != 'list_groups' }}
+        working-directory: apps/sssg-dashboard
+        run: |
+          npm i --no-save --no-audit --no-fund playwright@1
+          npx playwright install --with-deps chromium
+      - name: Susun & kirim pesan
+        working-directory: apps/sssg-dashboard
+        env:
+          ACTION: ${{ inputs.action || 'send' }}
+          SSSG_URL: https://dashboard-inti-warna.web.app/#exec
+          WA_GATEWAY: ${{ secrets.WA_GATEWAY }}
+          WA_TOKEN: ${{ secrets.WA_TOKEN }}
+          WA_API_URL: ${{ secrets.WA_API_URL }}
+          WA_TARGET_BOD: ${{ secrets.WA_TARGET_BOD }}
+          WA_TARGET_LEADER: ${{ secrets.WA_TARGET_LEADER }}
+          WA_MODE_BOD: ${{ vars.WA_MODE_BOD || 'detail' }}
+          WA_MODE_LEADER: ${{ vars.WA_MODE_LEADER || 'pct' }}
+          OUT_DIR: wa-out
+        run: node scripts/wa-blast.mjs
+      - name: Simpan salinan pesan
+        if: ${{ always() && inputs.action != 'list_groups' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pesan-wa-${{ github.run_number }}
+          path: apps/sssg-dashboard/wa-out/
+          if-no-files-found: ignore
+          retention-days: 30

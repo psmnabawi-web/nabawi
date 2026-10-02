@@ -1681,5 +1681,11 @@
   $("btnSwap").addEventListener("click", () => { state.rankWorst = !state.rankWorst; if (state.lastResult) drawRankList(state.lastResult, state.mode === "yoy" ? "SSSG" : "Growth MoM"); });
   $("btnSwapVisit").addEventListener("click", () => { state.visitRankWorst = !state.visitRankWorst; if (state.lastVisit) drawVisitRank(state.lastVisit); });
   $("storeFilter").addEventListener("input", applyFilter); $("btnClearFilter").addEventListener("click", () => { $("storeFilter").value = ""; applyFilter(); });
+  // API kecil untuk otomasi (blast WhatsApp terjadwal lewat scripts/wa-blast.mjs). Tidak mengubah tampilan.
+  window.SSSG = {
+    ready: () => state.months.length > 0,
+    status: () => ({ text: $("status").textContent, error: $("status").classList.contains("err"), fetchedAt: state.fetchedAt ? state.fetchedAt.toISOString() : null, months: state.months.filter(Boolean).length, sales: state.sales ? state.sales.rows.length : 0, salesErr: state.salesErr || null, year: state.year, month: state.month }),
+    wa: (mode) => mode === "pct" ? buildWaPercent() : buildWaMessage(mode === "compact"),
+  };
   loadAll();
 })();

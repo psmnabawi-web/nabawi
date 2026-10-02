@@ -42,8 +42,39 @@ total perusahaan, sisa hari dan kebutuhan per hari, daftar outlet belum/sudah me
 prioritas outlet dengan kekurangan Rp terbesar, dan tautan dashboard. Pesan bisa diedit, lalu **Salin pesan** (tempel di grup)
 atau **Buka WhatsApp** (pilih grup tujuan). Tidak memakai bot atau gateway, jadi tidak ada biaya dan tidak ada risiko blokir.
 
-Untuk blast **otomatis terjadwal** ke grup, diperlukan gateway WhatsApp pihak ketiga (mis. Fonnte/Wablas) karena API resmi
-WhatsApp tidak mengizinkan pengiriman ke grup; pemicunya bisa dari Apps Script time-driven trigger yang membaca sheet yang sama.
+## Blast otomatis ke grup WhatsApp (09.00 & 14.00 WIB)
+Workflow GitHub Actions `.github/workflows/wa-blast.yml` menjalankan `scripts/wa-blast.mjs` setiap hari pukul 09.00 dan 14.00 WIB
+(cron UTC `0 2,7 * * *`). Script membuka dashboard secara headless, menunggu data Google Sheet termuat, mengambil pesan yang
+**persis sama** dengan tombol Kirim WA (`window.SSSG.wa(mode)`), lalu mengirimkannya lewat gateway WhatsApp:
+grup **BOD** menerima versi rinci (dengan rupiah), grup **Grup Leader** menerima versi persentase (tanpa rupiah).
+Salinan setiap pesan disimpan sebagai artifact run (30 hari), jadi riwayat blast bisa diaudit.
+
+WhatsApp resmi (Cloud API) tidak mengizinkan pengiriman ke grup, sehingga dibutuhkan gateway pihak ketiga yang memakai
+nomor WhatsApp sendiri. Gunakan **nomor khusus** (bukan nomor pribadi) karena ada risiko pembatasan oleh WhatsApp.
+
+### Setup sekali (sekitar 15 menit)
+1. **Gateway.** Daftar di Fonnte (fonnte.com) atau Wablas, tambahkan device, scan QR dengan nomor WA khusus, salin **token** device.
+2. **Masukkan nomor gateway ke grup** BOD dan grup Grup Leader.
+3. **Secret di GitHub** (Settings → Secrets and variables → Actions → New repository secret):
+
+   | Secret | Isi |
+   |---|---|
+   | `WA_GATEWAY` | `fonnte`, `wablas`, atau `webhook` |
+   | `WA_TOKEN` | token device gateway |
+   | `WA_API_URL` | hanya Wablas (domain server, mis. `https://jogja.wablas.com`) atau webhook (URL tujuan) |
+   | `WA_TARGET_BOD` | ID grup BOD, format `1203…@g.us` |
+   | `WA_TARGET_LEADER` | ID grup Grup Leader |
+
+   Variabel opsional (tab Variables): `WA_MODE_BOD` (default `detail`), `WA_MODE_LEADER` (default `pct`); pilihan `detail | compact | pct`.
+4. **Cari ID grup.** Tab Actions → *WA Blast Pencapaian* → Run workflow → action `list_groups` (Fonnte) → ID grup tercetak di log.
+   Untuk Wablas, ID grup ada di menu Group pada panel Wablas.
+5. **Uji tanpa mengirim.** Run workflow dengan action `dry_run`, buka artifact `pesan-wa-<nomor>` untuk membaca pesannya.
+6. **Uji kirim.** Run workflow dengan action `send`. Setelah itu jadwal berjalan otomatis; tanpa secret, jadwal hanya dry-run.
+
+Mengubah jam: edit baris `cron` (UTC = WIB − 7). Menonaktifkan: Actions → WA Blast Pencapaian → Disable workflow.
+Pesan memakai periode bulan berjalan dan data sampai tanggal terakhir yang terisi; bila sheet belum diperbarui, isi pesan akan sama dengan blast sebelumnya.
+
+Uji lokal: `DRY_RUN=1 node scripts/wa-blast.mjs` (butuh `npm i --no-save playwright && npx playwright install chromium`).
 
 ## Cara hitung
 - SSSG YoY = Omset toko bulan ini 2026 ÷ Omset toko bulan sama 2025 − 1 (hanya toko yang ada di kedua tahun).
