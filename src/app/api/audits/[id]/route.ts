@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod/v4';
 import { requireProfile, jsonError, writeAuditLog, assertStoreAccess, requireRole } from '@/lib/auth-server';
 import { adminBucket, adminDb } from '@/lib/firebase/admin';
-import { loadAudit, recomputeSummary } from '@/lib/server/audits';
+import { assertStoreActive, loadAudit, recomputeSummary } from '@/lib/server/audits';
 import type { AuditItem } from '@/lib/types';
 import { HttpError } from '@/lib/utils';
 
@@ -24,6 +24,7 @@ export async function PATCH(req: Request, { params }: Params) {
     const { ref, audit } = await loadAudit(id);
     assertStoreAccess(ctx, audit.storeId);
 
+    if (body.action === 'submit' || body.action === 'reopen') await assertStoreActive(audit.storeId);
     if (body.action === 'submit') {
       if (audit.status === 'submitted') throw new HttpError(400, 'Audit sudah disubmit.');
       const summary = await recomputeSummary(id);

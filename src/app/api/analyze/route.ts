@@ -5,7 +5,7 @@ import { analyzeCleanliness } from '@/lib/ai/analyze';
 import { requireProfile, jsonError, writeAuditLog, assertStoreAccess } from '@/lib/auth-server';
 import { adminBucket } from '@/lib/firebase/admin';
 import { mustSeeText } from '@/lib/photoGuides';
-import { findBlockingItem, loadAudit, recomputeSummary } from '@/lib/server/audits';
+import { assertStoreActive, findBlockingItem, loadAudit, recomputeSummary } from '@/lib/server/audits';
 import type { AttemptRecord, AuditItem } from '@/lib/types';
 import { HttpError } from '@/lib/utils';
 
@@ -50,6 +50,7 @@ export async function POST(req: Request) {
 
     const { ref, audit } = await loadAudit(body.auditId);
     assertStoreAccess(ctx, audit.storeId);
+    await assertStoreActive(audit.storeId);
     if (audit.status === 'submitted') throw new HttpError(400, 'Audit sudah disubmit. Minta manager membuka kembali audit untuk capture ulang.');
 
     const itemRef = ref.collection('items').doc(body.itemId);

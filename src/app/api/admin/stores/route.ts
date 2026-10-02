@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod/v4';
 import { requireProfile, requireRole, jsonError, writeAuditLog } from '@/lib/auth-server';
 import { adminDb } from '@/lib/firebase/admin';
-import type { Store } from '@/lib/types';
+import type { Store, UserProfile } from '@/lib/types';
 import { HttpError, slugify } from '@/lib/utils';
 
 export const runtime = 'nodejs';
@@ -51,8 +51,9 @@ export async function PATCH(req: Request) {
     const batch = adminDb().batch();
     users.docs.forEach((d) => batch.set(d.ref, { storeName: body.name }, { merge: true }));
     await batch.commit();
-    await writeAuditLog(ctx, { action: 'UPDATE_STORE', entity: 'store', entityId: body.id, details: { ...update, excludedCount: update.excludedIndicatorIds.length } });
-    return NextResponse.json({ store: (await ref.get()).data() });
+    const boundUsers = users.docs.map((d) => (d.data() as UserProfile).email);
+    await writeAuditLog(ctx, { action: 'UPDATE_STORE', entity: 'store', entityId: body.id, details: { ...update, excludedCount: update.excludedIndicatorIds.length, boundUsers: body.active ? undefined : boundUsers } });
+    return NextResponse.json({ store: (await ref.get()).data(), boundUsers: body.active ? [] : boundUsers });
   } catch (err) {
     if (err instanceof z.ZodError) return NextResponse.json({ error: 'Input tidak valid.', issues: err.issues }, { status: 400 });
     return jsonError(err);

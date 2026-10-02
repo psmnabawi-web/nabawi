@@ -40,7 +40,9 @@ export async function POST(req: Request) {
     if (body.storeId) {
       const s = await adminDb().collection('stores').doc(body.storeId).get();
       if (!s.exists) throw new HttpError(404, 'Store tidak ditemukan.');
-      storeName = (s.data() as Store).name;
+      const st = s.data() as Store;
+      if (!st.active) throw new HttpError(400, 'Store tidak aktif. Pilih store aktif atau kosongkan.');
+      storeName = st.name;
     }
     const user = await adminAuth().createUser({ email: body.email, password: body.password, displayName: body.name });
     const now = Date.now();
@@ -96,8 +98,10 @@ export async function PATCH(req: Request) {
       if (body.storeId) {
         const s = await adminDb().collection('stores').doc(body.storeId).get();
         if (!s.exists) throw new HttpError(404, 'Store tidak ditemukan.');
+        const st = s.data() as Store;
+        if (!st.active && (snap.data() as UserProfile).storeId !== body.storeId) throw new HttpError(400, 'Store tidak aktif. Pilih store aktif atau kosongkan.');
         update.storeId = body.storeId;
-        update.storeName = (s.data() as Store).name;
+        update.storeName = st.name;
       } else {
         update.storeId = null;
         update.storeName = null;

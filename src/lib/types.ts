@@ -281,3 +281,23 @@ export interface ProductAudit {
   submittedAt: number | null;
   submittedByName: string | null;
 }
+
+// ===================== Notifikasi laporan scoring (WhatsApp/Telegram) =====================
+export type NotifyProvider = 'fonnte' | 'wablas' | 'telegram';
+
+export interface NotifySettings {
+  enabled: boolean;
+  provider: NotifyProvider;
+  /** Token perangkat (Fonnte), token.secret (Wablas), atau token bot (Telegram). Disimpan hanya di server. */
+  token: string;
+  /** ID grup WhatsApp (xxx@g.us) atau chat_id grup Telegram (negatif). */
+  target: string;
+  /** Khusus Wablas: server perangkat, mis. https://bdg.wablas.com */
+  baseUrl: string;
+  /** Jam kirim (WIB), informasi saja: jadwal sebenarnya di Cloud Scheduler. */
+  schedule: string;
+  updatedAt: number;
+  updatedByName: string | null;
+  lastSentAt: number | null;
+  lastResult: string | null;
+}

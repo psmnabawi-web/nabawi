@@ -154,7 +154,8 @@ export default function DashboardPage() {
   const gradeColor = GRADE_RULES.find((g) => g.grade === grade)?.color ?? '#F26522';
   const firstName = (profile?.name ?? '').split(/\s+/)[0] || 'Tim';
   const scopeStore = storeFilter === 'all' ? null : stores.find((s) => s.id === storeFilter);
-  const heroTitle = isAdmin ? (scopeStore?.name ?? 'Almaz Fried Chicken') : (profile?.storeName ?? 'Store belum dipilih');
+  const myStoreInactive = !isAdmin && !!profile?.storeId && stores.some((s) => s.id === profile.storeId && !s.active);
+  const heroTitle = isAdmin ? (scopeStore?.name ?? 'Almaz Fried Chicken') : profile?.storeName ? `${profile.storeName}${myStoreInactive ? ' (nonaktif)' : ''}` : 'Store belum dipilih';
   const heroSub = isAdmin
     ? scopeStore
       ? `${scopeStore.code} · ${scopeStore.city || '-'}`
@@ -162,7 +163,7 @@ export default function DashboardPage() {
     : 'Jaga standar bersih setiap shift';
 
   const journey = [
-    { label: 'Store', desc: isAdmin ? `${data.activeStores.length} store aktif` : (profile?.storeName ? 'Store terpilih' : 'Belum dipilih'), done: isAdmin ? data.activeStores.length > 0 : !!profile?.storeId, cta: !isAdmin && !profile?.storeId ? { label: 'Pilih store', href: '/profile' } : undefined },
+    { label: 'Store', desc: isAdmin ? `${data.activeStores.length} store aktif` : myStoreInactive ? 'Store nonaktif' : profile?.storeName ? 'Store terpilih' : 'Belum dipilih', done: isAdmin ? data.activeStores.length > 0 : !!profile?.storeId && !myStoreInactive, cta: !isAdmin && !profile?.storeId ? { label: 'Pilih store', href: '/profile' } : undefined },
     { label: 'Audit dibuat', desc: `${data.todayAudits.length} audit hari ini`, done: data.todayAudits.length > 0, cta: data.todayAudits.length === 0 ? { label: 'Mulai audit', href: '/audits/new' } : undefined },
     { label: 'Foto & AI', desc: `${data.todayPhotos} area dinilai`, done: data.todayPhotos > 0 },
     { label: 'Area di-submit', desc: `${data.todayLocked} area`, done: data.todayLocked > 0 },

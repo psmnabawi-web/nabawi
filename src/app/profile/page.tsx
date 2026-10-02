@@ -18,7 +18,7 @@ function ProfileForm() {
 
 function ProfileFormInner({ profile }: { profile: UserProfile }) {
   const { refreshProfile, logout } = useAuth();
-  const { stores } = useStores();
+  const { stores } = useStores(true);
   const params = useSearchParams();
   const onboarding = params.get('onboarding') === '1';
   const [name, setName] = useState(profile.name);
@@ -62,13 +62,16 @@ function ProfileFormInner({ profile }: { profile: UserProfile }) {
             <Label htmlFor="store">Store</Label>
             <Select id="store" value={storeId} onChange={(e) => setStoreId(e.target.value)} disabled={storeLocked}>
               <option value="">{profile.role === 'admin' ? '— Semua store —' : '— Pilih store —'}</option>
-              {stores.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.code} · {s.name}
-                </option>
-              ))}
+              {stores
+                .filter((s) => s.active || s.id === storeId)
+                .map((s) => (
+                  <option key={s.id} value={s.id} disabled={!s.active}>
+                    {s.code} · {s.name}{s.active ? '' : ' (nonaktif)'}
+                  </option>
+                ))}
             </Select>
             {storeLocked && <p className="mt-1 text-xs text-muted">Perubahan store dilakukan oleh admin.</p>}
+            {stores.some((s) => s.id === storeId && !s.active) && <Alert kind="warning" className="mt-2">Store Anda sudah dinonaktifkan. Hubungi admin untuk dipindahkan ke store lain.</Alert>}
             {stores.length === 0 && <p className="mt-1 text-xs text-warn">Belum ada store. Admin perlu menambahkan store di menu Admin.</p>}
           </div>
           <div className="flex gap-2">

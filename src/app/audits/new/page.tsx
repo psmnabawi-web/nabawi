@@ -12,7 +12,7 @@ import { todayISO } from '@/lib/utils';
 
 export default function NewAuditPage() {
   const { profile } = useAuth();
-  const { stores } = useStores();
+  const { stores } = useStores(true);
   const { indicators } = useIndicators();
   const router = useRouter();
   const [storeChoice, setStoreChoice] = useState('');
@@ -26,6 +26,7 @@ export default function NewAuditPage() {
   const isAdmin = profile?.role === 'admin';
   const storeId = isAdmin ? storeChoice : (profile?.storeId ?? storeChoice);
   const selectedStore = stores.find((s) => s.id === storeId);
+  const storeInactive = !!selectedStore && !selectedStore.active;
   const excluded = new Set(selectedStore?.excludedIndicatorIds ?? []);
   const activeCount = indicators.filter((i) => i.active && !excluded.has(i.id)).length;
 
@@ -68,12 +69,15 @@ export default function NewAuditPage() {
             <Label htmlFor="store">Store</Label>
             <Select id="store" required value={storeId} onChange={(e) => setStoreChoice(e.target.value)} disabled={!isAdmin && !!profile?.storeId}>
               <option value="">— Pilih store —</option>
-              {stores.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.code} · {s.name}
-                </option>
-              ))}
+              {stores
+                .filter((s) => s.active || s.id === storeId)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.code} · {s.name}{s.active ? '' : ' (nonaktif)'}
+                  </option>
+                ))}
             </Select>
+            {storeInactive && <Alert kind="warning" className="mt-2">Store ini sudah dinonaktifkan. Audit baru tidak bisa dibuat; hubungi admin untuk pindah store.</Alert>}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -98,7 +102,7 @@ export default function NewAuditPage() {
           <Alert kind="info">
             Auditor: <b>{profile?.name}</b>. Setelah audit dibuat, ambil foto per area langsung dari HP. AI akan menilai skor 1-5 sesuai standar tiap area.
           </Alert>
-          <Button type="submit" size="lg" className="w-full" loading={busy} disabled={!storeId}>
+          <Button type="submit" size="lg" className="w-full" loading={busy} disabled={!storeId || storeInactive}>
             Buat Audit & Mulai Capture
           </Button>
         </form>

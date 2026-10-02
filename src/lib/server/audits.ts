@@ -2,13 +2,19 @@ import 'server-only';
 import { adminDb } from '../firebase/admin';
 import { DEFAULT_INDICATORS, type Indicator } from '../indicators';
 import { findInProgress, summarize } from '../scoring';
-import type { Audit, AuditItem } from '../types';
+import type { Audit, AuditItem, Store } from '../types';
 import { HttpError } from '../utils';
 
 export async function loadIndicators(): Promise<Indicator[]> {
   const snap = await adminDb().collection('indicators').where('active', '==', true).get();
   if (snap.empty) return DEFAULT_INDICATORS.filter((i) => i.active);
   return snap.docs.map((d) => d.data() as Indicator).sort((a, b) => a.no - b.no);
+}
+
+/** Tolak operasi tulis pada store yang sudah dinonaktifkan. */
+export async function assertStoreActive(storeId: string) {
+  const s = await adminDb().collection('stores').doc(storeId).get();
+  if (!s.exists || !(s.data() as Store).active) throw new HttpError(400, 'Store ini sudah dinonaktifkan. Hubungi admin.');
 }
 
 export async function loadAudit(id: string) {

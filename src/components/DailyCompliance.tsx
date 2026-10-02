@@ -61,7 +61,7 @@ export function DailyCompliance({ stores, audits }: { stores: Store[]; audits: A
       agg.set(a.storeId, g);
     }
     return [...agg.entries()]
-      .filter(([id]) => stores.some((s) => s.id === id))
+      .filter(([id]) => stores.some((s) => s.id === id && s.active))
       .map(([id, g]) => {
         const draft = g.drafts > 0;
         const parts: string[] = [];

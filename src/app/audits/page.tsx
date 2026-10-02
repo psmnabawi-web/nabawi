@@ -108,6 +108,7 @@ function AuditsInner() {
                     {a.summary.scoredCount}/{a.summary.itemCount} dinilai
                   </Badge>
                   {a.summary.criticalCount > 0 && <Badge color="#e34948">{a.summary.criticalCount} kritikal</Badge>}
+                  {stores.some((s) => s.id === a.storeId && !s.active) && <Badge color="#9a9994">Store nonaktif</Badge>}
                 </div>
               </div>
               <span className="text-muted">›</span>

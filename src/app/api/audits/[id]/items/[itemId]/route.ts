@@ -3,7 +3,7 @@ import { z } from 'zod/v4';
 import { requireProfile, jsonError, writeAuditLog, assertStoreAccess, requireRole } from '@/lib/auth-server';
 import { adminBucket } from '@/lib/firebase/admin';
 import { effectiveScore, meetsSubmitThreshold, MIN_SUBMIT_PCT } from '@/lib/scoring';
-import { autoSubmitIfDone, loadAudit, recomputeSummary } from '@/lib/server/audits';
+import { assertStoreActive, autoSubmitIfDone, loadAudit, recomputeSummary } from '@/lib/server/audits';
 import type { AuditItem } from '@/lib/types';
 import { HttpError } from '@/lib/utils';
 
@@ -36,6 +36,7 @@ export async function PATCH(req: Request, { params }: Params) {
     const body = PatchSchema.parse(await req.json());
     const { ref, audit } = await loadAudit(id);
     assertStoreAccess(ctx, audit.storeId);
+    await assertStoreActive(audit.storeId);
 
     const itemRef = ref.collection('items').doc(itemId);
     const itemSnap = await itemRef.get();

@@ -90,6 +90,7 @@ export default function AdminUsersPage() {
               <div className="mt-1 flex flex-wrap gap-1">
                 <Badge color={u.role === 'admin' ? '#7a4ac7' : u.role === 'manager' ? '#2a78d6' : '#5f5e5a'}>{u.superAdmin && u.role === 'admin' ? 'Super Admin' : ROLES.find((r) => r.value === u.role)?.label}</Badge>
                 <Badge color="#5f5e5a">{u.storeName ?? 'Tanpa store'}</Badge>
+                {u.storeId && stores.some((s) => s.id === u.storeId && !s.active) && <Badge color="#eda100">Store nonaktif</Badge>}
                 {!u.active && <Badge color="#e34948">Nonaktif</Badge>}
               </div>
             </div>
@@ -130,9 +131,9 @@ export default function AdminUsersPage() {
               <Label>Store</Label>
               <Select value={form.storeId} onChange={(e) => setForm({ ...form, storeId: e.target.value })}>
                 <option value="">— Tidak ada —</option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.code} · {s.name}
+                {[...stores].sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)).map((s) => (
+                  <option key={s.id} value={s.id} disabled={!s.active && s.id !== form.storeId}>
+                    {s.code} · {s.name}{s.active ? '' : ' (nonaktif)'}
                   </option>
                 ))}
               </Select>

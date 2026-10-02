@@ -37,6 +37,7 @@ export async function PATCH(req: Request) {
         const store = await adminDb().collection('stores').doc(body.storeId).get();
         if (!store.exists) throw new HttpError(404, 'Store tidak ditemukan.');
         const s = store.data() as Store;
+        if (!s.active && s.id !== ctx.profile.storeId) throw new HttpError(400, 'Store tidak aktif. Pilih store lain atau hubungi admin.');
         update.storeId = s.id;
         update.storeName = s.name;
       } else {

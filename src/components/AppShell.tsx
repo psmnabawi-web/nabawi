@@ -7,7 +7,7 @@ import { useAuth } from './AuthProvider';
 import { LogoMark } from './brand/Logo';
 import { IconBell, IconChevron, IconClipboard, IconDashboard, IconHistory, IconList, IconLogout, IconPlus, IconQuality, IconStore, IconUser, IconUsers } from './icons';
 import { Alert, Spinner } from './ui';
-import { useAudits } from '@/lib/hooks';
+import { useAudits, useStores } from '@/lib/hooks';
 import { isSuperAdmin } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -16,6 +16,7 @@ const NAV = [
   { href: '/audits', label: 'Audit', icon: IconClipboard, roles: ['crew', 'manager', 'admin'] },
   { href: '/audits/new', label: 'Mulai Audit', icon: IconPlus, roles: ['crew', 'manager', 'admin'], primary: true },
   { href: '/product-audit', label: 'Audit Produk', icon: IconQuality, roles: ['admin'], superOnly: true },
+  { href: '/admin/notify', label: 'Notifikasi WA', icon: IconBell, roles: ['admin'], superOnly: true },
   { href: '/admin/stores', label: 'Store', icon: IconStore, roles: ['admin'] },
   { href: '/admin/users', label: 'User & Role', icon: IconUsers, roles: ['admin'] },
   { href: '/admin/indicators', label: 'Indikator', icon: IconList, roles: ['admin'] },
@@ -44,6 +45,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const { audits } = useAudits(profile, 'all');
+  const { stores } = useStores(true);
+  const myStoreInactive = !!profile?.storeId && profile.role !== 'admin' && stores.some((s) => s.id === profile.storeId && !s.active);
   const drafts = audits.filter((a) => a.status === 'draft').length;
 
   useEffect(() => {
@@ -169,6 +172,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
+        {myStoreInactive && pathname !== '/profile' && (
+          <div className="px-4 pt-4 md:px-8">
+            <Alert kind="warning">Store Anda sudah dinonaktifkan oleh admin. Audit baru tidak dapat dibuat. Hubungi admin untuk dipindahkan ke store lain.</Alert>
+          </div>
+        )}
         {profile && !profile.storeId && role !== 'admin' && pathname !== '/profile' && (
           <div className="px-4 pt-4 md:px-8">
             <Alert kind="warning">

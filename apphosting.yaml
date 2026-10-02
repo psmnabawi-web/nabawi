@@ -10,39 +10,45 @@ runConfig:
 env:
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
     value: "AIzaSyBMyOpwDz3ZP-j2xkBLFpo_0PKuClvLMic"
-    availability: [BUILD, RUNTIME]
+    availability: [ BUILD, RUNTIME ]
   - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
     value: "almaz-cleanliness-508507.firebaseapp.com"
-    availability: [BUILD, RUNTIME]
+    availability: [ BUILD, RUNTIME ]
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
     value: "almaz-cleanliness-508507"
-    availability: [BUILD, RUNTIME]
+    availability: [ BUILD, RUNTIME ]
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
     value: "almaz-cleanliness-508507.firebasestorage.app"
-    availability: [BUILD, RUNTIME]
+    availability: [ BUILD, RUNTIME ]
   - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
     value: "1033391731833"
-    availability: [BUILD, RUNTIME]
+    availability: [ BUILD, RUNTIME ]
   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
     value: "1:1033391731833:web:1f90c258de3d92962c90a8"
-    availability: [BUILD, RUNTIME]
+    availability: [ BUILD, RUNTIME ]
   - variable: AI_PROVIDER
     value: "google"
-    availability: [RUNTIME]
+    availability: [ RUNTIME ]
   - variable: AI_MODEL
     value: "gemini-3.6-flash"
-    availability: [RUNTIME]
+    availability: [ RUNTIME ]
   # Vertex AI lewat ADC service account App Hosting (butuh role Vertex AI User).
   # Untuk Gemini API key: set GOOGLE_GENAI_USE_VERTEXAI "false" dan tambah secret GEMINI_API_KEY.
   - variable: GOOGLE_GENAI_USE_VERTEXAI
     value: "true"
-    availability: [RUNTIME]
+    availability: [ RUNTIME ]
   - variable: GOOGLE_CLOUD_PROJECT
     value: "almaz-cleanliness-508507"
-    availability: [RUNTIME]
+    availability: [ RUNTIME ]
   - variable: GOOGLE_CLOUD_LOCATION
     value: "global"
-    availability: [RUNTIME]
+    availability: [ RUNTIME ]
   - variable: ADMIN_EMAILS
     secret: ADMIN_EMAILS
+    availability: [ RUNTIME ]
+  - variable: CRON_SECRET
+    secret: CRON_SECRET
+  # Rahasia pemanggil Cloud Scheduler untuk /api/cron/scoring-report (laporan WhatsApp 09.00 & 14.00 WIB).
+  - variable: CRON_SECRET
+    secret: CRON_SECRET
     availability: [RUNTIME]

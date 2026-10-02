@@ -23,7 +23,7 @@ export default function ProductAuditListPage() {
   const { profile } = useAuth();
   const enabled = isSuperAdmin(profile);
   const { audits, loading, error } = useProductAudits(enabled);
-  const { stores } = useStores();
+  const { stores: allStores } = useStores(true);
   const [month, setMonth] = useState(todayISO().slice(0, 7));
   const [storeFilter, setStoreFilter] = useState('all');
   const [productFilter, setProductFilter] = useState('all');
@@ -37,6 +37,8 @@ export default function ProductAuditListPage() {
   }, [audits]);
 
   const inMonth = useMemo(() => audits.filter((a) => a.month === month), [audits, month]);
+  /** Store aktif + store nonaktif yang punya pemeriksaan di bulan terpilih (histori tetap terlihat). */
+  const stores = useMemo(() => allStores.filter((s) => s.active || inMonth.some((a) => a.storeId === s.id)).sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)), [allStores, inMonth]);
   const list = useMemo(
     () => inMonth.filter((a) => (storeFilter === 'all' || a.storeId === storeFilter) && (productFilter === 'all' || a.productId === productFilter)).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt),
     [inMonth, storeFilter, productFilter],
@@ -116,7 +118,7 @@ export default function ProductAuditListPage() {
           <option value="all">Semua store</option>
           {stores.map((s) => (
             <option key={s.id} value={s.id}>
-              {s.code} · {s.name.replace(/^Almaz Fried Chicken\s*-\s*/i, '')}
+              {s.code} · {s.name.replace(/^Almaz Fried Chicken\s*-\s*/i, '')}{s.active ? '' : ' (nonaktif)'}
             </option>
           ))}
         </Select>
@@ -158,7 +160,10 @@ export default function ProductAuditListPage() {
                 .filter((r) => storeFilter === 'all' || r.store.id === storeFilter)
                 .map((r) => (
                   <tr key={r.store.id} className="border-b border-line/50 align-top">
-                    <td className="px-5 py-2.5 font-semibold text-ink">{r.store.name.replace(/^Almaz Fried Chicken\s*-\s*/i, '')}</td>
+                    <td className="px-5 py-2.5 font-semibold text-ink">
+                      {r.store.name.replace(/^Almaz Fried Chicken\s*-\s*/i, '')}
+                      {!r.store.active && <Badge color="#9a9994" className="ml-1">nonaktif</Badge>}
+                    </td>
                     {r.cells.map((c) => (
                       <td key={c.product.id} className="px-3 py-2.5">
                         <button type="button" className="text-left" onClick={() => { setStoreFilter(r.store.id); setProductFilter(c.product.id); }}>

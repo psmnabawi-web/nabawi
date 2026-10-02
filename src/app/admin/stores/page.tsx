@@ -72,7 +72,7 @@ export default function AdminStoresPage() {
     <AdminGuard>
       <PageHeader title="Store" subtitle={`${stores.length} store · ${activeIndicators.length} indikator aktif`} actions={<Button size="sm" onClick={() => edit()}>+ Tambah Store</Button>} />
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {stores.map((s) => {
+        {[...stores].sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)).map((s) => {
           const excluded = (s.excludedIndicatorIds ?? []).filter((id) => activeIndicators.some((i) => i.id === id)).length;
           return (
             <Card key={s.id} className="flex items-center justify-between gap-2">

@@ -26,6 +26,7 @@ export async function POST(req: Request) {
     const storeSnap = await adminDb().collection('stores').doc(body.storeId).get();
     if (!storeSnap.exists) throw new HttpError(404, 'Store tidak ditemukan.');
     const store = storeSnap.data() as Store;
+    if (!store.active) throw new HttpError(400, 'Store tidak aktif.');
 
     const month = body.date.slice(0, 7);
     const checkNo = await nextCheckNo(store.id, product.id, month);
