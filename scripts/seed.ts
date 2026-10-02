@@ -20,13 +20,9 @@ const db = getFirestore();
 const SAMPLE_STORES = [
   { id: 'afc-ctm', code: 'AFC-CTM', name: 'Almaz Fried Chicken - Citraland Medan', city: 'Medan' },
   { id: 'afc-hrp', code: 'AFC-HRP', name: 'Almaz Fried Chicken - Harapan Raya PKU', city: 'Pekanbaru' },
-  { id: 'afc-jmb', code: 'AFC-JMB', name: 'Almaz Fried Chicken - Jambi', city: 'Jambi' },
-  { id: 'afc-kip', code: 'AFC-KIP', name: 'Almaz Fried Chicken - Kambang Iwak Palembang', city: 'Palembang' },
   { id: 'afc-kmm', code: 'AFC-KMM', name: 'Almaz Fried Chicken - Kapten Muslim Medan', city: 'Medan' },
-  { id: 'afc-ktp', code: 'AFC-KTP', name: 'Almaz Fried Chicken - Kenten Palembang', city: 'Palembang' },
   { id: 'afc-mrp', code: 'AFC-MRP', name: 'Almaz Fried Chicken - Marpoyan PKU', city: 'Pekanbaru' },
   { id: 'afc-pnm', code: 'AFC-PNM', name: 'Almaz Fried Chicken - Panam PKU', city: 'Pekanbaru' },
-  { id: 'afc-ryp', code: 'AFC-RYP', name: 'Almaz Fried Chicken - Ryacudu Palembang', city: 'Palembang' },
   { id: 'afc-adm', code: 'AFC-ADM', name: 'Almaz Fried Chicken - Adam Malik Medan', city: 'Medan', excludedIndicatorIds: ['IND-17', 'IND-29', 'IND-30', 'IND-31', 'IND-48', 'IND-50'] },
 ];
 
