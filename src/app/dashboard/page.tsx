@@ -196,7 +196,7 @@ export default function DashboardPage() {
           {isAdmin && (
             <Select value={storeFilter} onChange={(e) => setStoreFilter(e.target.value)} className="!w-auto max-w-[260px]">
               <option value="all">Semua store</option>
-              {stores.map((s) => (
+              {stores.filter((s) => s.active).map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.code} · {s.name.replace(/^Almaz Fried Chicken\s*-\s*/i, '')}
                 </option>

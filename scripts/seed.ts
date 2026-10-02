@@ -18,16 +18,6 @@ initializeApp(
 const db = getFirestore();
 
 const SAMPLE_STORES = [
-  { id: 'afc-cbn', code: 'AFC-CBN', name: 'Almaz Fried Chicken - Cibinong', city: 'Cibinong' },
-  { id: 'afc-cks', code: 'AFC-CKS', name: 'Almaz Fried Chicken - Cikeas', city: 'Cikeas' },
-  { id: 'afc-cld', code: 'AFC-CLD', name: 'Almaz Fried Chicken - Cilendek', city: 'Bogor' },
-  { id: 'afc-cmg', code: 'AFC-CMG', name: 'Almaz Fried Chicken - Cimanggis', city: 'Depok' },
-  { id: 'afc-cnr', code: 'AFC-CNR', name: 'Almaz Fried Chicken - Cinere', city: 'Depok', excludedIndicatorIds: ['IND-19', 'IND-22', 'IND-31', 'IND-49', 'IND-50', 'IND-52', 'IND-53', 'IND-54', 'IND-55'] },
-  { id: 'afc-drm', code: 'AFC-DRM', name: 'Almaz Fried Chicken - Dramaga Bogor', city: 'Bogor' },
-  { id: 'afc-mok', code: 'AFC-MOK', name: 'Almaz Fried Chicken - Mayor Oking Cibinong', city: 'Cibinong' },
-  { id: 'afc-pdr', code: 'AFC-PDR', name: 'Almaz Fried Chicken - Pandu Raya', city: 'Bogor' },
-  { id: 'afc-stl', code: 'AFC-STL', name: 'Almaz Fried Chicken - Sentul', city: 'Sentul' },
-  { id: 'afc-wnh', code: 'AFC-WNH', name: 'Almaz Fried Chicken - Wanaherang', city: 'Gunung Putri' },
   { id: 'afc-ctm', code: 'AFC-CTM', name: 'Almaz Fried Chicken - Citraland Medan', city: 'Medan' },
   { id: 'afc-hrp', code: 'AFC-HRP', name: 'Almaz Fried Chicken - Harapan Raya PKU', city: 'Pekanbaru' },
   { id: 'afc-jmb', code: 'AFC-JMB', name: 'Almaz Fried Chicken - Jambi', city: 'Jambi' },

@@ -69,9 +69,9 @@ function AuditsInner() {
         {profile?.role === 'admin' && (
           <Select value={storeFilter} onChange={(e) => setStoreFilter(e.target.value)}>
             <option value="all">Semua store</option>
-            {stores.map((s) => (
+            {[...stores].sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)).map((s) => (
               <option key={s.id} value={s.id}>
-                {s.code} · {s.name}
+                {s.code} · {s.name}{s.active ? '' : ' (nonaktif)'}
               </option>
             ))}
           </Select>
