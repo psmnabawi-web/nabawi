@@ -46,8 +46,6 @@ env:
   - variable: ADMIN_EMAILS
     secret: ADMIN_EMAILS
     availability: [ RUNTIME ]
-  - variable: CRON_SECRET
-    secret: CRON_SECRET
   # Rahasia pemanggil Cloud Scheduler untuk /api/cron/scoring-report (laporan WhatsApp 09.00 & 14.00 WIB).
   - variable: CRON_SECRET
     secret: CRON_SECRET
