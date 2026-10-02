@@ -43,38 +43,55 @@ prioritas outlet dengan kekurangan Rp terbesar, dan tautan dashboard. Pesan bisa
 atau **Buka WhatsApp** (pilih grup tujuan). Tidak memakai bot atau gateway, jadi tidak ada biaya dan tidak ada risiko blokir.
 
 ## Blast otomatis ke grup WhatsApp (09.00 & 14.00 WIB)
-Workflow GitHub Actions `.github/workflows/wa-blast.yml` menjalankan `scripts/wa-blast.mjs` setiap hari pukul 09.00 dan 14.00 WIB
-(cron UTC `0 2,7 * * *`). Script membuka dashboard secara headless, menunggu data Google Sheet termuat, mengambil pesan yang
-**persis sama** dengan tombol Kirim WA (`window.SSSG.wa(mode)`), lalu mengirimkannya lewat gateway WhatsApp:
-grup **BOD** menerima versi rinci (dengan rupiah), grup **Grup Leader** menerima versi persentase (tanpa rupiah).
-Salinan setiap pesan disimpan sebagai artifact run (30 hari), jadi riwayat blast bisa diaudit.
+Workflow GitHub Actions `.github/workflows/wa-blast.yml` menjalankan `scripts/wa-blast.mjs` setiap hari pukul 09.03 dan 14.03 WIB
+(cron UTC `3 2,7 * * *`; menit :03 dipilih karena menit :00 adalah slot paling tertunda di GitHub). Script membuka dashboard secara
+headless (Playwright), menunggu data Google Sheet termuat, mengambil pesan yang **persis sama** dengan tombol Kirim WA
+(`window.SSSG.wa(mode)`), lalu mengirimkannya lewat gateway WhatsApp: grup **BOD** menerima versi rinci (dengan rupiah),
+grup **Grup Leader** menerima versi persentase (tanpa rupiah; mode lain ditolak kecuali variabel `WA_LEADER_ALLOW_RUPIAH=1`).
 
 WhatsApp resmi (Cloud API) tidak mengizinkan pengiriman ke grup, sehingga dibutuhkan gateway pihak ketiga yang memakai
 nomor WhatsApp sendiri. Gunakan **nomor khusus** (bukan nomor pribadi) karena ada risiko pembatasan oleh WhatsApp.
 
+### Dua syarat dari GitHub
+1. **Jadwal hanya berjalan dari branch default.** File workflow harus ada di branch default repo (Settings → General → Default branch),
+   kalau tidak cron tidak pernah dipicu walaupun `Run workflow` manual berhasil.
+2. **Repo publik: jadwal dinonaktifkan otomatis setelah 60 hari tanpa commit.** GitHub mengirim email sebelumnya; aktifkan lagi di tab
+   Actions → WA Blast Pencapaian → Enable workflow, atau lakukan commit apa pun.
+
 ### Setup sekali (sekitar 15 menit)
-1. **Gateway.** Daftar di Fonnte (fonnte.com) atau Wablas, tambahkan device, scan QR dengan nomor WA khusus, salin **token** device.
+1. **Gateway.** Daftar di Fonnte (fonnte.com) atau Wablas, tambahkan device, scan QR dengan nomor WA khusus, salin token.
+   Wablas memakai dua kunci: isi `WA_TOKEN` dengan `token.secret_key` (digabung dengan titik).
 2. **Masukkan nomor gateway ke grup** BOD dan grup Grup Leader.
-3. **Secret di GitHub** (Settings → Secrets and variables → Actions → New repository secret):
+3. **Isi di GitHub** (Settings → Secrets and variables → Actions):
 
-   | Secret | Isi |
-   |---|---|
-   | `WA_GATEWAY` | `fonnte`, `wablas`, atau `webhook` |
-   | `WA_TOKEN` | token device gateway |
-   | `WA_API_URL` | hanya Wablas (domain server, mis. `https://jogja.wablas.com`) atau webhook (URL tujuan) |
-   | `WA_TARGET_BOD` | ID grup BOD, format `1203…@g.us` |
-   | `WA_TARGET_LEADER` | ID grup Grup Leader |
+   | Nama | Jenis | Isi |
+   |---|---|---|
+   | `WA_GATEWAY` | Variable | `fonnte`, `wablas`, atau `webhook` |
+   | `WA_TOKEN` | Secret | token device (Wablas: `token.secret_key`) |
+   | `WA_API_URL` | Variable/Secret | Wablas: domain server, mis. `https://jogja.wablas.com` · webhook: URL tujuan (wajib https) |
+   | `WA_TARGET_BOD` | Secret | ID grup BOD, format `1203…@g.us` |
+   | `WA_TARGET_LEADER` | Secret | ID grup Grup Leader |
+   | `WA_MODE_BOD` / `WA_MODE_LEADER` | Variable (opsional) | `detail` (default BOD) / `pct` (default Leader) / `compact` |
 
-   Variabel opsional (tab Variables): `WA_MODE_BOD` (default `detail`), `WA_MODE_LEADER` (default `pct`); pilihan `detail | compact | pct`.
-4. **Cari ID grup.** Tab Actions → *WA Blast Pencapaian* → Run workflow → action `list_groups` (Fonnte) → ID grup tercetak di log.
-   Untuk Wablas, ID grup ada di menu Group pada panel Wablas.
-5. **Uji tanpa mengirim.** Run workflow dengan action `dry_run`, buka artifact `pesan-wa-<nomor>` untuk membaca pesannya.
-6. **Uji kirim.** Run workflow dengan action `send`. Setelah itu jadwal berjalan otomatis; tanpa secret, jadwal hanya dry-run.
+4. **Cari ID grup.** Fonnte: tab Actions → *WA Blast Pencapaian* → Run workflow → action `list_groups` → unduh artifact `pesan-wa-<nomor>`
+   (berisi `daftar-grup.txt`), salin ID, lalu **hapus artifact** tersebut. Wablas: menu Group di panel Wablas.
+5. **Uji tanpa mengirim.** Run workflow dengan action `dry_run`, baca pesannya di artifact, lalu hapus artifact.
+6. **Uji kirim.** Run workflow dengan action `send`. Setelah itu jadwal berjalan sendiri.
+
+Perilaku penting:
+- Pengiriman terjadwal **tidak** menyimpan artifact (repo publik: artifact dapat diunduh siapa pun yang login GitHub). Artifact hanya
+  dibuat pada mode uji (`dry_run`, `list_groups`, dan push perubahan kode) dengan masa simpan 3 hari.
+- Log tidak pernah memuat token, ID grup, isi pesan, atau balasan gateway.
+- Konfigurasi tidak lengkap (token kosong padahal gateway diisi, target kosong, URL bukan https, mode salah) membuat job **gagal merah**,
+  bukan diam-diam dilewati. Hanya bila gateway sama sekali belum dikonfigurasi, job berjalan sebagai dry-run dengan peringatan.
+- Gateway yang tidak merespons 45 detik dianggap tidak pasti dan **tidak diulang** (menghindari kiriman ganda); koneksi yang gagal
+  sebelum terkirim diulang sekali.
+- Setiap perubahan pada script/workflow memicu dry-run otomatis di Actions sebagai uji.
 
 Mengubah jam: edit baris `cron` (UTC = WIB − 7). Menonaktifkan: Actions → WA Blast Pencapaian → Disable workflow.
-Pesan memakai periode bulan berjalan dan data sampai tanggal terakhir yang terisi; bila sheet belum diperbarui, isi pesan akan sama dengan blast sebelumnya.
+Pesan memakai periode bulan berjalan dan data sampai tanggal terakhir yang terisi; bila sheet belum diperbarui, isinya sama dengan blast sebelumnya.
 
-Uji lokal: `DRY_RUN=1 node scripts/wa-blast.mjs` (butuh `npm i --no-save playwright && npx playwright install chromium`).
+Uji lokal: `cd apps/sssg-dashboard && npm install && npx playwright install chromium && npm run wa:dry-run`.
 
 ## Cara hitung
 - SSSG YoY = Omset toko bulan ini 2026 ÷ Omset toko bulan sama 2025 − 1 (hanya toko yang ada di kedua tahun).

@@ -1,18 +1,20 @@
 name: WA Blast Pencapaian
 
-# Jadwal dalam UTC. 02:00 UTC = 09:00 WIB, 07:00 UTC = 14:00 WIB.
-# GitHub bisa menunda jadwal beberapa menit saat antrean padat; itu normal.
+# Jadwal dalam UTC (WIB = UTC+7, tanpa DST): 02:03 UTC = 09:03 WIB, 07:03 UTC = 14:03 WIB.
+# Menit :00 adalah slot paling padat di GitHub dan paling sering tertunda, karena itu dipakai menit :03.
+# PENTING: GitHub hanya menjalankan "schedule" dari file workflow di BRANCH DEFAULT repo, dan menonaktifkan
+# jadwal otomatis bila repo publik tidak menerima commit selama 60 hari (aktifkan lagi di tab Actions).
 on:
   schedule:
-    - cron: "0 2,7 * * *"
+    - cron: "3 2,7 * * *"
   # Setiap perubahan pada script/workflow ini diuji otomatis dalam mode dry_run (tidak mengirim apa pun).
   push:
     branches: ["claude/adoring-dijkstra-78ese7", "main"]
-    paths: [".github/workflows/wa-blast.yml", "apps/sssg-dashboard/scripts/wa-blast.mjs"]
+    paths: [".github/workflows/wa-blast.yml", "apps/sssg-dashboard/scripts/wa-blast.mjs", "apps/sssg-dashboard/package.json"]
   workflow_dispatch:
     inputs:
       action:
-        description: "send = kirim ke grup · dry_run = susun pesan saja (lihat artifact) · list_groups = cetak ID grup (Fonnte)"
+        description: "send = kirim ke grup · dry_run = susun pesan saja (lihat artifact) · list_groups = tulis ID grup ke artifact (Fonnte)"
         type: choice
         default: dry_run
         options: [dry_run, send, list_groups]
@@ -28,36 +30,42 @@ jobs:
   blast:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # push → selalu dry_run; dispatch → sesuai pilihan; schedule → send
+      ACTION: ${{ github.event_name == 'push' && 'dry_run' || inputs.action || 'send' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
       - name: Pasang Playwright (Chromium)
-        if: ${{ inputs.action != 'list_groups' }}
+        if: ${{ env.ACTION != 'list_groups' }}
         working-directory: apps/sssg-dashboard
         run: |
-          npm i --no-save --no-audit --no-fund playwright@1
+          npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
       - name: Susun & kirim pesan
         working-directory: apps/sssg-dashboard
         env:
-          ACTION: ${{ github.event_name == 'push' && 'dry_run' || inputs.action || 'send' }}
           SSSG_URL: https://dashboard-inti-warna.web.app/#exec
-          WA_GATEWAY: ${{ secrets.WA_GATEWAY }}
+          # WA_GATEWAY dan WA_API_URL bukan rahasia; simpan sebagai Variables agar tidak ikut disamarkan di log.
+          WA_GATEWAY: ${{ vars.WA_GATEWAY || secrets.WA_GATEWAY }}
+          WA_API_URL: ${{ secrets.WA_API_URL || vars.WA_API_URL }}
           WA_TOKEN: ${{ secrets.WA_TOKEN }}
-          WA_API_URL: ${{ secrets.WA_API_URL }}
           WA_TARGET_BOD: ${{ secrets.WA_TARGET_BOD }}
           WA_TARGET_LEADER: ${{ secrets.WA_TARGET_LEADER }}
           WA_MODE_BOD: ${{ vars.WA_MODE_BOD || 'detail' }}
           WA_MODE_LEADER: ${{ vars.WA_MODE_LEADER || 'pct' }}
+          WA_LEADER_ALLOW_RUPIAH: ${{ vars.WA_LEADER_ALLOW_RUPIAH || '' }}
           OUT_DIR: wa-out
         run: node scripts/wa-blast.mjs
-      - name: Simpan salinan pesan
-        if: ${{ always() && inputs.action != 'list_groups' }}
+      # Salinan pesan/daftar grup hanya disimpan untuk uji (dry_run, push, list_groups), bukan untuk kiriman terjadwal:
+      # repo ini publik, artifact bisa diunduh siapa pun yang login GitHub. Hapus artifact setelah dibaca.
+      - name: Simpan salinan (hanya mode uji)
+        if: ${{ always() && env.ACTION != 'send' }}
         uses: actions/upload-artifact@v4
         with:
           name: pesan-wa-${{ github.run_number }}
           path: apps/sssg-dashboard/wa-out/
           if-no-files-found: ignore
-          retention-days: 30
+          retention-days: 3

@@ -1,0 +1,13 @@
+{
+  "name": "sssg-dashboard-tools",
+  "private": true,
+  "description": "Alat bantu Dashboard Inti Warna: blast WhatsApp terjadwal (scripts/wa-blast.mjs). Situs statis itu sendiri ada di public/ dan tidak butuh paket ini.",
+  "type": "module",
+  "scripts": {
+    "wa:dry-run": "ACTION=dry_run node scripts/wa-blast.mjs",
+    "wa:send": "ACTION=send node scripts/wa-blast.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

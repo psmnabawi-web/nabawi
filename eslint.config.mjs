@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Aplikasi statis terpisah (vanilla JS, bukan bagian build Next.js)
+    "apps/**",
   ]),
 ]);
 
