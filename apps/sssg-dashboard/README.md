@@ -53,8 +53,9 @@ WhatsApp resmi (Cloud API) tidak mengizinkan pengiriman ke grup, sehingga dibutu
 nomor WhatsApp sendiri. Gunakan **nomor khusus** (bukan nomor pribadi) karena ada risiko pembatasan oleh WhatsApp.
 
 ### Dua syarat dari GitHub
-1. **Jadwal hanya berjalan dari branch default.** File workflow harus ada di branch default repo (Settings → General → Default branch),
-   kalau tidak cron tidak pernah dipicu walaupun `Run workflow` manual berhasil.
+1. **Jadwal hanya berjalan dari branch default.** File workflow harus ada di branch default repo (Settings → General → Default branch).
+   Sebelum itu cron tidak pernah dipicu dan tombol **Run workflow** di tab Actions juga belum muncul (pemicu manual hanya bisa lewat API).
+   Setelah branch default berisi workflow ini, jadwal langsung aktif: pastikan uji `dry_run` sudah dilakukan sebelum secret `send` diisi.
 2. **Repo publik: jadwal dinonaktifkan otomatis setelah 60 hari tanpa commit.** GitHub mengirim email sebelumnya; aktifkan lagi di tab
    Actions → WA Blast Pencapaian → Enable workflow, atau lakukan commit apa pun.
 

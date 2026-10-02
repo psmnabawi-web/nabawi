@@ -1178,7 +1178,9 @@
       if (/^(total|jumlah|grand total)$/i.test(name)) break;
       const target = num(row[cTarget]) || 0, total = num(row[cTotal]) || 0; const days = {};
       for (const dc of dayCols) { if (dc.mi !== mi) continue; const v = num(row[dc.c]); if (v != null && v !== 0) { days[dc.d] = v; if (v > 0) lastDay = Math.max(lastDay, dc.d); } }
-      out.push({ name: name.replace(/\s+/g, " "), target, total, mtdSheet: num(row[cMtd]), days });
+      // Nama dari sheet dibersihkan: buang URL dan karakter format WhatsApp (*_~`), batasi 60 karakter.
+      const cleanName = name.replace(/https?:\/\/\S+/gi, "").replace(/[*_~`]/g, "").replace(/\s+/g, " ").trim().slice(0, 60) || "(tanpa nama)";
+      out.push({ name: cleanName, target, total, mtdSheet: num(row[cMtd]), days });
     }
     if (!out.length) throw new Error("tidak ada baris sales di bawah header");
     const dim = daysIn(year, mi);
