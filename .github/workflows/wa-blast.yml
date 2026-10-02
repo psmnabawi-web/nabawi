@@ -5,6 +5,10 @@ name: WA Blast Pencapaian
 on:
   schedule:
     - cron: "0 2,7 * * *"
+  # Setiap perubahan pada script/workflow ini diuji otomatis dalam mode dry_run (tidak mengirim apa pun).
+  push:
+    branches: ["claude/adoring-dijkstra-78ese7", "main"]
+    paths: [".github/workflows/wa-blast.yml", "apps/sssg-dashboard/scripts/wa-blast.mjs"]
   workflow_dispatch:
     inputs:
       action:
@@ -38,7 +42,7 @@ jobs:
       - name: Susun & kirim pesan
         working-directory: apps/sssg-dashboard
         env:
-          ACTION: ${{ inputs.action || 'send' }}
+          ACTION: ${{ github.event_name == 'push' && 'dry_run' || inputs.action || 'send' }}
           SSSG_URL: https://dashboard-inti-warna.web.app/#exec
           WA_GATEWAY: ${{ secrets.WA_GATEWAY }}
           WA_TOKEN: ${{ secrets.WA_TOKEN }}
