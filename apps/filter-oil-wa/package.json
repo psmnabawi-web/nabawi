@@ -1,0 +1,15 @@
+{
+  "name": "filter-oil-wa",
+  "private": true,
+  "description": "Blast WhatsApp terjadwal untuk app Trecking Filter Oil Store: persentase store yang sudah/belum scoring. Tanpa dependensi npm.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/wa-blast.test.mjs",
+    "discover": "ACTION=discover node scripts/wa-blast.mjs",
+    "wa:dry-run": "ACTION=dry_run node scripts/wa-blast.mjs",
+    "wa:send": "ACTION=send node scripts/wa-blast.mjs"
+  }
+}

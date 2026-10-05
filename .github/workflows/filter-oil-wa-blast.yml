@@ -1,0 +1,86 @@
+name: WA Blast Scoring Filter Oil
+
+# Khusus app Trecking Filter Oil Store (Firebase project trecking-filter-oil-store). Tidak terkait SSSG/Almaz.
+# Jadwal dalam UTC (WIB = UTC+7, tanpa DST): 05:02 = 12.02 WIB, 11:02 = 18.02 WIB, 17:02 = 00.02 WIB.
+# Menit :02 dipakai karena slot :00 paling padat di GitHub dan paling sering tertunda.
+# Kiriman 00.02 WIB otomatis berisi REKAP FINAL hari sebelumnya (bukan 0% untuk hari yang baru dimulai).
+# PENTING: GitHub hanya menjalankan "schedule" dan tombol "Run workflow" dari file workflow di BRANCH DEFAULT repo,
+# dan menonaktifkan jadwal bila repo publik tidak menerima commit selama 60 hari (aktifkan lagi di tab Actions).
+on:
+  schedule:
+    - cron: "2 5,11,17 * * *"
+  # Setiap perubahan pada script/workflow ini diuji otomatis: tes server tiruan + dry_run ke data asli (tidak mengirim apa pun).
+  push:
+    branches: ["claude/ecstatic-franklin-hhjvmk", "claude/adoring-dijkstra-78ese7", "main"]
+    paths: [".github/workflows/filter-oil-wa-blast.yml", "apps/filter-oil-wa/**"]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "dry_run = susun pesan saja (lihat artifact) · send = kirim ke grup · discover = struktur data · list_groups = daftar grup Fonnte"
+        type: choice
+        default: dry_run
+        options: [dry_run, send, discover, list_groups]
+      report_date:
+        description: "Opsional: tanggal laporan YYYY-MM-DD (kosongkan = otomatis)"
+        required: false
+        default: ""
+
+concurrency:
+  group: filter-oil-wa-blast
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  blast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # push → selalu dry_run; dispatch → sesuai pilihan; schedule → send
+      ACTION: ${{ github.event_name == 'push' && 'dry_run' || inputs.action || 'send' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Uji otomatis (server tiruan, tanpa data asli)
+        if: ${{ github.event_name == 'push' }}
+        working-directory: apps/filter-oil-wa
+        run: npm test
+      - name: Susun & kirim laporan
+        working-directory: apps/filter-oil-wa
+        env:
+          # Service account read-only (Cloud Datastore Viewer) di project trecking-filter-oil-store.
+          FO_SA_KEY: ${{ secrets.FO_FIREBASE_SA }}
+          FO_PROJECT_ID: trecking-filter-oil-store
+          # Struktur data app Filter Oil. Kosong = deteksi otomatis; isi lewat Settings → Variables bila perlu.
+          FO_STORE_COLLECTION: ${{ vars.FO_STORE_COLLECTION }}
+          FO_STORE_NAME_FIELD: ${{ vars.FO_STORE_NAME_FIELD }}
+          FO_STORE_ACTIVE_FIELD: ${{ vars.FO_STORE_ACTIVE_FIELD }}
+          FO_STORE_LIST: ${{ vars.FO_STORE_LIST }}
+          FO_SCORE_COLLECTION: ${{ vars.FO_SCORE_COLLECTION }}
+          FO_SCORE_STORE_FIELD: ${{ vars.FO_SCORE_STORE_FIELD }}
+          FO_SCORE_DATE_FIELD: ${{ vars.FO_SCORE_DATE_FIELD }}
+          FO_SCORE_DATE_FORMAT: ${{ vars.FO_SCORE_DATE_FORMAT }}
+          FO_TITLE: ${{ vars.FO_TITLE }}
+          REPORT_DATE: ${{ inputs.report_date }}
+          # Gateway WhatsApp: pakai FO_WA_TOKEN bila diisi (nomor bot khusus Filter Oil),
+          # bila tidak, ikut nomor bot yang sudah dipakai blast lain di repo ini (WA_TOKEN). Hanya dibaca, tidak diubah.
+          WA_GATEWAY: ${{ secrets.FO_WA_TOKEN != '' && (vars.FO_WA_GATEWAY || 'fonnte') || (vars.WA_GATEWAY || secrets.WA_GATEWAY || 'fonnte') }}
+          WA_TOKEN: ${{ secrets.FO_WA_TOKEN || secrets.WA_TOKEN }}
+          WA_API_URL: ${{ vars.FO_WA_API_URL || secrets.WA_API_URL || vars.WA_API_URL }}
+          # Nama grup persis seperti di WhatsApp (Fonnte) atau ID grup 1203…@g.us; beberapa tujuan pisahkan dengan koma.
+          WA_TARGET: ${{ secrets.FO_WA_TARGET }}
+          OUT_DIR: wa-out
+        run: node scripts/wa-blast.mjs
+      # Salinan pesan/daftar grup hanya untuk uji manual (Run workflow → dry_run / list_groups), bukan untuk push atau kiriman
+      # terjadwal: repo ini publik, artifact bisa diunduh siapa pun yang login GitHub. Hapus artifact setelah dibaca.
+      - name: Simpan salinan (hanya uji manual)
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && env.ACTION != 'send' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: filter-oil-wa-${{ github.run_number }}
+          path: apps/filter-oil-wa/wa-out/
+          if-no-files-found: ignore
+          retention-days: 3
