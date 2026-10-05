@@ -192,6 +192,7 @@ function render() {
   const slotAgg = group(r.rows, (x) => x.slotId);
   ui.slots = r.slots.map((s) => ({ ...s, name: `${s.label} · ${s.time}`, ...fin(slotAgg.get(s.id) || blank()) }));
   renderInsight(); renderKpis(); renderChart(); renderSlots(); renderRank(); renderActions(); renderLog();
+  if (ui.toTop) { ui.toTop = false; window.scrollTo({ top: 0, behavior: "smooth" }); }
 }
 
 function renderInsight() {
@@ -206,7 +207,7 @@ function renderInsight() {
   const sub = `${t.done} dari ${t.expected} slot filter dikerjakan. ${r.stores.length > 1 ? `${r.nonCompliant} dari ${r.stores.length} store di bawah target.` : ""}`;
   const facts = [];
   const worstSlot = [...ui.slots].filter((s) => s.expected).sort((a, b) => b.MISSED / b.expected - a.MISSED / a.expected)[0];
-  if (worstSlot && worstSlot.MISSED) facts.push(["bad", `${STATUS.MISSED.icon} Paling sering terlewat: ${worstSlot.label} (${worstSlot.time}), ${pct(worstSlot.MISSED / worstSlot.expected)} tidak dikerjakan`]);
+  if (worstSlot && worstSlot.MISSED >= 2) facts.push(["bad", `${STATUS.MISSED.icon} Paling sering terlewat: ${worstSlot.label} (${worstSlot.time}), ${pct(worstSlot.MISSED / worstSlot.expected)} tidak dikerjakan`]);
   const days = ui.days.filter((d) => d.expected);
   if (days.length >= 2) {
     const worst = [...days].sort((a, b) => a.pctDone - b.pctDone)[0];
@@ -288,7 +289,7 @@ function renderChart() {
 }
 
 function renderSlots() {
-  const worst = [...ui.slots].filter((s) => s.expected && s.MISSED).sort((a, b) => b.MISSED / b.expected - a.MISSED / a.expected)[0];
+  const worst = [...ui.slots].filter((s) => s.expected && s.MISSED >= 2).sort((a, b) => b.MISSED / b.expected - a.MISSED / a.expected)[0];
   $("fdSlots").innerHTML = ui.slots.map((s) => {
     const ok = s.expected && s.pctDone >= TARGET - 1e-9;
     return `<div class="card fd-slot${worst && worst.id === s.id ? " fd-worst" : ""}">
@@ -453,7 +454,7 @@ function onClick(e) {
     $("dashFrom").value = s; $("dashTo").value = en; schedule(); return;
   }
   const store = t.closest("[data-fd-store]");
-  if (store) { $("dashStore").value = store.dataset.fdStore; schedule(); $("dashboard").scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+  if (store) { $("dashStore").value = store.dataset.fdStore; ui.toTop = true; schedule(); return; }
   if (t.closest("[data-fd-allstores]")) { $("dashStore").value = "ALL"; schedule(); return; }
   const chip = t.closest("[data-fd-log]");
   if (chip) { ui.log = chip.dataset.fdLog; ui.logShown = LOG_PAGE; renderLog(); return; }
