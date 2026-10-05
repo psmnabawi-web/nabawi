@@ -1,0 +1,10 @@
+{
+  "name": "filter-oil-app",
+  "private": true,
+  "description": "Salinan app Trecking Filter Oil yang live (live/) + tambahan menu Kepatuhan & Export Excel (overlay/), dideploy ke situs utama lewat Firebase Hosting REST API.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/hosting.test.mjs"
+  }
+}
