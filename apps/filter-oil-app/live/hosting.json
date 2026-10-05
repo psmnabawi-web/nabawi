@@ -1,0 +1,111 @@
+{
+  "site": "trecking-filter-oil-store",
+  "version": "sites/trecking-filter-oil-store/versions/1e27a06f91587a76",
+  "status": "FINALIZED",
+  "releaseTime": "2026-09-20T14:42:30.998Z",
+  "releaseUser": "nabawim@gmail.com",
+  "message": null,
+  "config": {
+    "headers": [
+      {
+        "headers": {
+          "Cache-Control": "no-cache"
+        },
+        "glob": "**/*.@(js|css|html)"
+      }
+    ]
+  },
+  "files": [
+    {
+      "path": "/__/firebase/init.js",
+      "hash": "a053c41f5fd1c2a90aa8004d43a964a111b56319f50a30e522a67f018c76433c",
+      "bytes": 523,
+      "sha256": "ee8fe01d28f8be5a35df3104941d99a78b2a8982e6d9ff004b63f1e4ba644244"
+    },
+    {
+      "path": "/__/firebase/init.json",
+      "hash": "8b501d4f9c1a9a63e12205b3a42cbfdef73e636d7651ef240cbecee248abe16e",
+      "bytes": 346,
+      "sha256": "a5dd6fcc73225ed2bc2014fc27d8a356337a5ca07ee8cb7f61bd5a0581298630"
+    },
+    {
+      "path": "/app.js",
+      "hash": "5e17fa7635101f698b9a2e584df0e0726879963a58617430edd189b69ffce635",
+      "bytes": 40664,
+      "sha256": "043ffa585eb5796240f9e253a977ef93f8c66348725ee5e1a324fb8ad3c41351"
+    },
+    {
+      "path": "/assets/bangor-favicon.png",
+      "hash": "8bd6fa3a8fdfe6752780ad2378163d3156c2ebd172fd89f391d4e8d56ad25446",
+      "bytes": 66005,
+      "sha256": "d872b246d2d1c3fdc4424d2bccd5e12e698aabe2cbaf46ac258796413e5eb129"
+    },
+    {
+      "path": "/assets/bangor-logo.png",
+      "hash": "44c64911673f8ff9c0f8f60419e7014b6932bf4b9462ef972343dc0133964cf6",
+      "bytes": 72599,
+      "sha256": "51b109e1b5bcfeec3dbe5cf6fe3fe9a1906340c1470a278efa3636670b150687"
+    },
+    {
+      "path": "/assets/favicon-16.png",
+      "hash": "91232cb9ec4e05896cf2a88e74d4b81e192748107a17d9b8dabdc2bed8a5559b",
+      "bytes": 760,
+      "sha256": "3d11365ba3dc261bcb3f8dfa084161aba2497748102cf1bc6d39cfb40cbe1847"
+    },
+    {
+      "path": "/assets/favicon-180.png",
+      "hash": "8f215ebc6d789f9ac7c4471316c713fa01df44f7cdd775297c8eba9072a694a0",
+      "bytes": 18602,
+      "sha256": "9056090fec40704a085a262b3ed0e8670659b959bc1b1f9505bcea46816808b5"
+    },
+    {
+      "path": "/assets/favicon-192.png",
+      "hash": "60aa8ddc67ce1eca3b65f30d6843d79be9e02cc62f58748e93057b01e0709392",
+      "bytes": 19914,
+      "sha256": "3b1f2659409e134d7039e89b23961c675e517e72c2566734395d54bdb04d43cd"
+    },
+    {
+      "path": "/assets/favicon-32.png",
+      "hash": "9e84206d2fb2a2e5fac64aeec979c11de069f9c75e0bfc5a015053c75392f457",
+      "bytes": 2053,
+      "sha256": "cbc26fc31fe970933ec89e22e77814e31c01da1248eb686b76d3973031f7a247"
+    },
+    {
+      "path": "/assets/favicon-64.png",
+      "hash": "6d646f862859ded7e14dea0df2d24f2922e857aeb7c5a9da28c340584e889ca4",
+      "bytes": 5582,
+      "sha256": "9f3a14b67e2c6c0ce8a9ff47ac27ee50049acb7693870707673ba2214b42f639"
+    },
+    {
+      "path": "/assets/favicon.ico",
+      "hash": "9a88467c7b6d418b60ba65b99a6b8937a99df9b678289c6c77cab357306c7a33",
+      "bytes": 12126,
+      "sha256": "2bf96233deb4220f8af3e0b2a74cdb3a57ec2f2a7211914dd392c70d89c88202"
+    },
+    {
+      "path": "/data/crew-trial-v19.json",
+      "hash": "10f6adddc54a1b6bb6273c9e209e15709cb9b6a71ec2e42d85a642895a09c0be",
+      "bytes": 7708,
+      "sha256": "ead70365a748d7a67c796fb7ca2327179501ec7ed1cbe111ab209db29813ac79"
+    },
+    {
+      "path": "/firebase-config.json",
+      "hash": "db05910106664e83b1ada1451e6f5990a597ab2da984e59f643c8e7afcf9baf8",
+      "bytes": 378,
+      "sha256": "b3a2723fc6065a26cb7167252401bd9b8a307d3c2b27093a2942567ee376b988"
+    },
+    {
+      "path": "/index.html",
+      "hash": "8fd0a4fc3af72292307d57b7540aa3a14ce5b9aa3ca46e125bdd51d5c2708744",
+      "bytes": 18347,
+      "sha256": "517bd77fd9ce37b64dd4448b07b0e3aa63f5f4321adf74780556b5e2967fd6fa"
+    },
+    {
+      "path": "/styles.css",
+      "hash": "b7cd8689a8ae476b4c8246fe3036f46c996e11546bd1964a1b44c4e23ca617ab",
+      "bytes": 16195,
+      "sha256": "b9c5a15f83abd4797f9225266cc348a2453ea214886967fd9dd3efb6990189c2"
+    }
+  ],
+  "takenAt": "2026-10-05T08:30:49.930Z"
+}

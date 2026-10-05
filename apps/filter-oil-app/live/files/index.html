@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#ffffff" />
+  <title>Compliance Filtrasi Minyak</title>
+  <link rel="icon" type="image/x-icon" href="assets/favicon.ico" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/favicon-192.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/exifr/dist/lite.umd.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-block">
+        <div class="brand-logo-wrap">
+          <img src="assets/bangor-logo.png" alt="Bangor" class="brand-logo">
+        </div>
+        <div class="brand-meta">
+          <div class="brand-name">BURGER BANGOR</div>
+          <div class="brand-sub">Operation Control</div>
+        </div>
+      </div>
+
+      <div class="sidebar-section-label">MENU UTAMA</div>
+      <nav class="sidebar-nav">
+        <button class="tab active" data-tab="capture" data-title="Input Evidence" data-subtitle="Capture atau upload evidence filtrasi minyak.">
+          <span class="nav-icon">▣</span><span>Input Evidence</span>
+        </button>
+        <button class="tab" data-tab="oilchange" data-title="Pergantian Minyak" data-subtitle="Tracking pergantian minyak per store dan crew.">
+          <span class="nav-icon">↻</span><span>Pergantian Minyak</span>
+        </button>
+        <button class="tab" data-tab="dashboard" data-title="Dashboard" data-subtitle="Monitoring compliance filtrasi minyak per periode dan store.">
+          <span class="nav-icon">◫</span><span>Dashboard</span>
+        </button>
+        <button class="tab" data-tab="master" data-title="Master Data" data-subtitle="Kelola jadwal filter, store, dan crew.">
+          <span class="nav-icon">⚙</span><span>Master Data</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-section-label schedule-label">JADWAL FILTER</div>
+      <div class="schedule-list">
+        <div><span>Filter 1</span><strong>09:00</strong></div>
+        <div><span>Filter 2</span><strong>16:00</strong></div>
+        <div><span>Filter 3</span><strong>23:30</strong></div>
+      </div>
+
+      <div class="sidebar-bottom">
+        <div class="sidebar-status-row">
+          <span class="status-dot"></span>
+          <div><small>Status aplikasi</small><strong>Firebase Connected</strong></div>
+        </div>
+        <div class="sidebar-caption">Internal operation tool</div>
+      </div>
+    </aside>
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="app-main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Buka menu">☰</button>
+          <div>
+            <div class="page-kicker">COMPLIANCE FILTRASI MINYAK</div>
+            <h1 id="pageTitle">Input Evidence</h1>
+            <p id="pageSubtitle">Capture atau upload evidence filtrasi minyak.</p>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <div class="today-pill" id="todayDisplay">Hari ini</div>
+          <div id="syncBadge" class="status-badge neutral">Connecting...</div>
+        </div>
+      </header>
+
+      <main class="content">
+    <section id="capture" class="panel active">
+      <div class="grid two">
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <div class="section-label">OPERATIONS INPUT</div>
+              <h2>Identitas Crew</h2>
+            </div>
+          </div>
+          <label>Store
+            <select id="storeSelect"></select>
+          </label>
+          <label>Crew
+            <select id="crewSelect"></select>
+          </label>
+          <div id="crewHint" class="hint">Pilih store dan crew yang bertugas.</div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <div class="section-label">EVIDENCE CAPTURE</div>
+              <h2>Upload / Capture Evidence</h2>
+            </div>
+          </div>
+
+          <div class="capture-actions">
+            <button id="btnCamera" class="btn primary">📷 Capture Camera</button>
+            <button id="btnUpload" class="btn secondary">⬆ Upload Evidence</button>
+          </div>
+          <input id="cameraInput" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" hidden>
+          <input id="uploadInput" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" hidden>
+
+          <div id="dropZone" class="dropzone">atau drag & drop foto evidence di sini</div>
+          <div class="hint">Hari, tanggal, jam, dan slot filter dibaca otomatis. Crew tidak dapat mengetik waktu manual.</div>
+        </div>
+      </div>
+
+      <div id="evidenceCard" class="card evidence-card hidden">
+        <div class="card-head split">
+          <div>
+            <div class="section-label">AUTO VALIDATION</div>
+            <h2>Validasi Metadata Evidence</h2>
+          </div>
+          <span id="trustBadge" class="status-badge neutral">-</span>
+        </div>
+
+        <div class="evidence-layout">
+          <div class="preview-box">
+            <img id="previewImg" class="preview" alt="Preview evidence" />
+          </div>
+          <div class="meta-grid">
+            <div><span>Hari</span><strong id="metaDay">-</strong></div>
+            <div><span>Tanggal</span><strong id="metaDate">-</strong></div>
+            <div><span>Jam Evidence</span><strong id="metaTime">-</strong></div>
+            <div><span>Sumber Waktu</span><strong id="metaSource">-</strong></div>
+            <div><span>Slot Otomatis</span><strong id="metaSlot">-</strong></div>
+            <div><span>Planned Time</span><strong id="metaPlanned">-</strong></div>
+            <div><span>Deviasi</span><strong id="metaDeviation">-</strong></div>
+            <div><span>Status</span><strong id="metaStatus">-</strong></div>
+            <div><span>Camera</span><strong id="metaCamera">-</strong></div>
+            <div><span>File Hash</span><strong id="metaHash" class="mono small">-</strong></div>
+          </div>
+        </div>
+
+        <div id="integrityAlert" class="alert hidden"></div>
+
+        <label>Catatan Crew / Kondisi Minyak
+          <textarea id="noteInput" rows="3" placeholder="Opsional: kondisi minyak, kendala fryer, hasil setelah filtering, dll."></textarea>
+        </label>
+
+        <div class="actions right">
+          <button id="btnResetEvidence" class="btn ghost">Batal</button>
+          <button id="btnSubmitEvidence" class="btn primary">Simpan Evidence</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head split">
+          <div>
+            <div class="section-label">RECENT ACTIVITY</div>
+            <h2>Evidence Terakhir</h2>
+            <div class="hint">5 aktivitas terakhir yang tersimpan.</div>
+          </div>
+          <button id="btnRefreshRecent" class="btn ghost smallbtn">Refresh</button>
+        </div>
+        <div id="recentList" class="recent-list"></div>
+      </div>
+    </section>
+
+    <section id="oilchange" class="panel">
+      <div class="grid oil-change-grid">
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <div class="section-label">TRACKING PERGANTIAN MINYAK</div>
+              <h2>Input Pergantian Minyak</h2>
+              <div class="hint">Catat pergantian minyak berdasarkan store, crew, tanggal, dan jam.</div>
+            </div>
+          </div>
+
+          <div class="oil-change-form">
+            <label>Store
+              <select id="oilChangeStore"></select>
+            </label>
+            <label>Crew
+              <select id="oilChangeCrew"></select>
+            </label>
+            <label>Tanggal Pergantian
+              <input id="oilChangeDate" type="date">
+            </label>
+            <label>Jam Pergantian
+              <input id="oilChangeTime" type="time">
+            </label>
+          </div>
+
+          <div class="actions right oil-change-actions">
+            <button id="btnSaveOilChange" class="btn primary">Simpan Pergantian Minyak</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head split">
+            <div>
+              <div class="section-label">RIWAYAT PERGANTIAN</div>
+              <h2>Tracking Pergantian Minyak</h2>
+              <div class="hint">Riwayat terbaru pergantian minyak yang sudah dicatat.</div>
+            </div>
+            <button id="btnRefreshOilChange" class="btn ghost smallbtn">Refresh</button>
+          </div>
+          <div class="table-wrap">
+            <table class="oil-change-table">
+              <thead>
+                <tr><th>Tanggal</th><th>Jam</th><th>Store</th><th>Crew</th></tr>
+              </thead>
+              <tbody id="oilChangeHistoryBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="dashboard" class="panel">
+      <div class="card filterbar">
+        <div class="filterbar-title">
+          <div class="section-label">FILTER DASHBOARD</div>
+          <h2>Filter Periode Monitoring</h2>
+          <div class="hint">Pilih rentang tanggal dan store untuk melihat performa compliance secara lebih terarah.</div>
+        </div>
+        <label>Periode Dari
+          <input id="dashFrom" type="date">
+        </label>
+        <label>Periode Sampai
+          <input id="dashTo" type="date">
+        </label>
+        <label>Store
+          <select id="dashStore"></select>
+        </label>
+        <button id="btnLoadDashboard" class="btn primary">Tampilkan Dashboard</button>
+      </div>
+
+      <div class="hero-grid">
+        <div class="card insight-card">
+          <div class="section-label">EXECUTIVE INSIGHT</div>
+          <h2>Highlight Compliance</h2>
+          <div class="insight-grid">
+            <div class="mini-card">
+              <span>Store terbaik</span>
+              <strong id="bestStoreName">-</strong>
+              <small id="bestStoreValue">Belum ada data.</small>
+            </div>
+            <div class="mini-card">
+              <span>Hari terbaik</span>
+              <strong id="bestDayName">-</strong>
+              <small id="bestDayValue">Belum ada data.</small>
+            </div>
+            <div class="mini-card">
+              <span>Data quality</span>
+              <strong id="dataGapCount">0 gap</strong>
+              <small id="dataGapText">Belum ada temuan.</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="card impact-card">
+          <div class="section-label">OPS IMPACT</div>
+          <h2>Impact Score</h2>
+          <div class="impact-layout">
+            <div class="score-ring" id="impactRing" style="--score:0">
+              <div class="score-center">
+                <div id="impactScoreValue">0</div>
+                <span>/100</span>
+              </div>
+            </div>
+            <div class="impact-copy">
+              <strong id="impactScoreLabel">Perlu perhatian</strong>
+              <p id="impactScoreText">Skor akan muncul setelah data dashboard dimuat.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi kpi-required"><span>Filter Wajib</span><strong id="kpiRequired">0</strong></div>
+        <div class="kpi kpi-ontime"><span>Tepat Waktu</span><strong id="kpiOnTime">0</strong></div>
+        <div class="kpi kpi-variance"><span>Early / Late</span><strong id="kpiVariance">0</strong></div>
+        <div class="kpi danger kpi-missed"><span>Tidak Dilakukan</span><strong id="kpiMissed">0</strong></div>
+        <div class="kpi kpi-compliance"><span>Compliance</span><strong id="kpiCompliance">0%</strong></div>
+        <div class="kpi kpi-trust"><span>Trust Tinggi</span><strong id="kpiHighTrust">0%</strong></div>
+      </div>
+
+      <div class="card chart-card">
+        <div class="card-head split">
+          <div>
+            <div class="section-label">COMPLIANCE FILTRASI MINYAK</div>
+            <h2>Compliance Filtrasi Minyak</h2>
+          </div>
+          <div class="pill-group">
+            <div class="metric-pill">
+              <span>Rata-rata Compliance</span>
+              <strong id="avgComplianceChip">0%</strong>
+            </div>
+            <div class="metric-pill success">
+              <span>Persentase Missed</span>
+              <strong id="avgMissedChip">0%</strong>
+            </div>
+          </div>
+        </div>
+        <div class="chart-legend" aria-label="Legenda grafik">
+          <span><i class="legend-dot target"></i>Target Compliance 95%</span>
+          <span><i class="legend-dot compliance"></i>Compliance Dilakukan</span>
+        </div>
+        <div class="chart-wrap" id="complianceChartWrap">
+          <canvas id="complianceBarChart" height="360"></canvas>
+          <div id="chartTooltip" class="chart-tooltip hidden"></div>
+        </div>
+      </div>
+
+      <div class="grid two dashboard-bottom">
+        <div class="card monitor-card">
+          <div class="card-head split">
+            <div>
+              <div class="section-label">MONITOR STORE</div>
+              <h2>Ringkasan Compliance Store</h2>
+              <div class="hint">Ringkasan kepatuhan store pada periode terpilih.</div>
+            </div>
+            <div class="pill-group">
+              <div class="metric-pill warning">
+                <span>Di Atas Target</span>
+                <strong id="storesAboveTarget">0 store</strong>
+              </div>
+              <div class="metric-pill">
+                <span>Compliance Tertinggi</span>
+                <strong id="topComplianceValue">0%</strong>
+              </div>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Store</th><th>Wajib</th><th>Tepat Waktu</th><th>Var.</th><th>Tidak Dilakukan</th><th>Compliance</th></tr></thead>
+              <tbody id="storeScoreBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card issue-card">
+          <div class="card-head">
+            <div>
+              <div class="section-label">PRIORITAS TINDAKAN</div>
+              <h2>Issue Priority</h2>
+              <div class="hint">Fokus pada store, slot, dan tanggal yang perlu segera ditindaklanjuti.</div>
+            </div>
+          </div>
+          <div id="issueList" class="issue-list"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <div class="section-label">LOG EVIDENCE</div>
+            <h2>Evidence Log</h2>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Evidence</th><th>Store</th><th>Crew</th><th>Hari/Tanggal</th><th>Jam</th><th>Slot</th><th>Status</th><th>Trust</th></tr>
+            </thead>
+            <tbody id="evidenceBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="master" class="panel">
+      <div class="alert warning">
+        Master Data adalah kontrol operasional. Sebelum URL dibuka ke publik, aktifkan Authentication + App Check.
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <div class="section-label">SCHEDULING CONTROL</div>
+          <h2>Setting Filter</h2>
+          <div class="grid two compact">
+            <label>Filter 1
+              <input id="slot1" type="time" value="09:00">
+            </label>
+            <label>Filter 2
+              <input id="slot2" type="time" value="16:00">
+            </label>
+            <label>Filter 3
+              <input id="slot3" type="time" value="23:30">
+            </label>
+            <label>Toleransi ± menit
+              <input id="toleranceMin" type="number" min="0" value="30">
+            </label>
+            <label>Maks. umur evidence (jam)
+              <input id="maxAgeHours" type="number" min="1" value="24">
+            </label>
+          </div>
+          <button id="btnSaveSettings" class="btn primary">Simpan Setting</button>
+        </div>
+
+        <div class="card">
+          <div class="section-label">STORE MASTER</div>
+          <h2>Tambah Store</h2>
+          <label>Store ID <input id="storeIdInput" placeholder="BB001"></label>
+          <label>Nama Store <input id="storeNameInput" placeholder="Bangor - Kemang"></label>
+          <label>Area / AM <input id="storeAreaInput" placeholder="Jakarta Selatan"></label>
+          <label>Aktif Mulai <input id="storeActiveFromInput" type="date"></label>
+          <button id="btnAddStore" class="btn primary">Tambah Store</button>
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div class="card">
+          <div class="section-label">ACTIVE STORE LIST</div>
+          <h2>Store Aktif</h2>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Store</th><th>Area</th><th>Active From</th></tr></thead>
+              <tbody id="storeMasterBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-label">CREW MASTER</div>
+          <h2>Tambah Crew</h2>
+          <label>Crew ID <input id="crewIdInput" placeholder="CR001"></label>
+          <label>Nama Crew <input id="crewNameInput" placeholder="Nama Crew"></label>
+          <label>Store <select id="crewStoreInput"></select></label>
+          <button id="btnAddCrew" class="btn primary">Tambah Crew</button>
+          <div class="divider"></div>
+          <h3>Crew Terdaftar</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>ID</th><th>Nama</th><th>Store</th></tr></thead>
+              <tbody id="crewMasterBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+      <footer class="app-footer">
+        Evidence timestamp: EXIF → capture session / file metadata → server timestamp.
+      </footer>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

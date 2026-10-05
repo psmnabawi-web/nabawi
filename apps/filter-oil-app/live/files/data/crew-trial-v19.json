@@ -1,0 +1,315 @@
+{
+  "version": "v21",
+  "stores": [
+    {
+      "storeId": "TRIAL-KEDOYA",
+      "storeName": "Kedoya",
+      "area": "Outlet Trial",
+      "crews": [
+        {
+          "crewId": "TRIAL-KEDOYA-001",
+          "crewName": "Siska Amelia"
+        },
+        {
+          "crewId": "TRIAL-KEDOYA-002",
+          "crewName": "Tutut Wulandari"
+        },
+        {
+          "crewId": "TRIAL-KEDOYA-003",
+          "crewName": "Fardhan Al Fahri"
+        },
+        {
+          "crewId": "TRIAL-KEDOYA-004",
+          "crewName": "Tia Rahayu"
+        }
+      ]
+    },
+    {
+      "storeId": "TRIAL-JAGAKARSA",
+      "storeName": "Jagakarsa",
+      "area": "Outlet Trial",
+      "crews": [
+        {
+          "crewId": "TRIAL-JAGAKARSA-001",
+          "crewName": "Muhammad Zulfikri"
+        },
+        {
+          "crewId": "TRIAL-JAGAKARSA-002",
+          "crewName": "Amanda Asyifa"
+        },
+        {
+          "crewId": "TRIAL-JAGAKARSA-003",
+          "crewName": "Fatna Fadilla"
+        },
+        {
+          "crewId": "TRIAL-JAGAKARSA-004",
+          "crewName": "Robiansyah"
+        },
+        {
+          "crewId": "TRIAL-JAGAKARSA-005",
+          "crewName": "Dimas Setiawan"
+        },
+        {
+          "crewId": "TRIAL-JAGAKARSA-006",
+          "crewName": "Saskia Chairunnisa"
+        }
+      ]
+    },
+    {
+      "storeId": "TRIAL-CIKANDE",
+      "storeName": "Cikande",
+      "area": "Outlet Trial",
+      "crews": [
+        {
+          "crewId": "TRIAL-CIKANDE-001",
+          "crewName": "Natasya Salsabila Putri"
+        },
+        {
+          "crewId": "TRIAL-CIKANDE-002",
+          "crewName": "Afdal Alamsyah"
+        },
+        {
+          "crewId": "TRIAL-CIKANDE-003",
+          "crewName": "M. Raihan Al Rahman"
+        },
+        {
+          "crewId": "TRIAL-CIKANDE-004",
+          "crewName": "M. Egi Ikhsanudin"
+        },
+        {
+          "crewId": "TRIAL-CIKANDE-005",
+          "crewName": "Sam Rahmat Alparizy"
+        },
+        {
+          "crewId": "TRIAL-CIKANDE-006",
+          "crewName": "Fajri"
+        }
+      ]
+    },
+    {
+      "storeId": "TRIAL-KRAMATWATU",
+      "storeName": "Kramatwatu",
+      "area": "Outlet Trial",
+      "crews": [
+        {
+          "crewId": "TRIAL-KRAMATWATU-001",
+          "crewName": "Siti zubaidah"
+        },
+        {
+          "crewId": "TRIAL-KRAMATWATU-002",
+          "crewName": "amalia putri ayu ningtyas"
+        },
+        {
+          "crewId": "TRIAL-KRAMATWATU-003",
+          "crewName": "kaila khuljannah"
+        },
+        {
+          "crewId": "TRIAL-KRAMATWATU-004",
+          "crewName": "faslucky Ardiansyah"
+        },
+        {
+          "crewId": "TRIAL-KRAMATWATU-005",
+          "crewName": "aldi nurohman"
+        },
+        {
+          "crewId": "TRIAL-KRAMATWATU-006",
+          "crewName": "alief noufal ilham fahmi"
+        }
+      ]
+    },
+    {
+      "storeId": "TRIAL-SEKTOR-9",
+      "storeName": "Jombang Sektor 9",
+      "area": "Outlet Trial",
+      "crews": [
+        {
+          "crewId": "TRIAL-SEKTOR-9-001",
+          "crewName": "anisa ayu nur fadillah"
+        },
+        {
+          "crewId": "TRIAL-SEKTOR-9-002",
+          "crewName": "harsya raihan al baihaqi"
+        },
+        {
+          "crewId": "TRIAL-SEKTOR-9-003",
+          "crewName": "muhammad nur rizki"
+        },
+        {
+          "crewId": "TRIAL-SEKTOR-9-004",
+          "crewName": "muhammad raffy aryaan ramadhan"
+        },
+        {
+          "crewId": "TRIAL-SEKTOR-9-005",
+          "crewName": "shafira nazwa"
+        },
+        {
+          "crewId": "TRIAL-SEKTOR-9-006",
+          "crewName": "syofiatuzahra hasanah"
+        },
+        {
+          "crewId": "TRIAL-SEKTOR-9-007",
+          "crewName": "wapiq wijaya"
+        }
+      ]
+    },
+    {
+      "storeId": "TRIAL-ZAMBRUD",
+      "storeName": "Zamrud",
+      "area": "Outlet Trial",
+      "crews": [
+        {
+          "crewId": "TRIAL-ZAMBRUD-001",
+          "crewName": "aditya satya ghani"
+        },
+        {
+          "crewId": "TRIAL-ZAMBRUD-002",
+          "crewName": "aletta zoya audina pesik"
+        },
+        {
+          "crewId": "TRIAL-ZAMBRUD-003",
+          "crewName": "husni hasunah"
+        },
+        {
+          "crewId": "TRIAL-ZAMBRUD-004",
+          "crewName": "maulana malikul ibrohim soleh"
+        },
+        {
+          "crewId": "TRIAL-ZAMBRUD-005",
+          "crewName": "prue gracia ellyn preciosa pesik"
+        },
+        {
+          "crewId": "TRIAL-ZAMBRUD-006",
+          "crewName": "sahidah salsabila"
+        },
+        {
+          "crewId": "TRIAL-ZAMBRUD-007",
+          "crewName": "vardhan pamungkas"
+        }
+      ]
+    },
+    {
+      "storeId": "TRIAL-KOJA",
+      "storeName": "Koja",
+      "area": "Outlet Trial",
+      "crews": [
+        {
+          "crewId": "TRIAL-KOJA-001",
+          "crewName": "Sintiya"
+        },
+        {
+          "crewId": "TRIAL-KOJA-002",
+          "crewName": "M. Khalil Gibran"
+        },
+        {
+          "crewId": "TRIAL-KOJA-003",
+          "crewName": "Nicky Fernando Zebua"
+        },
+        {
+          "crewId": "TRIAL-KOJA-004",
+          "crewName": "Novianti Wulandari M."
+        },
+        {
+          "crewId": "TRIAL-KOJA-005",
+          "crewName": "Syifa Kautsar"
+        }
+      ]
+    },
+    {
+      "storeId": "TRIAL-GRAHA-RAYA",
+      "storeName": "Graha Raya",
+      "area": "Outlet Trial",
+      "crews": [
+        {
+          "crewId": "TRIAL-GRAHA-RAYA-001",
+          "crewName": "Muhammad Raihan"
+        },
+        {
+          "crewId": "TRIAL-GRAHA-RAYA-002",
+          "crewName": "Fakhri Hendar Prasetyo"
+        },
+        {
+          "crewId": "TRIAL-GRAHA-RAYA-003",
+          "crewName": "Rohman Nopriyanto"
+        },
+        {
+          "crewId": "TRIAL-GRAHA-RAYA-004",
+          "crewName": "Widya Nurul Azizah"
+        },
+        {
+          "crewId": "TRIAL-GRAHA-RAYA-005",
+          "crewName": "siti maulidah"
+        },
+        {
+          "crewId": "TRIAL-GRAHA-RAYA-006",
+          "crewName": "Sifa Setiawati"
+        },
+        {
+          "crewId": "TRIAL-GRAHA-RAYA-007",
+          "crewName": "Muhammad Abdurahman Fajar Suhendra"
+        }
+      ]
+    },
+    {
+      "storeId": "TRIAL-SEPATAN",
+      "storeName": "Sepatan",
+      "area": "Outlet Trial",
+      "crews": [
+        {
+          "crewId": "TRIAL-SEPATAN-001",
+          "crewName": "usswatun khasanah"
+        },
+        {
+          "crewId": "TRIAL-SEPATAN-002",
+          "crewName": "muhammad al farizi gumay"
+        },
+        {
+          "crewId": "TRIAL-SEPATAN-003",
+          "crewName": "muhammad yahya reyhansyah"
+        },
+        {
+          "crewId": "TRIAL-SEPATAN-004",
+          "crewName": "muhammad irwansyah"
+        },
+        {
+          "crewId": "TRIAL-SEPATAN-005",
+          "crewName": "Guntur prasetya"
+        },
+        {
+          "crewId": "TRIAL-SEPATAN-006",
+          "crewName": "dina trisetya wati"
+        }
+      ]
+    },
+    {
+      "storeId": "TRIAL-BERINGIN",
+      "storeName": "Beringin",
+      "area": "Outlet Trial",
+      "crews": [
+        {
+          "crewId": "TRIAL-BERINGIN-001",
+          "crewName": "Rama Eka Ardianto"
+        },
+        {
+          "crewId": "TRIAL-BERINGIN-002",
+          "crewName": "Ahmad Rafi Al Hasan"
+        },
+        {
+          "crewId": "TRIAL-BERINGIN-003",
+          "crewName": "Dicky Aldy Adriansyah"
+        },
+        {
+          "crewId": "TRIAL-BERINGIN-004",
+          "crewName": "Izdihar Hasna qanita"
+        },
+        {
+          "crewId": "TRIAL-BERINGIN-005",
+          "crewName": "Syifa Loliana"
+        },
+        {
+          "crewId": "TRIAL-BERINGIN-006",
+          "crewName": "Vannia Putri Rahmadani"
+        }
+      ]
+    }
+  ]
+}
