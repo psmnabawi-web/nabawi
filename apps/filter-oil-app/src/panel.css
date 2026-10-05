@@ -1,0 +1,58 @@
+/* Tambahan tampilan menu Kepatuhan & Export dan tombol Export di Dashboard. Memakai variabel warna app (styles.css). */
+.filterbar.kp-has-export { grid-template-columns: repeat(3, minmax(150px, 1fr)) auto auto; }
+.filterbar.kp-has-export .btn { white-space: nowrap; }
+
+.kp-filterbar { grid-template-columns: repeat(4, minmax(150px, 1fr)) auto; }
+.kp-actions { display: flex; gap: 8px; align-items: flex-end; }
+.kp-actions .btn { height: 44px; white-space: nowrap; }
+#kepatuhan .alert[hidden], #kepatuhan .hint[hidden] { display: none; }
+
+.kp-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.kp-kpis .kpi small { display: block; margin-top: 4px; font-size: 10px; color: var(--muted); line-height: 1.35; }
+
+#kepatuhan .table-wrap td { white-space: nowrap; }
+#kepatuhan .table-wrap th { white-space: normal; min-width: 52px; vertical-align: bottom; }
+#kpDetailCard .table-wrap { max-height: 560px; }
+#kepatuhan .table-wrap tfoot td { border-top: 2px solid var(--line); background: #fbfcfe; }
+.kp-row { cursor: pointer; }
+.kp-row.kp-selected { background: #f2f7ff; box-shadow: inset 3px 0 0 #0d67df; }
+.kp-red { color: var(--red); }
+.kp-bar { display: inline-block; width: 52px; height: 6px; border-radius: 3px; background: #edf1f5; vertical-align: middle; overflow: hidden; }
+.kp-bar i { display: block; height: 100%; background: var(--blue); border-radius: 3px; }
+#kepatuhan .kp-note { white-space: normal; min-width: 160px; max-width: 260px; color: var(--muted); }
+.kp-check { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; white-space: nowrap; }
+.kp-check input { width: auto; margin: 0; }
+
+.kp-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0; padding: 0; font-size: 11px; color: var(--muted); font-weight: 700; }
+.kp-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.kp-sw { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+.kp-heat-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.kp-heat { border-collapse: separate; border-spacing: 3px; min-width: 0; width: auto; }
+.kp-heat th, .kp-heat td { border: 0; padding: 0; font-size: 11px; }
+.kp-heat th { text-transform: none; letter-spacing: 0; }
+.kp-heat thead th { background: transparent; position: static; color: #748194; font-weight: 800; text-align: center; padding: 2px 3px; line-height: 1.2; }
+.kp-heat th.kp-sticky { position: sticky; left: 0; z-index: 1; background: #fff; text-align: left; padding-right: 10px; color: var(--text); font-weight: 800; white-space: nowrap; }
+.kp-heat td { width: 42px; min-width: 42px; height: 30px; text-align: center; border-radius: 6px; font-weight: 800; color: var(--text); }
+.kp-heat td:hover, .kp-heat td:focus { outline: 2px solid var(--navy); }
+.kp-good { background: var(--green-soft); box-shadow: inset 0 -3px 0 var(--green); }
+.kp-warning { background: var(--amber-soft); box-shadow: inset 0 -3px 0 var(--amber); }
+.kp-serious { background: #fde9df; box-shadow: inset 0 -3px 0 #ec835a; }
+.kp-critical { background: var(--red-soft); box-shadow: inset 0 -3px 0 var(--red); }
+.kp-none { background: #f3f5f8; color: #9aa6b4 !important; font-weight: 400 !important; }
+.kp-tip { position: fixed; z-index: 120; max-width: 280px; padding: 9px 11px; border-radius: 9px; background: #122d50; color: #fff; font-size: 11px; line-height: 1.45; pointer-events: none; box-shadow: 0 8px 24px rgba(10, 26, 48, .22); }
+.kp-tip[hidden] { display: none; }
+
+@media (max-width: 1200px) {
+  .filterbar.kp-has-export { grid-template-columns: 1fr 1fr; }
+  .kp-filterbar { grid-template-columns: 1fr 1fr; }
+  .kp-actions { grid-column: 1 / -1; }
+  .kp-actions .btn { flex: 1; }
+  .kp-kpis { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 900px) {
+  .kp-kpis { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .kp-filterbar { grid-template-columns: 1fr; }
+  .filterbar.kp-has-export { grid-template-columns: 1fr; }
+}

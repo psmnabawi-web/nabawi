@@ -20,7 +20,7 @@ on:
   # Push hanya menjalankan tes script (tidak menyentuh situs).
   push:
     branches: ["claude/ecstatic-franklin-hhjvmk", "claude/adoring-dijkstra-78ese7", "main"]
-    paths: ["apps/filter-oil-app/scripts/**", "apps/filter-oil-app/test/**", ".github/workflows/filter-oil-app-hosting.yml"]
+    paths: ["apps/filter-oil-app/scripts/**", "apps/filter-oil-app/src/**", "apps/filter-oil-app/test/**", "apps/filter-oil-kepatuhan/public/**", ".github/workflows/filter-oil-app-hosting.yml"]
 
 concurrency:
   group: filter-oil-app-hosting
@@ -44,6 +44,10 @@ jobs:
       - name: Tes script (API tiruan)
         working-directory: apps/filter-oil-app
         run: npm test
+      - name: Rakit overlay (index.html live + menu Kepatuhan)
+        if: ${{ env.ACTION == 'deploy' }}
+        working-directory: apps/filter-oil-app
+        run: node scripts/build-overlay.mjs
       - name: Login Google (Workload Identity, tanpa key)
         id: auth
         if: ${{ env.ACTION != 'test' }}

@@ -5,6 +5,7 @@
   "type": "module",
   "engines": { "node": ">=20" },
   "scripts": {
-    "test": "node --test test/hosting.test.mjs"
+    "test": "node --test test/hosting.test.mjs test/overlay.test.mjs",
+    "build": "node scripts/build-overlay.mjs"
   }
 }
