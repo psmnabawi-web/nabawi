@@ -38,6 +38,8 @@
 //   WA_API_URL             Wablas: domain server (mis. https://jogja.wablas.com) · webhook: URL tujuan POST (https)
 //   WA_TARGET              tujuan, pisahkan dengan koma: ID grup (1203…@g.us) atau NAMA grup persis seperti di WhatsApp
 //                          (nama hanya untuk Fonnte; dicari otomatis lewat daftar grup device)
+//   WA_TAG                 nomor WA yang di-tag di setiap pesan (628…, 08…, +62…), pisahkan dengan koma.
+//                          Boleh "Nama=0812…"; yang dikirim tetap @628… (Fonnte mengubahnya jadi mention di grup)
 //   OUT_DIR                folder salinan pesan (default wa-out)
 //   ACTION                 send (default) | dry_run | discover | list_groups
 
@@ -57,6 +59,7 @@ const splitTargets = (v) => String(v || "").split(/\s*[,;\n]\s*/).filter(Boolean
 let TOKEN = env("WA_TOKEN");
 let TARGETS = splitTargets(env("WA_TARGET"));
 let TITLE = env("FO_TITLE") || "Scoring Filter Oil";
+let TAGS = []; // nomor WA yang di-tag di setiap pesan (dari baris "tag" di Sheet atau env WA_TAG)
 const CONFIG_SHEET = env("FO_CONFIG_SHEET_ID");
 const RUN_LABEL = env("FO_RUN_LABEL");
 const CUTOFF_HOUR = Number(env("FO_CUTOFF_HOUR", "6"));
@@ -349,7 +352,7 @@ async function loadScores(db, stores, w) {
 }
 
 // ---------- pesan ----------
-export function buildMessage(stores, done, w, title = TITLE) {
+export function buildMessage(stores, done, w, title = TITLE, tags = TAGS) {
   const sudah = stores.filter((s) => done.has(s.id));
   const belum = stores.filter((s) => !done.has(s.id));
   const total = stores.length;
@@ -367,6 +370,7 @@ export function buildMessage(stores, done, w, title = TITLE) {
   L.push("");
   if (belum.length) L.push(w.final ? "Store yang tidak scoring mohon dicek dan ditindaklanjuti." : "Mohon store yang belum segera melakukan scoring hari ini.");
   else L.push("Terima kasih, pertahankan.");
+  if (tags.length) L.push(`cc ${tags.map((t) => "@" + t).join(" ")}`);
   L.push("_Pesan otomatis_");
   return { text: L.join("\n"), total, sudah: sudah.length, belum: belum.length, pct };
 }
@@ -451,6 +455,23 @@ async function listGroups() {
   log(`${data.length} grup ditulis ke ${file} (tidak dicetak ke log karena log repo publik bisa dibaca siapa saja).`);
 }
 
+// ---------- tag (mention) ----------
+/** "Imanuel=0812-3456-7890, +62 813 1111 2222" → ["6281234567890", "6281311112222"]. Entri tanpa nomor valid diabaikan (dengan peringatan). */
+export function parseTags(raw) {
+  const out = [];
+  for (const part of String(raw || "").split(/[,;\n]+/)) {
+    const p = part.trim(); if (!p) continue;
+    const num = (p.includes("=") ? p.slice(p.lastIndexOf("=") + 1) : p).replace(/[^\d+]/g, "");
+    let d = num.replace(/^\+/, "");
+    if (d.startsWith("0")) d = "62" + d.slice(1);
+    else if (d.startsWith("8")) d = "62" + d;
+    if (/^62\d{8,13}$/.test(d)) { if (!out.includes(d)) out.push(d); }
+    else warn(`Entri tag ke-${out.length + 1} bukan nomor WhatsApp yang valid (contoh benar: 628xxxxxxxxxx); dilewati.`);
+  }
+  return out;
+}
+TAGS = parseTags(env("WA_TAG"));
+
 // ---------- Google Sheet pengaturan & riwayat ----------
 const STATUSES = ["AKTIF", "UJI", "MATI"];
 class ConfigSheet {
@@ -473,6 +494,7 @@ function applySheetConfig(cfg) {
   if (!TOKEN && cfg.fonnte_token) TOKEN = cfg.fonnte_token;
   if (!TARGETS.length && cfg.grup_tujuan) TARGETS = splitTargets(cfg.grup_tujuan);
   if (!env("FO_TITLE") && cfg.judul) TITLE = cfg.judul;
+  if (!env("WA_TAG") && cfg.tag) TAGS = parseTags(cfg.tag);
   const st = (cfg.status || "UJI").toUpperCase();
   if (!STATUSES.includes(st)) { warn(`Status "${st}" di Sheet pengaturan tidak dikenal (AKTIF | UJI | MATI); dianggap UJI.`); return "UJI"; }
   return st;
@@ -512,7 +534,7 @@ async function main() {
   if (!access.project) fail("Project ID tidak diketahui. Isi FO_PROJECT_ID.");
   const sheet = CONFIG_SHEET ? new ConfigSheet(CONFIG_SHEET, access.token) : null;
   const status = sheet ? applySheetConfig(await sheet.read()) : "AKTIF";
-  log(`action=${ACTION}${RUN_LABEL ? ` (${RUN_LABEL})` : ""} status=${status}${sheet ? " (Sheet)" : ""} gateway=${GATEWAY} token=${TOKEN ? "terisi" : "kosong"} tujuan=${TARGETS.length}`);
+  log(`action=${ACTION}${RUN_LABEL ? ` (${RUN_LABEL})` : ""} status=${status}${sheet ? " (Sheet)" : ""} gateway=${GATEWAY} token=${TOKEN ? "terisi" : "kosong"} tujuan=${TARGETS.length} tag=${TAGS.length}`);
   if (ACTION === "list_groups") return listGroups();
   if (ACTION === "send" && status === "MATI") { log("Status MATI di Sheet pengaturan: tidak ada yang dijalankan."); return; }
   const willSend = ACTION === "send" && status === "AKTIF";

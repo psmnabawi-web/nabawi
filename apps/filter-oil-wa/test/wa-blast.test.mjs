@@ -409,3 +409,16 @@ test("dry_run dengan nama grup yang salah: tidak mengirim, tapi Riwayat memberi 
     assert.match(mock.calls.riwayat[0][3], /^Uji \(dry run, push\), tidak dikirim\. Cek grup: 1 dari 1 tujuan TIDAK ditemukan/);
   } finally { await mock.close(); }
 });
+
+test("tag dari Sheet: nomor dinormalisasi ke 62…, muncul sebagai @nomor di pesan, nomor tidak bocor ke log", async () => {
+  const sheet = { id: SHEET_ID, config: [["status", "AKTIF"], ["fonnte_token", "fonnte-token"], ["grup_tujuan", "Filter Oil BBA"], ["tag", "Imanuel RM=0812-3456-7890, +62 813 1111 2222, salah"]] };
+  const mock = await startMock(SCORES_TODAY, GROUPS, sheet);
+  try {
+    const r = await run(mock, viaSheet({ ACTION: "send" }));
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+    assert.match(mock.calls.sent[0].message, /\ncc @6281234567890 @6281311112222\n_Pesan otomatis_$/);
+    assert.match(r.stdout, /tag=2/);
+    assert.match(r.stdout, /Entri tag ke-3 bukan nomor WhatsApp yang valid/);
+    assert.doesNotMatch(r.stdout + r.stderr, /6281234567890|Imanuel/);
+  } finally { await mock.close(); }
+});
