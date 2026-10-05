@@ -2,7 +2,9 @@
 
 Halaman web untuk melihat **store mana yang tidak patuh** menjalankan filter minyak sesuai jadwal slot. Halaman ini juga bisa **export Excel** yang rapi dan berformula. Data dibaca langsung dari Firestore app Trecking Filter Oil (`trecking-filter-oil-store`). Halaman ini hanya membaca dan tidak pernah menulis ke database.
 
-- **Alamat:** **https://kepatuhan-filter-oil.web.app**, situs Firebase Hosting terpisah di project yang sama. Situs utama app (`trecking-filter-oil-store.web.app`) tidak disentuh, dan script deploy menolak menerbitkan ke situs itu.
+> **Sekarang dipakai di dalam app utama.** Halaman ini tampil sebagai menu **"Export Kepatuhan"** dan tombol **Export Excel** di Dashboard app `trecking-filter-oil-store.web.app` (lihat `apps/filter-oil-app`). `public/core.js` dan `public/kepatuhan.js` dipakai bersama oleh app utama. Situs terpisah `kepatuhan-filter-oil.web.app` sudah **dimatikan**.
+
+- **Alamat lama:** https://kepatuhan-filter-oil.web.app (dimatikan), situs Firebase Hosting terpisah di project yang sama. Script deploy menolak menerbitkan ke atau mematikan situs utama app.
 - **Isi halaman:**
   - KPI: skor kepatuhan, % slot terlaksana, % tepat waktu, jumlah slot tidak dikerjakan, jumlah store tidak patuh.
   - Peringkat store dari skor terendah.
@@ -42,7 +44,7 @@ Aturan mengikuti pengaturan app (dokumen `settings/app`) dan definisi di dashboa
 
    Script ini membuat service account `kepatuhan-deployer` (Firebase Hosting Admin) dan mengizinkan GitHub Actions repo ini memakainya lewat Workload Identity. Tanpa key dan tanpa secret.
 
-2. **Deploy otomatis** setiap ada perubahan di `apps/filter-oil-kepatuhan/**` pada branch default, atau manual lewat tab Actions → *Deploy Kepatuhan Filter Oil* → *Run workflow*. Situs dibuat otomatis saat deploy pertama.
+2. **Workflow** *Deploy Kepatuhan Filter Oil*: push hanya menjalankan tes (tidak pernah deploy). Manual lewat tab Actions → *Run workflow*: `disable` mematikan situs terpisah, `deploy` menghidupkannya lagi (hanya bila memang diminta).
 
 ## Catatan keamanan
 

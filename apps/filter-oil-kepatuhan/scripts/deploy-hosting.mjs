@@ -3,6 +3,10 @@
 // lewat Firebase Hosting REST API (tanpa firebase-tools). Situs app Filter Oil utama tidak pernah disentuh:
 // script menolak deploy ke situs default project.
 //
+//   node scripts/deploy-hosting.mjs           → deploy public/ ke situs terpisah
+//   node scripts/deploy-hosting.mjs disable   → matikan situs terpisah (Firebase "hosting:disable"; bisa diaktifkan lagi
+//                                               dengan deploy). Halaman kepatuhan sekarang ada di dalam app utama.
+//
 // Env:
 //   FO_ACCESS_TOKEN      access token Google (google-github-actions/auth, Workload Identity, scope cloud-platform)
 //   FO_PROJECT_ID        default trecking-filter-oil-store
@@ -67,8 +71,39 @@ async function pickSite() {
   fail("Tidak ada nama situs yang bisa dipakai. Isi FO_SITE_CANDIDATES dengan nama lain.");
 }
 
+// Matikan situs terpisah: hanya situs kandidat yang SUDAH ada, tidak pernah membuat situs, tidak pernah situs utama.
+async function disable() {
+  const list = await call("GET", `${API}/projects/${PROJECT}/sites?pageSize=100`);
+  if (!list.ok) fail(`Daftar situs Hosting tidak bisa dibaca: ${why(list)}`);
+  const sites = (list.json.sites || []).map((s) => ({ id: s.name.split("/").pop(), type: s.type }));
+  const defaultIds = sites.filter((s) => s.type === "DEFAULT_SITE").map((s) => s.id);
+  const targets = CANDIDATES.filter((id) => sites.some((s) => s.id === id));
+  for (const id of targets) if (defaultIds.includes(id) || id === PROJECT) fail(`Menolak mematikan situs utama app (${id}).`);
+  if (!targets.length) { log("tidak ada situs kepatuhan terpisah yang aktif; tidak ada yang dimatikan"); return; }
+  for (const site of targets) {
+    const rel = await call("POST", `${API}/sites/${site}/releases`, { type: "SITE_DISABLE", message: "dimatikan: halaman kepatuhan pindah ke app utama" });
+    if (!rel.ok) fail(`Gagal mematikan ${site}: ${why(rel)}`);
+    log(`situs ${site} dimatikan`);
+    if (!env("FO_SKIP_SMOKE")) {
+      let code = 0;
+      for (let i = 0; i < 6 && code !== 404; i++) {
+        if (i) await new Promise((r) => setTimeout(r, 5000));
+        try { code = (await fetch(`https://${site}.web.app/?v=${Date.now()}`)).status; } catch { code = 0; }
+      }
+      if (code !== 404) fail(`https://${site}.web.app masih menjawab HTTP ${code} setelah dimatikan.`);
+      log(`cek OK: https://${site}.web.app sudah tidak melayani halaman (HTTP 404)`);
+    }
+    if (process.env.GITHUB_STEP_SUMMARY) {
+      const { appendFileSync } = await import("node:fs");
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Kepatuhan Filter Oil\nSitus https://${site}.web.app dimatikan. Halaman kepatuhan ada di menu "Export Kepatuhan" app utama.\n`);
+    }
+  }
+  console.log(`\nSELESAI: ${targets.join(", ")} dimatikan`);
+}
+
 async function main() {
   if (!TOKEN) fail("FO_ACCESS_TOKEN kosong (login Google gagal?).");
+  if (process.argv[2] === "disable") return disable();
   const site = await pickSite();
 
   const files = walk(PUBLIC_DIR);

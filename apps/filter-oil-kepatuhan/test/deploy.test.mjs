@@ -37,14 +37,14 @@ async function mock({ sites = [{ id: "trecking-filter-oil-store", type: "DEFAULT
       calls.uploads[h] = gunzipSync(body).toString("utf8").slice(0, 40); return json(200, {});
     }
     if (req.method === "PATCH" && p.endsWith("/versions/v1")) { if (JSON.parse(body).status === "FINALIZED") calls.finalized++; return json(200, {}); }
-    if (req.method === "POST" && (m = p.match(/^\/sites\/([^/]+)\/releases$/))) { calls.released.push({ site: m[1], version: url.searchParams.get("versionName") }); return json(200, {}); }
+    if (req.method === "POST" && (m = p.match(/^\/sites\/([^/]+)\/releases$/))) { calls.released.push({ site: m[1], version: url.searchParams.get("versionName"), type: (body.length && JSON.parse(body).type) || undefined }); return json(200, {}); }
     return json(404, { error: { message: `no route ${req.method} ${p}` } });
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const base = `http://127.0.0.1:${server.address().port}`;
   return { base, calls, close: () => new Promise((r) => server.close(r)) };
 }
-const run = (m, extra = {}) => new Promise((resolve) => execFile(process.execPath, [SCRIPT], {
+const run = (m, extra = {}, args = []) => new Promise((resolve) => execFile(process.execPath, [SCRIPT, ...args], {
   env: { PATH: process.env.PATH, FO_ACCESS_TOKEN: "tok", FO_TEST_HOSTING_BASE: m.base, FO_TEST_UPLOAD_BASE: m.base, FO_SKIP_SMOKE: "1", ...extra },
 }, (err, stdout, stderr) => resolve({ code: err ? err.code : 0, stdout, stderr })));
 
@@ -58,7 +58,7 @@ test("buat situs baru (lewati nama yang sudah dipakai project lain), upload, fin
     assert.equal(Object.keys(m.calls.uploads).length, new Set(Object.values(m.calls.manifest)).size);
     assert.match(Object.values(m.calls.uploads).join("|"), /<!doctype html>/);
     assert.equal(m.calls.finalized, 1);
-    assert.deepEqual(m.calls.released, [{ site: "kepatuhan-filter-oil-bba", version: "sites/kepatuhan-filter-oil-bba/versions/v1" }]);
+    assert.deepEqual(m.calls.released, [{ site: "kepatuhan-filter-oil-bba", version: "sites/kepatuhan-filter-oil-bba/versions/v1", type: undefined }]);
     assert.match(r.stdout, /SELESAI: https:\/\/kepatuhan-filter-oil-bba\.web\.app/);
     assert.equal(m.calls.config.headers[0].headers["X-Robots-Tag"], "noindex, nofollow");
   } finally { await m.close(); }
@@ -80,6 +80,31 @@ test("menolak deploy ke situs utama app Filter Oil", async () => {
     const r = await run(m, { FO_SITE_CANDIDATES: "trecking-filter-oil-store" });
     assert.equal(r.code, 1);
     assert.match(r.stderr, /Menolak deploy ke situs utama app/);
+    assert.equal(m.calls.released.length, 0);
+  } finally { await m.close(); }
+});
+
+test("disable: matikan situs terpisah yang ada (SITE_DISABLE), tanpa membuat situs baru", async () => {
+  const m = await mock({ sites: [{ id: "trecking-filter-oil-store", type: "DEFAULT_SITE" }, { id: "kepatuhan-filter-oil" }] });
+  try {
+    const r = await run(m, {}, ["disable"]);
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+    assert.deepEqual(m.calls.created, []);
+    assert.deepEqual(m.calls.released, [{ site: "kepatuhan-filter-oil", version: null, type: "SITE_DISABLE" }]);
+    assert.match(r.stdout, /kepatuhan-filter-oil dimatikan/);
+  } finally { await m.close(); }
+});
+
+test("disable: tidak menyentuh situs utama dan tidak membuat situs bila belum ada", async () => {
+  const m = await mock();
+  try {
+    const r = await run(m, {}, ["disable"]);
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+    assert.deepEqual(m.calls.created, []);
+    assert.equal(m.calls.released.length, 0);
+    const r2 = await run(m, { FO_SITE_CANDIDATES: "trecking-filter-oil-store" }, ["disable"]);
+    assert.equal(r2.code, 1);
+    assert.match(r2.stderr, /Menolak mematikan situs utama app/);
     assert.equal(m.calls.released.length, 0);
   } finally { await m.close(); }
 });

@@ -1,7 +1,10 @@
 name: Deploy Kepatuhan Filter Oil
 
 # Halaman web Kepatuhan Filter Oil (apps/filter-oil-kepatuhan/public) → situs Firebase Hosting TERPISAH di project
-# trecking-filter-oil-store (mis. kepatuhan-filter-oil.web.app). Situs utama app Filter Oil tidak disentuh.
+# trecking-filter-oil-store (kepatuhan-filter-oil.web.app). Situs utama app Filter Oil tidak disentuh.
+# Sejak menu "Export Kepatuhan" ada di app utama (workflow filter-oil-app-hosting.yml), situs terpisah ini DIMATIKAN:
+#   push      → hanya tes (core.js & kepatuhan.js juga dipakai app utama), tidak pernah deploy
+#   manual    → action "disable" (matikan situs terpisah) atau "deploy" (hidupkan lagi, hanya bila memang diminta)
 # Login tanpa key: GitHub OIDC → Workload Identity → service account kepatuhan-deployer (Firebase Hosting Admin),
 # disiapkan sekali dengan apps/filter-oil-kepatuhan/setup-cloudshell.sh.
 on:
@@ -9,6 +12,12 @@ on:
     branches: ["claude/adoring-dijkstra-78ese7", "claude/ecstatic-franklin-hhjvmk", "main"]
     paths: ["apps/filter-oil-kepatuhan/**", ".github/workflows/deploy-filter-oil-kepatuhan.yml"]
   workflow_dispatch:
+    inputs:
+      action:
+        description: "disable = matikan situs terpisah | deploy = hidupkan lagi situs terpisah"
+        type: choice
+        default: disable
+        options: [disable, deploy]
 
 concurrency:
   group: deploy-filter-oil-kepatuhan
@@ -23,8 +32,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      # Deploy hanya dari branch default (atau dijalankan manual); push ke branch lain cukup menjalankan tes.
-      DO_DEPLOY: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/claude/adoring-dijkstra-78ese7' || github.ref == 'refs/heads/main' }}
+      # Hanya dijalankan manual; push cukup menjalankan tes.
+      DO_DEPLOY: ${{ github.event_name == 'workflow_dispatch' }}
+      ACTION: ${{ inputs.action || 'disable' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -36,8 +46,6 @@ jobs:
       - name: Login Google (Workload Identity, tanpa key)
         id: auth
         if: ${{ env.DO_DEPLOY == 'true' }}
-        # Saat push: kalau setup-cloudshell.sh belum dijalankan, lewati deploy dengan peringatan (bukan gagal).
-        continue-on-error: ${{ github.event_name == 'push' }}
         uses: google-github-actions/auth@v2
         with:
           project_id: trecking-filter-oil-store
@@ -47,14 +55,11 @@ jobs:
           access_token_scopes: https://www.googleapis.com/auth/cloud-platform
           create_credentials_file: false
           export_environment_variables: false
-      - name: Setup belum dijalankan
-        if: ${{ env.DO_DEPLOY == 'true' && steps.auth.outcome == 'failure' }}
-        run: echo "::warning::Login Google gagal. Jalankan apps/filter-oil-kepatuhan/setup-cloudshell.sh di Cloud Shell (Owner), lalu jalankan workflow ini lagi."
-      - name: Terbitkan ke Firebase Hosting
+      - name: ${{ env.ACTION == 'deploy' && 'Terbitkan ke Firebase Hosting' || 'Matikan situs terpisah' }}
         if: ${{ env.DO_DEPLOY == 'true' && steps.auth.outcome == 'success' }}
         working-directory: apps/filter-oil-kepatuhan
         env:
           FO_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           FO_PROJECT_ID: trecking-filter-oil-store
           FO_SITE_CANDIDATES: ${{ vars.FO_KEPATUHAN_SITE || 'kepatuhan-filter-oil,kepatuhan-filter-oil-bba,trecking-filter-oil-kepatuhan' }}
-        run: node scripts/deploy-hosting.mjs
+        run: node scripts/deploy-hosting.mjs "$([ "$ACTION" = deploy ] && echo deploy || echo disable)"
