@@ -452,7 +452,7 @@ class ConfigSheet {
     return cfg;
   }
   async append(row) {
-    const r = await request(this.url("Riwayat!A:G", ":append?valueInputOption=RAW&insertDataOption=INSERT_ROWS"), { method: "POST", headers: this.headers, body: JSON.stringify({ values: [row] }) });
+    const r = await request(this.url("Riwayat!A:G", ":append?valueInputOption=RAW&insertDataOption=OVERWRITE"), { method: "POST", headers: this.headers, body: JSON.stringify({ values: [row] }) });
     if (!r.ok) throw new Error(`gagal mencatat ke tab Riwayat: ${reasonOf(r)}`);
   }
 }
@@ -546,7 +546,16 @@ async function main() {
   log(`pesan ${msg.text.length} karakter → ${file}`);
 
   if (!willSend) {
-    const why = ACTION === "dry_run" ? `Uji (dry run${RUN_LABEL ? ", " + RUN_LABEL : ""}), tidak dikirim` : "Status UJI: tidak dikirim. Ubah status ke AKTIF untuk mulai kirim ke grup.";
+    let why = ACTION === "dry_run" ? `Uji (dry run${RUN_LABEL ? ", " + RUN_LABEL : ""}), tidak dikirim` : "Status UJI: tidak dikirim. Ubah status ke AKTIF untuk mulai kirim ke grup.";
+    // Cek token & grup tujuan tanpa mengirim apa pun, supaya masalah ketahuan sebelum jadwal kirim.
+    if (TOKEN && TARGETS.length && GATEWAY === "fonnte") {
+      try {
+        const ts = await resolveTargets(TARGETS);
+        const bad = ts.filter((t) => !t.id);
+        why += bad.length ? `. Cek grup: ${bad.length} dari ${ts.length} tujuan TIDAK ditemukan (${bad.map((t) => t.error).join("; ")})` : `. Cek grup: ${ts.length} tujuan ditemukan, token Fonnte valid`;
+        log(bad.length ? `cek grup: ${bad.length}/${ts.length} tujuan tidak ditemukan` : `cek grup: ${ts.length} tujuan ditemukan`);
+      } catch (e) { why += `. Cek grup gagal: ${e.message}`; warn(`cek grup gagal: ${e.message}`); }
+    }
     await record(why, msg);
     console.log(`\n${why}. Pesan tersimpan di ${file}${sheet ? " dan tab Riwayat" : ""}.`);
     return;

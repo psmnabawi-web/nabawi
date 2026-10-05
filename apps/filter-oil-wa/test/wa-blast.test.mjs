@@ -309,6 +309,7 @@ test("Sheet status UJI: jadwal tidak mengirim, pesan lengkap dicatat di tab Riwa
     const [waktu, jenis, tgl, status, sudah, total, pesan] = mock.calls.riwayat[0];
     assert.equal(waktu, "2026-10-05 12.02"); assert.equal(jenis, "Progress"); assert.equal(tgl, "05/10/2026");
     assert.match(status, /Status UJI: tidak dikirim/); assert.equal(sudah, 1); assert.equal(total, 3);
+    assert.match(status, /Cek grup: 1 tujuan ditemukan, token Fonnte valid/);
     assert.match(pesan, /^\*Laporan Scoring Filter Oil BBA\*/);
     assert.match(r.stdout, /status=UJI \(Sheet\)/);
     assert.doesNotMatch(r.stdout + r.stderr, /fonnte-token|Filter Oil BBA|Cipete/);
@@ -390,5 +391,16 @@ test("struktur app Filter Oil: filterRecords + dateKey + slotId, store activeFro
     assert.doesNotMatch(r.text, /Store C|Store D/);
     assert.match(r.stdout, /1 belum mulai \(activeFrom\)/);
     assert.match(r.stdout, /field tanggal=dateKey \(teks YYYY-MM-DD\), field slot=slotId/);
+  } finally { await mock.close(); }
+});
+
+test("dry_run dengan nama grup yang salah: tidak mengirim, tapi Riwayat memberi tahu grup tidak ditemukan", async () => {
+  const sheet = { id: SHEET_ID, config: [["status", "UJI"], ["fonnte_token", "fonnte-token"], ["grup_tujuan", "Grup Salah Ketik"]] };
+  const mock = await startMock(SCORES_TODAY, GROUPS, sheet);
+  try {
+    const r = await run(mock, viaSheet({ ACTION: "dry_run", FO_RUN_LABEL: "push" }));
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+    assert.equal(mock.calls.sent.length, 0);
+    assert.match(mock.calls.riwayat[0][3], /^Uji \(dry run, push\), tidak dikirim\. Cek grup: 1 dari 1 tujuan TIDAK ditemukan/);
   } finally { await mock.close(); }
 });
