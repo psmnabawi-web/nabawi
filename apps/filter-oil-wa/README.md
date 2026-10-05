@@ -6,6 +6,7 @@ Laporan otomatis ke grup WhatsApp tentang **persentase store yang sudah dan belu
 - **Jam 00.00 = Rekap Final hari sebelumnya.** Laporan yang dibuat sebelum 06.00 WIB selalu untuk tanggal kemarin, supaya grup tidak menerima "0% sudah scoring" untuk hari yang baru dimulai.
 - **App Filter Oil tidak diubah.** Script hanya membaca Firestore lewat service account **read-only** (Cloud Datastore Viewer). Tidak ada kode, rules, atau hosting app yang disentuh.
 - **Biaya:** Rp0. GitHub Actions untuk repo publik gratis, dan pembacaan Firestore jauh di bawah kuota Spark 50.000 read/hari (±3 run × jumlah data scoring per hari).
+- **Pengaturan tanpa coding:** status AKTIF/UJI/MATI, token Fonnte, grup tujuan, dan riwayat kiriman ada di Google Sheet *Pengaturan Blast WA - Scoring Filter Oil*.
 
 ## Contoh pesan
 
@@ -27,30 +28,32 @@ _Pesan otomatis_
 
 ## Setup (sekali saja)
 
-1. **Service account read-only.** Jalankan di Cloud Shell akun Owner project:
+Tidak ada key atau secret GitHub. Login ke Firebase memakai **Workload Identity Federation**: hanya GitHub Actions dari repo ini yang boleh memakai service account read-only. Token Fonnte dan grup tujuan disimpan di Google Sheet pengaturan milik psmnabawi@gmail.com.
+
+1. **Cloud Shell (akun Owner project), satu baris:**
 
    ```bash
-   P=trecking-filter-oil-store; SA=wa-blast-reader; EMAIL=$SA@$P.iam.gserviceaccount.com
-   gcloud config set project $P
-   gcloud services enable iam.googleapis.com
-   gcloud iam service-accounts describe $EMAIL >/dev/null 2>&1 || gcloud iam service-accounts create $SA --display-name="WA blast scoring (read-only)"
-   gcloud projects add-iam-policy-binding $P --member="serviceAccount:$EMAIL" --role="roles/datastore.viewer" --condition=None --quiet >/dev/null && echo "ROLE OK"
-   gcloud iam service-accounts keys create ~/fo-wa-key.json --iam-account=$EMAIL && cat ~/fo-wa-key.json
+   curl -sL https://raw.githubusercontent.com/psmnabawi-web/nabawi/claude/ecstatic-franklin-hhjvmk/apps/filter-oil-wa/setup-cloudshell.sh | bash
    ```
 
-2. **GitHub Secrets.** Buka repo → Settings → Secrets and variables → Actions → *New repository secret*:
+   Script [`setup-cloudshell.sh`](setup-cloudshell.sh) membuat service account `wa-blast-reader` (role Cloud Datastore Viewer), Workload Identity Pool `github-actions`, dan provider `nabawi-repo` yang dikunci ke repo `psmnabawi-web/nabawi`. Aman dijalankan ulang. Semuanya gratis, dan project tetap di paket Spark.
 
-   | Secret | Isi |
+2. **Bagikan Sheet pengaturan** *Pengaturan Blast WA - Scoring Filter Oil* ke `wa-blast-reader@trecking-filter-oil-store.iam.gserviceaccount.com` sebagai **Editor**. Script menulis ke tab Riwayat.
+
+3. **Isi tab Pengaturan:**
+
+   | Kunci | Isi |
    |---|---|
-   | `FO_FIREBASE_SA` | Seluruh isi `fo-wa-key.json`, dari `{` sampai `}`. Setelah tersimpan, hapus file di Cloud Shell: `rm ~/fo-wa-key.json` |
-   | `FO_WA_TARGET` | **Nama grup WhatsApp persis** (mis. `Filter Oil BBA`) atau ID grup `1203…@g.us`. Beberapa grup dipisah koma. |
-   | `FO_WA_TOKEN` | *Opsional.* Token device Fonnte khusus Filter Oil. Kosongkan untuk memakai nomor bot yang sudah dipakai blast lain (`WA_TOKEN`). |
+   | `status` | `UJI` (pesan hanya dicatat di tab Riwayat), `AKTIF` (kirim ke grup), `MATI` (tidak berjalan) |
+   | `fonnte_token` | Token device Fonnte (md.fonnte.com, menu Device) |
+   | `grup_tujuan` | Nama grup WhatsApp persis, atau ID `1203…@g.us`. Beberapa grup dipisah koma. Nomor Fonnte harus anggota grup. |
+   | `judul` | Judul pesan (default `Scoring Filter Oil`) |
 
-   Nomor bot (device Fonnte) **harus sudah jadi anggota grup tujuan**.
+   Setiap run menambah satu baris di tab **Riwayat**: waktu, jenis laporan, status kirim, angka, dan isi pesan lengkap. Error juga dicatat di sana.
 
-3. **Uji.** Tab Actions → *WA Blast Scoring Filter Oil* → *Run workflow*:
-   - `dry_run`: pesan disusun tanpa dikirim. Hasilnya bisa diunduh di artifact. Hapus artifact setelah dibaca, karena repo publik.
-   - `send`: kirim sekali ke grup.
+4. **Jadwal hanya berjalan dari branch default repo.** Workflow ini harus ada di branch default.
+
+Alternatif tanpa Sheet: isi secret `FO_WA_TOKEN` dan `FO_WA_TARGET`. Alternatif tanpa Workload Identity: isi secret `FO_FIREBASE_SA` dengan key service account. Secret yang terisi selalu mengalahkan isi Sheet.
 
 ## Struktur data (deteksi otomatis)
 
@@ -76,6 +79,7 @@ Data scoring dicocokkan ke store lewat ID dokumen, nama, atau kode store. Pencoc
 ```bash
 cd apps/filter-oil-wa
 npm test                                   # uji end-to-end dengan server tiruan
-FO_SA_KEY="$(cat ~/fo-wa-key.json)" npm run discover
-FO_SA_KEY="$(cat ~/fo-wa-key.json)" npm run wa:dry-run   # pesan tersimpan di wa-out/
+# di Cloud Shell (login gcloud sebagai Owner/Viewer project):
+FO_ACCESS_TOKEN="$(gcloud auth print-access-token)" FO_PROJECT_ID=trecking-filter-oil-store npm run discover
+FO_ACCESS_TOKEN="$(gcloud auth print-access-token)" FO_PROJECT_ID=trecking-filter-oil-store npm run wa:dry-run   # pesan di wa-out/
 ```

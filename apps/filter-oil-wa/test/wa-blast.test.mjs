@@ -31,8 +31,8 @@ const cmpVal = (a, b) => {
 const unquote = (p) => p.replace(/^`|`$/g, "");
 
 // ---------- server tiruan ----------
-async function startMock(db, groups = []) {
-  const calls = { token: 0, sent: [], fetchGroup: 0, queries: [] };
+async function startMock(db, groups = [], sheet = null) {
+  const calls = { token: 0, sent: [], fetchGroup: 0, queries: [], riwayat: [] };
   const server = createServer(async (req, res) => {
     let body = ""; for await (const ch of req) body += ch;
     const url = new URL(req.url, "http://x");
@@ -54,8 +54,17 @@ async function startMock(db, groups = []) {
       if (url.pathname === "/fonnte/get-whatsapp-group") return calls.fetchGroup ? json(200, { status: true, data: groups }) : json(200, { status: false, reason: "data not found, please fetch" });
       return json(404, {});
     }
+    if (!["Bearer tok-123", "Bearer direct-tok"].includes(req.headers.authorization)) return json(401, { error: { code: 401, message: "unauthenticated", status: "UNAUTHENTICATED" } });
+    // Google Sheets (pengaturan & riwayat)
+    if (url.pathname.startsWith("/v4/spreadsheets/")) {
+      const [, , , id, , range] = url.pathname.split("/").map(decodeURIComponent);
+      if (!sheet || id !== sheet.id) return json(404, { error: { code: 404, message: "Requested entity was not found.", status: "NOT_FOUND" } });
+      if (sheet.forbidden) return json(403, { error: { code: 403, message: "The caller does not have permission", status: "PERMISSION_DENIED" } });
+      if (req.method === "GET" && range === "Pengaturan!A2:B30") return json(200, { range, values: sheet.config });
+      if (req.method === "POST" && range === "Riwayat!A:G:append" && url.searchParams.get("valueInputOption") === "RAW") { calls.riwayat.push(...JSON.parse(body).values); return json(200, { updates: { updatedRows: 1 } }); }
+      return json(400, { error: { code: 400, message: `unsupported sheets ${req.method} ${range}` } });
+    }
     // Firestore
-    if (req.headers.authorization !== "Bearer tok-123") return json(401, { error: { code: 401, message: "unauthenticated", status: "UNAUTHENTICATED" } });
     const prefix = `/v1/projects/${PROJECT}/databases/(default)/documents`;
     if (!decodeURIComponent(url.pathname).startsWith(prefix)) return json(404, { error: { code: 404, message: "project not found", status: "NOT_FOUND" } });
     let rest = decodeURIComponent(url.pathname).slice(prefix.length).replace(/^\//, "");
@@ -97,7 +106,7 @@ async function startMock(db, groups = []) {
 
 function run(mock, envOver) {
   const out = mkdtempSync(join(tmpdir(), "fo-wa-"));
-  const env = { PATH: process.env.PATH, OUT_DIR: out, FO_SA_KEY: JSON.stringify(SA), FO_TEST_FIRESTORE_BASE: `${mock.base}/v1`, FO_TEST_TOKEN_URL: `${mock.base}/token`, FO_TEST_FONNTE_BASE: `${mock.base}/fonnte`, ...envOver };
+  const env = { PATH: process.env.PATH, OUT_DIR: out, FO_SA_KEY: JSON.stringify(SA), FO_TEST_FIRESTORE_BASE: `${mock.base}/v1`, FO_TEST_TOKEN_URL: `${mock.base}/token`, FO_TEST_FONNTE_BASE: `${mock.base}/fonnte`, FO_TEST_SHEETS_BASE: mock.base, ...envOver };
   for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
   return new Promise((resolve) => execFile(process.execPath, [SCRIPT], { env }, (err, stdout, stderr) => {
     const files = readdirSync(out); const text = files.filter((f) => f.startsWith("laporan-")).map((f) => readFileSync(join(out, f), "utf8"))[0] || "";
@@ -252,9 +261,9 @@ test("konfigurasi kurang: tanpa secret di dry_run aman (exit 0), di send gagal j
   const mock = await startMock(STORES);
   try {
     const a = await run(mock, { ACTION: "dry_run", FO_SA_KEY: undefined });
-    assert.equal(a.code, 0); assert.match(a.stdout, /FO_FIREBASE_SA belum diisi/);
+    assert.equal(a.code, 0); assert.match(a.stdout, /Login Google belum tersedia/);
     const b = await run(mock, { ACTION: "send", FO_SA_KEY: undefined, WA_TOKEN: "fonnte-token", WA_TARGET: "x@g.us" });
-    assert.equal(b.code, 1); assert.match(b.stderr, /FO_FIREBASE_SA belum diisi/);
+    assert.equal(b.code, 1); assert.match(b.stderr, /Login Google belum tersedia/);
     const c = await run(mock, { ACTION: "send", WA_TOKEN: "", WA_TARGET: "x@g.us", FO_SCORE_COLLECTION: "scorings" });
     assert.equal(c.code, 1); assert.match(c.stderr, /Token gateway WhatsApp kosong/);
     const d = await run(mock, { ACTION: "dry_run", FO_SA_KEY: "{bukan json" });
@@ -280,4 +289,79 @@ test("nama store di data scoring tidak persis sama: cocok hanya bila tepat satu 
     assert.match(r.stdout, /1 data scoring dicocokkan lewat nama store yang mirip/);
     assert.match(r.stdout, /1 tidak cocok/);
   } finally { await mock.close(); }
+});
+
+// ---------- Sheet pengaturan + login tanpa key (FO_ACCESS_TOKEN dari Workload Identity) ----------
+const SHEET_ID = "sheet-abc";
+const SCORES_TODAY = { ...STORES, scorings: [{ id: "a", fields: { storeId: S("s1"), createdAt: TS("2026-10-05T02:00:00Z") } }] };
+const GROUPS = [{ id: "120363000000000002@g.us", name: "Filter Oil BBA" }];
+const viaSheet = (extra = {}) => ({ FO_SA_KEY: undefined, FO_ACCESS_TOKEN: "direct-tok", FO_PROJECT_ID: PROJECT, FO_CONFIG_SHEET_ID: SHEET_ID, FO_TEST_NOW: NOON, FO_SCORE_COLLECTION: "scorings", ...extra });
+
+test("Sheet status UJI: jadwal tidak mengirim, pesan lengkap dicatat di tab Riwayat", async () => {
+  const sheet = { id: SHEET_ID, config: [["status", "UJI"], ["fonnte_token", "fonnte-token"], ["grup_tujuan", "Filter Oil BBA"], ["judul", "Scoring Filter Oil BBA"]] };
+  const mock = await startMock(SCORES_TODAY, GROUPS, sheet);
+  try {
+    const r = await run(mock, viaSheet({ ACTION: "send", FO_RUN_LABEL: "schedule" }));
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+    assert.equal(mock.calls.token, 0, "FO_ACCESS_TOKEN dipakai langsung, tanpa tukar JWT");
+    assert.equal(mock.calls.sent.length, 0);
+    assert.equal(mock.calls.riwayat.length, 1);
+    const [waktu, jenis, tgl, status, sudah, total, pesan] = mock.calls.riwayat[0];
+    assert.equal(waktu, "2026-10-05 12.02"); assert.equal(jenis, "Progress"); assert.equal(tgl, "05/10/2026");
+    assert.match(status, /Status UJI: tidak dikirim/); assert.equal(sudah, 1); assert.equal(total, 3);
+    assert.match(pesan, /^\*Laporan Scoring Filter Oil BBA\*/);
+    assert.match(r.stdout, /status=UJI \(Sheet\)/);
+    assert.doesNotMatch(r.stdout + r.stderr, /fonnte-token|Filter Oil BBA|Cipete/);
+  } finally { await mock.close(); }
+});
+
+test("Sheet status AKTIF: token & grup dari Sheet, terkirim, tercatat 'Terkirim'", async () => {
+  const sheet = { id: SHEET_ID, config: [["status", "aktif"], ["fonnte_token", "fonnte-token"], ["grup_tujuan", "Filter Oil BBA"]] };
+  const mock = await startMock(SCORES_TODAY, GROUPS, sheet);
+  try {
+    const r = await run(mock, viaSheet({ ACTION: "send" }));
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+    assert.deepEqual(mock.calls.sent.map((x) => x.target), ["120363000000000002@g.us"]);
+    assert.match(mock.calls.sent[0].message, /^\*Laporan Scoring Filter Oil\*/);
+    assert.equal(mock.calls.riwayat[0][3], "Terkirim ke 1 grup");
+  } finally { await mock.close(); }
+});
+
+test("Secret WA_TOKEN/WA_TARGET mengalahkan isi Sheet", async () => {
+  const sheet = { id: SHEET_ID, config: [["status", "AKTIF"], ["fonnte_token", "token-salah"], ["grup_tujuan", "Grup Salah"]] };
+  const mock = await startMock(SCORES_TODAY, GROUPS, sheet);
+  try {
+    const r = await run(mock, viaSheet({ ACTION: "send", WA_TOKEN: "fonnte-token", WA_TARGET: "120363000000000002@g.us" }));
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+    assert.deepEqual(mock.calls.sent.map((x) => x.target), ["120363000000000002@g.us"]);
+  } finally { await mock.close(); }
+});
+
+test("Sheet status MATI: tidak membaca Firestore, tidak mengirim", async () => {
+  const mock = await startMock(SCORES_TODAY, GROUPS, { id: SHEET_ID, config: [["status", "MATI"], ["fonnte_token", "fonnte-token"], ["grup_tujuan", "Filter Oil BBA"]] });
+  try {
+    const r = await run(mock, viaSheet({ ACTION: "send" }));
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+    assert.equal(mock.calls.queries.length, 0); assert.equal(mock.calls.sent.length, 0); assert.equal(mock.calls.riwayat.length, 0);
+    assert.match(r.stdout, /Status MATI/);
+  } finally { await mock.close(); }
+});
+
+test("AKTIF tapi grup kosong / Sheet belum dibagikan / data error: gagal jelas & tercatat bila bisa", async () => {
+  const m1 = await startMock(SCORES_TODAY, GROUPS, { id: SHEET_ID, config: [["status", "AKTIF"], ["fonnte_token", "fonnte-token"]] });
+  try {
+    const r = await run(m1, viaSheet({ ACTION: "send" }));
+    assert.equal(r.code, 1); assert.match(r.stderr, /Grup tujuan kosong/); assert.equal(m1.calls.sent.length, 0);
+  } finally { await m1.close(); }
+  const m2 = await startMock(SCORES_TODAY, GROUPS, { id: SHEET_ID, forbidden: true, config: [] });
+  try {
+    const r = await run(m2, viaSheet({ ACTION: "send" }));
+    assert.equal(r.code, 1); assert.match(r.stderr, /bagikan Sheet ke service account sebagai Editor/);
+  } finally { await m2.close(); }
+  const m3 = await startMock(STORES, GROUPS, { id: SHEET_ID, config: [["status", "AKTIF"], ["fonnte_token", "fonnte-token"], ["grup_tujuan", "Filter Oil BBA"]] });
+  try {
+    const r = await run(m3, viaSheet({ ACTION: "send" }));
+    assert.equal(r.code, 1); assert.equal(m3.calls.sent.length, 0);
+    assert.match(m3.calls.riwayat[0][3], /^ERROR: Koleksi scoring "scorings" kosong/);
+  } finally { await m3.close(); }
 });

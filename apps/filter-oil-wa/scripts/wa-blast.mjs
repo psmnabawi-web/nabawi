@@ -14,9 +14,13 @@
 //   ACTION=discover node scripts/wa-blast.mjs      # tulis struktur Firestore (nama koleksi, field, tipe; TANPA isi data) ke log
 //   ACTION=list_groups node scripts/wa-blast.mjs   # (Fonnte) tulis daftar grup + ID ke wa-out/daftar-grup.txt
 //
-// Env (isi lewat GitHub Secrets/Variables, jangan ditulis di kode):
+// Env (isi lewat GitHub Secrets/Variables atau Sheet pengaturan, jangan ditulis di kode):
+//   FO_ACCESS_TOKEN        access token Google (dari google-github-actions/auth + Workload Identity, tanpa key), atau:
 //   FO_SA_KEY              JSON service account (atau base64 dari JSON tsb) dengan role Cloud Datastore Viewer
-//   FO_PROJECT_ID          default: project_id dari service account
+//   FO_PROJECT_ID          project Firebase (default: project_id dari service account)
+//   FO_CONFIG_SHEET_ID     ID Google Sheet pengaturan (tab "Pengaturan": status AKTIF/UJI/MATI, fonnte_token, grup_tujuan,
+//                          judul; tab "Riwayat": dicatat setiap run). Service account harus diberi akses Editor ke Sheet ini.
+//                          Secret WA_TOKEN/WA_TARGET (bila diisi) mengalahkan isi Sheet.
 //   FO_STORE_COLLECTION    koleksi master store (default "stores")
 //   FO_STORE_NAME_FIELD    field nama store (default: deteksi otomatis name/nama/storeName/...)
 //   FO_STORE_ACTIVE_FIELD  field aktif/status store (default: deteksi otomatis active/aktif/isActive/status)
@@ -46,10 +50,14 @@ const IN_CI = !!process.env.GITHUB_ACTIONS;
 const ACTION = env("ACTION", "send").toLowerCase();
 const OUT_DIR = env("OUT_DIR", "wa-out");
 const GATEWAY = (env("WA_GATEWAY") || "fonnte").toLowerCase();
-const TOKEN = env("WA_TOKEN");
 const API_URL = env("WA_API_URL").replace(/\/+$/, "");
-const TARGETS = env("WA_TARGET").split(/\s*[,;\n]\s*/).filter(Boolean);
-const TITLE = env("FO_TITLE") || "Scoring Filter Oil";
+const splitTargets = (v) => String(v || "").split(/\s*[,;\n]\s*/).filter(Boolean);
+// Bisa diisi dari Sheet pengaturan (lihat loadSheetConfig); secret/env yang terisi selalu menang.
+let TOKEN = env("WA_TOKEN");
+let TARGETS = splitTargets(env("WA_TARGET"));
+let TITLE = env("FO_TITLE") || "Scoring Filter Oil";
+const CONFIG_SHEET = env("FO_CONFIG_SHEET_ID");
+const RUN_LABEL = env("FO_RUN_LABEL");
 const CUTOFF_HOUR = Number(env("FO_CUTOFF_HOUR", "6"));
 const REPORT_DATE = env("REPORT_DATE");
 const CFG = {
@@ -67,6 +75,7 @@ const testEnv = (k) => (IN_CI ? "" : env(k));
 const FIRESTORE_BASE = testEnv("FO_TEST_FIRESTORE_BASE") || "https://firestore.googleapis.com/v1";
 const TOKEN_URL = testEnv("FO_TEST_TOKEN_URL") || "https://oauth2.googleapis.com/token";
 const FONNTE_BASE = testEnv("FO_TEST_FONNTE_BASE") || "https://api.fonnte.com";
+const SHEETS_BASE = testEnv("FO_TEST_SHEETS_BASE") || "https://sheets.googleapis.com";
 const NOW_MS = testEnv("FO_TEST_NOW") ? Date.parse(testEnv("FO_TEST_NOW")) : Date.now();
 
 const NAME_FIELDS = ["name", "nama", "storeName", "namaStore", "nama_store", "store_name", "namaToko", "nama_toko", "outletName", "namaOutlet", "nama_outlet", "outlet", "store", "toko", "label", "title"];
@@ -139,7 +148,7 @@ function parseServiceAccount(raw) {
 }
 async function accessToken(sa) {
   const now = Math.floor(Date.now() / 1000);
-  const unsigned = `${b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }))}.${b64url(JSON.stringify({ iss: sa.client_email, scope: "https://www.googleapis.com/auth/datastore", aud: TOKEN_URL, iat: now, exp: now + 3600 }))}`;
+  const unsigned = `${b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }))}.${b64url(JSON.stringify({ iss: sa.client_email, scope: "https://www.googleapis.com/auth/datastore https://www.googleapis.com/auth/spreadsheets", aud: TOKEN_URL, iat: now, exp: now + 3600 }))}`;
   let sig; try { sig = createSign("RSA-SHA256").update(unsigned).sign(sa.private_key); } catch { fail("private_key di FO_FIREBASE_SA rusak/terpotong. Salin ulang isi file key secara utuh."); }
   const r = await request(TOKEN_URL, form({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: `${unsigned}.${b64url(sig)}` }));
   if (!r.ok || !r.json || !r.json.access_token) fail(`Login service account ditolak Google: ${reasonOf(r)}. Key mungkin sudah dihapus/dinonaktifkan; buat key baru.`);
@@ -420,6 +429,33 @@ async function listGroups() {
   log(`${data.length} grup ditulis ke ${file} (tidak dicetak ke log karena log repo publik bisa dibaca siapa saja).`);
 }
 
+// ---------- Google Sheet pengaturan & riwayat ----------
+const STATUSES = ["AKTIF", "UJI", "MATI"];
+class ConfigSheet {
+  constructor(id, token) { this.id = id; this.headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }; }
+  url(range, suffix = "") { return `${SHEETS_BASE}/v4/spreadsheets/${encodeURIComponent(this.id)}/values/${encodeURIComponent(range)}${suffix}`; }
+  async read() {
+    const r = await request(this.url("Pengaturan!A2:B30"), { headers: this.headers });
+    if (!r.ok) fail(`Sheet pengaturan tidak bisa dibaca: ${reasonOf(r)}${r.status === 403 ? " → bagikan Sheet ke service account sebagai Editor." : r.status === 404 ? " → ID Sheet salah atau tab \"Pengaturan\" tidak ada." : ""}`);
+    const cfg = {};
+    for (const row of (r.json && r.json.values) || []) if (row[0]) cfg[norm(row[0]).replace(/\s+/g, "_")] = String(row[1] ?? "").trim();
+    return cfg;
+  }
+  async append(row) {
+    const r = await request(this.url("Riwayat!A:G", ":append?valueInputOption=RAW&insertDataOption=INSERT_ROWS"), { method: "POST", headers: this.headers, body: JSON.stringify({ values: [row] }) });
+    if (!r.ok) throw new Error(`gagal mencatat ke tab Riwayat: ${reasonOf(r)}`);
+  }
+}
+/** Terapkan isi tab Pengaturan. Mengembalikan status (AKTIF/UJI/MATI). */
+function applySheetConfig(cfg) {
+  if (!TOKEN && cfg.fonnte_token) TOKEN = cfg.fonnte_token;
+  if (!TARGETS.length && cfg.grup_tujuan) TARGETS = splitTargets(cfg.grup_tujuan);
+  if (!env("FO_TITLE") && cfg.judul) TITLE = cfg.judul;
+  const st = (cfg.status || "UJI").toUpperCase();
+  if (!STATUSES.includes(st)) { warn(`Status "${st}" di Sheet pengaturan tidak dikenal (AKTIF | UJI | MATI); dianggap UJI.`); return "UJI"; }
+  return st;
+}
+
 // ---------- discover: struktur Firestore tanpa isi data ----------
 async function discover(db) {
   const cols = await db.collections();
@@ -435,61 +471,86 @@ async function discover(db) {
 }
 
 // ---------- main ----------
+async function googleAccess() {
+  const direct = env("FO_ACCESS_TOKEN");
+  if (direct) return { token: direct, project: env("FO_PROJECT_ID") };
+  const saRaw = env("FO_SA_KEY");
+  if (!saRaw) return null;
+  const sa = parseServiceAccount(saRaw);
+  return { token: await accessToken(sa), project: env("FO_PROJECT_ID") || sa.project_id };
+}
+
 async function main() {
   if (!["send", "dry_run", "discover", "list_groups"].includes(ACTION)) fail(`ACTION "${ACTION}" tidak dikenal (send | dry_run | discover | list_groups)`);
-  log(`action=${ACTION} gateway=${GATEWAY} token=${TOKEN ? "terisi" : "kosong"} tujuan=${TARGETS.length}`);
+  const access = await googleAccess();
+  if (!access) {
+    if (ACTION === "dry_run") { warn("Login Google belum tersedia (Workload Identity belum disiapkan / secret FO_FIREBASE_SA kosong). Dry-run berhenti di sini."); return; }
+    fail("Login Google belum tersedia: jalankan blok setup Cloud Shell (Workload Identity) atau isi secret FO_FIREBASE_SA.");
+  }
+  if (!access.project) fail("Project ID tidak diketahui. Isi FO_PROJECT_ID.");
+  const sheet = CONFIG_SHEET ? new ConfigSheet(CONFIG_SHEET, access.token) : null;
+  const status = sheet ? applySheetConfig(await sheet.read()) : "AKTIF";
+  log(`action=${ACTION}${RUN_LABEL ? ` (${RUN_LABEL})` : ""} status=${status}${sheet ? " (Sheet)" : ""} gateway=${GATEWAY} token=${TOKEN ? "terisi" : "kosong"} tujuan=${TARGETS.length}`);
   if (ACTION === "list_groups") return listGroups();
-  if (ACTION === "send") { validateGateway(); if (!TARGETS.length) fail("Secret FO_WA_TARGET kosong: tidak ada grup tujuan."); }
+  if (ACTION === "send" && status === "MATI") { log("Status MATI di Sheet pengaturan: tidak ada yang dijalankan."); return; }
+  const willSend = ACTION === "send" && status === "AKTIF";
+  if (willSend) { validateGateway(); if (!TARGETS.length) fail("Grup tujuan kosong. Isi grup_tujuan di Sheet pengaturan (atau secret FO_WA_TARGET)."); }
 
-  const saRaw = env("FO_SA_KEY");
-  if (!saRaw) {
-    if (ACTION === "send") fail("Secret FO_FIREBASE_SA belum diisi: script tidak bisa membaca data Filter Oil.");
-    warn("Secret FO_FIREBASE_SA belum diisi. Dry-run berhenti di sini; isi secret lalu jalankan ulang.");
-    return;
-  }
-  const sa = parseServiceAccount(saRaw);
-  const project = env("FO_PROJECT_ID") || sa.project_id;
-  if (!project) fail("Project ID tidak diketahui. Isi FO_PROJECT_ID.");
-  const db = new Firestore(project, await accessToken(sa));
-  log(`login service account OK (project ${project})`);
-
-  if (ACTION === "discover" || ACTION === "dry_run") {
-    const cols = await discover(db);
-    if (ACTION === "discover") return;
-    if (!CFG.scoreCollection) {
-      const guess = cols.filter((c) => c !== CFG.storeCollection && /scor|nilai|filter|oil|minyak|cek|check|inspe|audit|monitor/i.test(c));
-      if (guess.length !== 1) { warn(`Variabel FO_SCORE_COLLECTION belum diisi dan koleksi scoring tidak bisa ditebak (${guess.length} kandidat). Pilih dari daftar di atas.`); return; }
-      CFG.scoreCollection = guess[0];
-      warn(`FO_SCORE_COLLECTION belum diisi; dry-run memakai tebakan koleksi "${guess[0]}". Isi variabel ini sebelum jadwal kirim aktif.`);
-    }
-  }
-  if (!CFG.scoreCollection) fail("Variabel FO_SCORE_COLLECTION belum diisi (koleksi data scoring). Jalankan ACTION=dry_run/discover untuk melihat daftar koleksi.");
-
+  const db = new Firestore(access.project, access.token);
+  log(`login Google OK (project ${access.project})`);
   const w = reportWindow(NOW_MS, REPORT_DATE, CUTOFF_HOUR);
-  log(`laporan ${w.final ? "REKAP FINAL" : "progress"} tanggal ${w.date} (WIB), dibuat ${w.sentAt} WIB`);
-  const { stores, info: storeInfo } = await loadStores(db);
-  log(`master store: ${storeInfo} → ${stores.length} store aktif`);
-  if (!stores.length) fail("Tidak ada store aktif di master store.");
-  const { done, info: scoreInfo } = await loadScores(db, stores, w);
-  log(`data scoring: ${scoreInfo}`);
-  const msg = buildMessage(stores, done, w);
-  log(`hasil: ${msg.sudah}/${msg.total} store sudah scoring (${msg.pct}%), ${msg.belum} belum`);
+  const record = async (statusText, msg) => {
+    if (!sheet) return;
+    const row = [`${ymd(NOW_MS)} ${hhmm(NOW_MS)}`, w.final ? "Rekap final" : "Progress", w.dateLabel, statusText.slice(0, 500), msg ? msg.sudah : "", msg ? msg.total : "", msg ? msg.text : ""];
+    try { await sheet.append(row); log("dicatat ke tab Riwayat"); } catch (e) { warn(e.message); }
+  };
 
+  let msg;
+  try {
+    if (ACTION === "discover" || ACTION === "dry_run") {
+      const cols = await discover(db);
+      if (ACTION === "discover") return;
+      if (!CFG.scoreCollection) {
+        const guess = cols.filter((c) => c !== CFG.storeCollection && /scor|nilai|filter|oil|minyak|cek|check|inspe|audit|monitor/i.test(c));
+        if (guess.length !== 1) { warn(`Variabel FO_SCORE_COLLECTION belum diisi dan koleksi scoring tidak bisa ditebak (${guess.length} kandidat). Pilih dari daftar di atas.`); await record(`Uji: FO_SCORE_COLLECTION belum diisi (${guess.length} kandidat koleksi)`); return; }
+        CFG.scoreCollection = guess[0];
+        warn(`FO_SCORE_COLLECTION belum diisi; dry-run memakai tebakan koleksi "${guess[0]}". Isi variabel ini sebelum jadwal kirim aktif.`);
+      }
+    }
+    if (!CFG.scoreCollection) fail("Variabel FO_SCORE_COLLECTION belum diisi (koleksi data scoring). Jalankan ACTION=dry_run/discover untuk melihat daftar koleksi.");
+    log(`laporan ${w.final ? "REKAP FINAL" : "progress"} tanggal ${w.date} (WIB), dibuat ${w.sentAt} WIB`);
+    const { stores, info: storeInfo } = await loadStores(db);
+    log(`master store: ${storeInfo} → ${stores.length} store aktif`);
+    if (!stores.length) fail("Tidak ada store aktif di master store.");
+    const { done, info: scoreInfo } = await loadScores(db, stores, w);
+    log(`data scoring: ${scoreInfo}`);
+    msg = buildMessage(stores, done, w);
+  } catch (e) {
+    await record(`ERROR: ${e.message}`);
+    throw e;
+  }
+  log(`hasil: ${msg.sudah}/${msg.total} store sudah scoring (${msg.pct}%), ${msg.belum} belum`);
   mkdirSync(OUT_DIR, { recursive: true });
   const file = join(OUT_DIR, `laporan-${w.date}-${w.final ? "final" : "progress"}.txt`);
   writeFileSync(file, msg.text, "utf8");
   log(`pesan ${msg.text.length} karakter → ${file}`);
-  if (ACTION === "dry_run") { console.log(`\nDRY RUN selesai. Pesan tersimpan di ${file}, tidak dikirim.`); return; }
 
-  const targets = await resolveTargets(TARGETS);
-  let sent = 0, failed = 0;
-  for (const t of targets) {
-    if (!t.id) { failed++; console.error(IN_CI ? `::error::${t.label}: ${t.error}` : `GAGAL ${t.label}: ${t.error}`); continue; }
-    try { const r = await send(t.id, msg.text); sent++; log(`terkirim ke ${t.label} · ${r}`); }
-    catch (e) { failed++; console.error(IN_CI ? `::error::${t.label}: GAGAL kirim: ${e.message}` : `GAGAL kirim ${t.label}: ${e.message}`); }
+  if (!willSend) {
+    const why = ACTION === "dry_run" ? `Uji (dry run${RUN_LABEL ? ", " + RUN_LABEL : ""}), tidak dikirim` : "Status UJI: tidak dikirim. Ubah status ke AKTIF untuk mulai kirim ke grup.";
+    await record(why, msg);
+    console.log(`\n${why}. Pesan tersimpan di ${file}${sheet ? " dan tab Riwayat" : ""}.`);
+    return;
   }
-  console.log(`\nSelesai: ${sent} terkirim, ${failed} gagal.`);
-  if (failed) process.exitCode = 1;
+  const targets = await resolveTargets(TARGETS);
+  let sent = 0; const errors = [];
+  for (const t of targets) {
+    if (!t.id) { errors.push(`${t.label}: ${t.error}`); console.error(IN_CI ? `::error::${t.label}: ${t.error}` : `GAGAL ${t.label}: ${t.error}`); continue; }
+    try { const r = await send(t.id, msg.text); sent++; log(`terkirim ke ${t.label} · ${r}`); }
+    catch (e) { errors.push(`${t.label}: ${e.message}`); console.error(IN_CI ? `::error::${t.label}: GAGAL kirim: ${e.message}` : `GAGAL kirim ${t.label}: ${e.message}`); }
+  }
+  await record(errors.length ? `GAGAL ${errors.length} dari ${targets.length} tujuan (${sent} terkirim): ${errors.join("; ")}` : `Terkirim ke ${sent} grup`, msg);
+  console.log(`\nSelesai: ${sent} terkirim, ${errors.length} gagal.`);
+  if (errors.length) process.exitCode = 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
