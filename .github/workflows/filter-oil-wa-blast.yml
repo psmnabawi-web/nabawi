@@ -1,14 +1,16 @@
 name: WA Blast Scoring Filter Oil
 
 # Khusus app Trecking Filter Oil Store (Firebase project trecking-filter-oil-store). Tidak terkait SSSG/Almaz.
-# Jadwal dalam UTC (WIB = UTC+7, tanpa DST): 05:02 = 12.02 WIB, 11:02 = 18.02 WIB, 17:02 = 00.02 WIB.
-# Menit :02 dipakai karena slot :00 paling padat di GitHub dan paling sering tertunda.
-# Kiriman 00.02 WIB otomatis berisi REKAP FINAL hari sebelumnya (bukan 0% untuk hari yang baru dimulai).
+# Jadwal kirim: 12.00, 18.00, 00.00 WIB (00.00 = REKAP FINAL hari sebelumnya).
+# Cron GitHub di repo ini terbukti sering telat 50-80 menit bahkan terlewat, jadi workflow dipicu tiap 5 menit
+# selama 2 jam setelah tiap jadwal (UTC 05-06 = 12.00-13.55 WIB, 11-12 = 18.00-19.55, 17-18 = 00.00-01.55).
+# Mode "auto" hanya mengirim bila jadwal jatuh tempo belum diproses (dicatat di tab Status pada Sheet pengaturan),
+# jadi run pertama yang benar-benar jalan yang mengirim, sisanya selesai dalam hitungan detik tanpa kirim apa pun.
 # PENTING: GitHub hanya menjalankan "schedule" dan tombol "Run workflow" dari file workflow di BRANCH DEFAULT repo,
 # dan menonaktifkan jadwal bila repo publik tidak menerima commit selama 60 hari (aktifkan lagi di tab Actions).
 on:
   schedule:
-    - cron: "2 5,11,17 * * *"
+    - cron: "*/5 5,6,11,12,17,18 * * *"
   # Setiap perubahan pada script/workflow ini diuji otomatis: tes server tiruan + dry_run ke data asli (tidak mengirim apa pun).
   push:
     branches: ["claude/ecstatic-franklin-hhjvmk", "claude/adoring-dijkstra-78ese7", "main"]
@@ -16,10 +18,10 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "dry_run = susun pesan saja (lihat artifact) · send = kirim ke grup · discover = struktur data · list_groups = daftar grup Fonnte"
+        description: "dry_run = susun pesan saja · send = kirim sekarang · auto = kirim bila jadwal jatuh tempo belum terkirim · discover = struktur data · list_groups = daftar grup Fonnte"
         type: choice
         default: dry_run
-        options: [dry_run, send, discover, list_groups]
+        options: [dry_run, send, auto, discover, list_groups]
       report_date:
         description: "Opsional: tanggal laporan YYYY-MM-DD (kosongkan = otomatis)"
         required: false
@@ -36,10 +38,10 @@ permissions:
 jobs:
   blast:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
     env:
-      # push → selalu dry_run; dispatch → sesuai pilihan; schedule → send (tetap tunduk pada status AKTIF/UJI/MATI di Sheet)
-      ACTION: ${{ github.event_name == 'push' && 'dry_run' || inputs.action || 'send' }}
+      # push → selalu dry_run; dispatch → sesuai pilihan; schedule → auto (tetap tunduk pada status AKTIF/UJI/MATI di Sheet)
+      ACTION: ${{ github.event_name == 'push' && 'dry_run' || inputs.action || 'auto' }}
       HAS_SA_KEY: ${{ secrets.FO_FIREBASE_SA != '' }}
     steps:
       - uses: actions/checkout@v4

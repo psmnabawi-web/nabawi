@@ -41,7 +41,10 @@
 //   WA_TAG                 nomor WA yang di-tag di setiap pesan (628…, 08…, +62…), pisahkan dengan koma.
 //                          Boleh "Nama=0812…"; yang dikirim tetap @628… (Fonnte mengubahnya jadi mention di grup)
 //   OUT_DIR                folder salinan pesan (default wa-out)
-//   ACTION                 send (default) | dry_run | discover | list_groups
+//   ACTION                 send (default, kirim sekarang) | auto (kirim hanya bila ada jadwal jatuh tempo yang belum diproses)
+//                          | dry_run | discover | list_groups
+//   FO_SLOTS               jam jadwal WIB untuk ACTION=auto (default "12,18,0")
+//   FO_CATCHUP_MIN         toleransi keterlambatan run setelah jam jadwal, menit (default 120)
 
 import { createSign } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -64,6 +67,8 @@ const CONFIG_SHEET = env("FO_CONFIG_SHEET_ID");
 const RUN_LABEL = env("FO_RUN_LABEL");
 const CUTOFF_HOUR = Number(env("FO_CUTOFF_HOUR", "6"));
 const REPORT_DATE = env("REPORT_DATE");
+const SLOTS = env("FO_SLOTS", "12,18,0").split(/[,\s]+/).filter(Boolean).map(Number).filter((h) => h >= 0 && h <= 23);
+const CATCHUP_MIN = Number(env("FO_CATCHUP_MIN", "120"));
 const CFG = {
   storeCollection: env("FO_STORE_COLLECTION") || "stores",
   storeNameField: env("FO_STORE_NAME_FIELD"),
@@ -120,6 +125,22 @@ export function reportWindow(nowMs, reportDate = "", cutoffHour = 6) {
   const start = Date.parse(`${date}T00:00:00Z`) - WIB;
   const [y, m, d] = date.split("-");
   return { date, final, start, end: start + DAY, sentAt: hhmm(nowMs), dayName: DAYS[new Date(`${date}T00:00:00Z`).getUTCDay()], dateLabel: `${d}/${m}/${y}`, y, m, d };
+}
+
+/**
+ * Jadwal (jam WIB) yang sudah lewat paling lama catchupMin menit dari nowMs, yang terbaru. Null bila tidak ada.
+ * Kunci jadwal unik per hari, mis. "2026-10-05 12.00" atau "2026-10-06 00.00" (= rekap final 05/10).
+ * Dipakai ACTION=auto: GitHub sering menunda/melewatkan cron, jadi workflow dipicu tiap 5 menit di sekitar jadwal
+ * dan hanya run pertama yang benar-benar jalan yang mengirim.
+ */
+export function dueSlot(nowMs, slots = SLOTS, catchupMin = CATCHUP_MIN) {
+  const cands = [];
+  for (const d of [ymd(nowMs), ymd(nowMs - DAY)]) for (const h of slots) {
+    const hh = String(h).padStart(2, "0");
+    cands.push({ t: Date.parse(`${d}T${hh}:00:00Z`) - WIB, key: `${d} ${hh}.00` });
+  }
+  const ok = cands.filter((c) => c.t <= nowMs && nowMs - c.t < catchupMin * 60_000).sort((a, b) => b.t - a.t);
+  return ok[0] || null;
 }
 
 // ---------- HTTP ----------
@@ -484,6 +505,18 @@ class ConfigSheet {
     for (const row of (r.json && r.json.values) || []) if (row[0]) cfg[norm(row[0]).replace(/\s+/g, "_")] = String(row[1] ?? "").trim();
     return cfg;
   }
+  /** Jadwal terakhir yang sudah diproses (tab "Status", sel B1). */
+  async readState() {
+    const r = await request(this.url("Status!A1:B2"), { headers: this.headers });
+    if (!r.ok) fail(`Tab Status di Sheet tidak bisa dibaca (${reasonOf(r)}); kiriman otomatis dibatalkan supaya tidak dobel.`);
+    const v = (r.json && r.json.values) || [];
+    return String((v[0] && v[0][1]) || "").trim();
+  }
+  async writeState(key) {
+    const body = { values: [["Jadwal terakhir diproses", key], ["Diperbarui (WIB)", `${ymd(Date.now())} ${hhmm(Date.now())}`]] };
+    const r = await request(this.url("Status!A1:B2", "?valueInputOption=RAW"), { method: "PUT", headers: this.headers, body: JSON.stringify(body) });
+    if (!r.ok) fail(`Tab Status di Sheet tidak bisa ditulis (${reasonOf(r)}); kiriman otomatis dibatalkan supaya tidak dobel.`);
+  }
   async append(row) {
     const r = await request(this.url("Riwayat!A:G", ":append?valueInputOption=RAW&insertDataOption=OVERWRITE"), { method: "POST", headers: this.headers, body: JSON.stringify({ values: [row] }) });
     if (!r.ok) throw new Error(`gagal mencatat ke tab Riwayat: ${reasonOf(r)}`);
@@ -525,7 +558,7 @@ async function googleAccess() {
 }
 
 async function main() {
-  if (!["send", "dry_run", "discover", "list_groups"].includes(ACTION)) fail(`ACTION "${ACTION}" tidak dikenal (send | dry_run | discover | list_groups)`);
+  if (!["send", "auto", "dry_run", "discover", "list_groups"].includes(ACTION)) fail(`ACTION "${ACTION}" tidak dikenal (send | auto | dry_run | discover | list_groups)`);
   const access = await googleAccess();
   if (!access) {
     if (ACTION === "dry_run") { warn("Login Google belum tersedia (Workload Identity belum disiapkan / secret FO_FIREBASE_SA kosong). Dry-run berhenti di sini."); return; }
@@ -536,8 +569,19 @@ async function main() {
   const status = sheet ? applySheetConfig(await sheet.read()) : "AKTIF";
   log(`action=${ACTION}${RUN_LABEL ? ` (${RUN_LABEL})` : ""} status=${status}${sheet ? " (Sheet)" : ""} gateway=${GATEWAY} token=${TOKEN ? "terisi" : "kosong"} tujuan=${TARGETS.length} tag=${TAGS.length}`);
   if (ACTION === "list_groups") return listGroups();
-  if (ACTION === "send" && status === "MATI") { log("Status MATI di Sheet pengaturan: tidak ada yang dijalankan."); return; }
-  const willSend = ACTION === "send" && status === "AKTIF";
+  const sending = ACTION === "send" || ACTION === "auto";
+  if (sending && status === "MATI") { log("Status MATI di Sheet pengaturan: tidak ada yang dijalankan."); return; }
+  let slot = null, prevState = "";
+  if (ACTION === "auto") {
+    if (!sheet) fail("ACTION=auto butuh Sheet pengaturan (FO_CONFIG_SHEET_ID) untuk mencatat jadwal yang sudah diproses.");
+    slot = dueSlot(NOW_MS);
+    if (!slot) { log(`tidak ada jadwal jatuh tempo (jadwal ${SLOTS.map((h) => String(h).padStart(2, "0") + ".00").join(", ")} WIB, toleransi ${CATCHUP_MIN} menit). Selesai.`); return; }
+    prevState = await sheet.readState();
+    if (prevState === slot.key) { log(`jadwal ${slot.key} WIB sudah diproses run sebelumnya; tidak dikirim ulang.`); return; }
+    log(`jadwal jatuh tempo: ${slot.key} WIB`);
+  }
+  const slotNote = slot ? ` (jadwal ${slot.key} WIB)` : "";
+  const willSend = sending && status === "AKTIF";
   if (willSend) { validateGateway(); if (!TARGETS.length) fail("Grup tujuan kosong. Isi grup_tujuan di Sheet pengaturan (atau secret FO_WA_TARGET)."); }
 
   const db = new Firestore(access.project, access.token);
@@ -580,7 +624,7 @@ async function main() {
   log(`pesan ${msg.text.length} karakter → ${file}`);
 
   if (!willSend) {
-    let why = ACTION === "dry_run" ? `Uji (dry run${RUN_LABEL ? ", " + RUN_LABEL : ""}), tidak dikirim` : "Status UJI: tidak dikirim. Ubah status ke AKTIF untuk mulai kirim ke grup.";
+    let why = ACTION === "dry_run" ? `Uji (dry run${RUN_LABEL ? ", " + RUN_LABEL : ""}), tidak dikirim` : `Status UJI${slotNote}: tidak dikirim. Ubah status ke AKTIF untuk mulai kirim ke grup.`;
     // Cek token & grup tujuan tanpa mengirim apa pun, supaya masalah ketahuan sebelum jadwal kirim.
     if (TOKEN && TARGETS.length && GATEWAY === "fonnte") {
       try {
@@ -591,17 +635,25 @@ async function main() {
       } catch (e) { why += `. Cek grup gagal: ${e.message}`; warn(`cek grup gagal: ${e.message}`); }
     }
     await record(why, msg);
+    if (slot) await sheet.writeState(slot.key);
     console.log(`\n${why}. Pesan tersimpan di ${file}${sheet ? " dan tab Riwayat" : ""}.`);
     return;
   }
-  const targets = await resolveTargets(TARGETS);
+  // Klaim jadwal SEBELUM kirim: kalau pencatatan gagal, lebih baik tidak kirim daripada terkirim berulang tiap 5 menit.
+  if (slot) await sheet.writeState(slot.key);
+  const release = async () => { if (!slot) return; try { await sheet.writeState(prevState); log("jadwal dibuka lagi untuk dicoba ulang run berikutnya"); } catch (e) { warn(e.message); } };
+  let targets;
+  try { targets = await resolveTargets(TARGETS); }
+  catch (e) { await release(); await record(`ERROR${slotNote}: ${e.message}`, msg); throw e; }
   let sent = 0; const errors = [];
   for (const t of targets) {
     if (!t.id) { errors.push(`${t.label}: ${t.error}`); console.error(IN_CI ? `::error::${t.label}: ${t.error}` : `GAGAL ${t.label}: ${t.error}`); continue; }
     try { const r = await send(t.id, msg.text); sent++; log(`terkirim ke ${t.label} · ${r}`); }
     catch (e) { errors.push(`${t.label}: ${e.message}`); console.error(IN_CI ? `::error::${t.label}: GAGAL kirim: ${e.message}` : `GAGAL kirim ${t.label}: ${e.message}`); }
   }
-  await record(errors.length ? `GAGAL ${errors.length} dari ${targets.length} tujuan (${sent} terkirim): ${errors.join("; ")}` : `Terkirim ke ${sent} grup`, msg);
+  // Semua tujuan gagal → lepas klaim supaya run berikutnya (5 menit lagi) mencoba ulang.
+  if (!sent) await release();
+  await record(errors.length ? `GAGAL ${errors.length} dari ${targets.length} tujuan (${sent} terkirim)${slotNote}: ${errors.join("; ")}` : `Terkirim ke ${sent} grup${slotNote}`, msg);
   console.log(`\nSelesai: ${sent} terkirim, ${errors.length} gagal.`);
   if (errors.length) process.exitCode = 1;
 }

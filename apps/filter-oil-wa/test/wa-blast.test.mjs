@@ -66,6 +66,8 @@ async function startMock(db, groups = [], sheet = null) {
       if (!sheet || id !== sheet.id) return json(404, { error: { code: 404, message: "Requested entity was not found.", status: "NOT_FOUND" } });
       if (sheet.forbidden) return json(403, { error: { code: 403, message: "The caller does not have permission", status: "PERMISSION_DENIED" } });
       if (req.method === "GET" && range === "Pengaturan!A2:B30") return json(200, { range, values: sheet.config });
+      if (req.method === "GET" && range === "Status!A1:B2") return json(200, { range, values: sheet.state ? [["Jadwal terakhir diproses", sheet.state]] : undefined });
+      if (req.method === "PUT" && range === "Status!A1:B2") { sheet.state = JSON.parse(body).values[0][1]; (calls.states ||= []).push(sheet.state); return json(200, { updatedCells: 4 }); }
       if (req.method === "POST" && range === "Riwayat!A:G:append" && url.searchParams.get("valueInputOption") === "RAW") { calls.riwayat.push(...JSON.parse(body).values); return json(200, { updates: { updatedRows: 1 } }); }
       return json(400, { error: { code: 400, message: `unsupported sheets ${req.method} ${range}` } });
     }
@@ -420,5 +422,69 @@ test("tag dari Sheet: nomor dinormalisasi ke 62…, muncul sebagai @nomor di pes
     assert.match(r.stdout, /tag=2/);
     assert.match(r.stdout, /Entri tag ke-3 bukan nomor WhatsApp yang valid/);
     assert.doesNotMatch(r.stdout + r.stderr, /6281234567890|Imanuel/);
+  } finally { await mock.close(); }
+});
+
+// ---------- ACTION=auto: jadwal 12.00 / 18.00 / 00.00 WIB, kirim sekali per jadwal ----------
+test("dueSlot: jadwal terbaru yang lewat < 120 menit, kunci per hari", async () => {
+  const { dueSlot } = await import("../scripts/wa-blast.mjs");
+  const at = (iso) => dueSlot(Date.parse(iso), [12, 18, 0], 120);
+  assert.equal(at("2026-10-05T05:00:00Z").key, "2026-10-05 12.00");  // 12.00 WIB tepat
+  assert.equal(at("2026-10-05T06:59:00Z").key, "2026-10-05 12.00");  // 13.59 WIB
+  assert.equal(at("2026-10-05T07:00:00Z"), null);                    // 14.00 WIB: lewat toleransi
+  assert.equal(at("2026-10-05T04:59:00Z"), null);                    // 11.59 WIB: belum waktunya
+  assert.equal(at("2026-10-05T11:20:00Z").key, "2026-10-05 18.00");
+  assert.equal(at("2026-10-05T17:05:00Z").key, "2026-10-06 00.00");  // 00.05 WIB Selasa
+  assert.equal(at("2026-10-05T18:30:00Z").key, "2026-10-06 00.00");  // 01.30 WIB
+});
+
+test("auto: kirim sekali per jadwal, run berikutnya di jadwal yang sama dilewati", async () => {
+  const sheet = { id: SHEET_ID, config: [["status", "AKTIF"], ["fonnte_token", "fonnte-token"], ["grup_tujuan", "120363000000000002@g.us"]] };
+  const mock = await startMock(SCORES_TODAY, GROUPS, sheet);
+  try {
+    const a = await run(mock, viaSheet({ ACTION: "auto", FO_TEST_NOW: "2026-10-05T05:07:00Z" }));
+    assert.equal(a.code, 0, a.stderr + a.stdout);
+    assert.equal(mock.calls.sent.length, 1);
+    assert.equal(sheet.state, "2026-10-05 12.00");
+    assert.match(mock.calls.riwayat[0][3], /^Terkirim ke 1 grup \(jadwal 2026-10-05 12\.00 WIB\)/);
+    const b = await run(mock, viaSheet({ ACTION: "auto", FO_TEST_NOW: "2026-10-05T05:12:00Z" }));
+    assert.equal(b.code, 0, b.stderr + b.stdout);
+    assert.equal(mock.calls.sent.length, 1, "tidak boleh dobel");
+    assert.match(b.stdout, /sudah diproses run sebelumnya/);
+    const c = await run(mock, viaSheet({ ACTION: "auto", FO_TEST_NOW: "2026-10-05T08:00:00Z" })); // 15.00 WIB
+    assert.equal(c.code, 0); assert.match(c.stdout, /tidak ada jadwal jatuh tempo/);
+    assert.equal(mock.calls.sent.length, 1);
+    const d = await run(mock, viaSheet({ ACTION: "auto", FO_TEST_NOW: "2026-10-05T17:04:00Z" })); // 00.04 WIB → rekap final 05/10
+    assert.equal(d.code, 0, d.stderr + d.stdout);
+    assert.equal(mock.calls.sent.length, 2);
+    assert.match(mock.calls.sent[1].message, /^\*Rekap Final Scoring Filter Oil\*\nSenin, 05\/10\/2026 · ditutup 00\.04 WIB/);
+    assert.equal(sheet.state, "2026-10-06 00.00");
+  } finally { await mock.close(); }
+});
+
+test("auto: semua tujuan gagal → jadwal dibuka lagi supaya run berikutnya mencoba ulang", async () => {
+  const sheet = { id: SHEET_ID, state: "2026-10-04 18.00", config: [["status", "AKTIF"], ["fonnte_token", "fonnte-token"], ["grup_tujuan", "Grup Tidak Ada"]] };
+  const mock = await startMock(SCORES_TODAY, GROUPS, sheet);
+  try {
+    const r = await run(mock, viaSheet({ ACTION: "auto", FO_TEST_NOW: "2026-10-05T05:07:00Z" }));
+    assert.equal(r.code, 1);
+    assert.equal(mock.calls.sent.length, 0);
+    assert.deepEqual(mock.calls.states, ["2026-10-05 12.00", "2026-10-04 18.00"]); // klaim lalu dilepas
+    assert.match(mock.calls.riwayat[0][3], /^GAGAL 1 dari 1 tujuan \(0 terkirim\) \(jadwal 2026-10-05 12\.00 WIB\)/);
+  } finally { await mock.close(); }
+});
+
+test("auto: status UJI dicatat sekali per jadwal, MATI tidak memproses apa pun", async () => {
+  const sheet = { id: SHEET_ID, config: [["status", "UJI"], ["fonnte_token", "fonnte-token"], ["grup_tujuan", "Filter Oil BBA"]] };
+  const mock = await startMock(SCORES_TODAY, GROUPS, sheet);
+  try {
+    await run(mock, viaSheet({ ACTION: "auto", FO_TEST_NOW: "2026-10-05T11:03:00Z" }));
+    await run(mock, viaSheet({ ACTION: "auto", FO_TEST_NOW: "2026-10-05T11:08:00Z" }));
+    assert.equal(mock.calls.sent.length, 0);
+    assert.equal(mock.calls.riwayat.length, 1);
+    assert.equal(sheet.state, "2026-10-05 18.00");
+    sheet.config[0][1] = "MATI"; sheet.state = "";
+    const r = await run(mock, viaSheet({ ACTION: "auto", FO_TEST_NOW: "2026-10-05T11:13:00Z" }));
+    assert.match(r.stdout, /Status MATI/); assert.equal(sheet.state, "");
   } finally { await mock.close(); }
 });

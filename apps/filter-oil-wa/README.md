@@ -2,7 +2,7 @@
 
 Laporan otomatis ke grup WhatsApp tentang **persentase store yang sudah dan belum scoring** di app Trecking Filter Oil Store (`trecking-filter-oil-store.web.app`).
 
-- **Jadwal:** 12.00, 18.00, dan 00.00 WIB. Workflow `.github/workflows/filter-oil-wa-blast.yml` dijalankan di menit :02 karena slot :00 di GitHub sering tertunda.
+- **Jadwal:** 12.00, 18.00, dan 00.00 WIB. Cron GitHub di repo ini sering telat 50–80 menit, bahkan terlewat. Karena itu workflow dipicu setiap 5 menit selama 2 jam setelah tiap jadwal (mode `auto`). Run pertama yang benar-benar jalan mengirim pesan, dan jadwal yang sudah terkirim dicatat di tab **Status** pada Sheet pengaturan supaya tidak terkirim dobel. Kalau semua tujuan gagal, catatan itu dilepas dan run berikutnya mencoba lagi.
 - **Jam 00.00 = Rekap Final hari sebelumnya.** Laporan yang dibuat sebelum 06.00 WIB selalu untuk tanggal kemarin, supaya grup tidak menerima "0% sudah scoring" untuk hari yang baru dimulai.
 - **App Filter Oil tidak diubah.** Script hanya membaca Firestore lewat service account **read-only** (Cloud Datastore Viewer). Tidak ada kode, rules, atau hosting app yang disentuh.
 - **Biaya:** Rp0. GitHub Actions untuk repo publik gratis, dan pembacaan Firestore jauh di bawah kuota Spark 50.000 read/hari (±3 run × jumlah data scoring per hari).
