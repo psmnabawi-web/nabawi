@@ -406,14 +406,26 @@ async function send(target, message) {
     return sendOnce(target, message);
   }
 }
-async function fonnteGroups(refresh) {
-  if (refresh) {
-    const f = await request(`${FONNTE_BASE}/fetch-group`, form({}, fonnteAuth()));
-    if (!(f.json && f.json.status === true)) warn(`fetch-group: ${reasonOf(f)} (lanjut membaca daftar yang tersimpan)`);
-  }
+const FONNTE_WAIT_MS = Number(testEnv("FO_TEST_FONNTE_WAIT_MS") || 5000);
+async function fonnteGroupsOnce() {
   const r = await request(`${FONNTE_BASE}/get-whatsapp-group`, form({}, fonnteAuth()));
-  if (!(r.json && r.json.status === true)) { if (!refresh) return []; fail(`Daftar grup Fonnte gagal dibaca: ${reasonOf(r)}`); }
-  return (Array.isArray(r.json.data) ? r.json.data : []).map((g) => ({ id: String(g.id || g.jid || ""), name: String(g.name || g.subject || "") })).filter((g) => g.id);
+  const ok = !!(r.json && r.json.status === true);
+  const data = ok && Array.isArray(r.json.data) ? r.json.data : [];
+  return { ok, reason: ok ? "" : reasonOf(r), groups: data.map((g) => ({ id: String(g.id || g.jid || ""), name: String(g.name || g.subject || "") })).filter((g) => g.id) };
+}
+/** Daftar grup pada nomor Fonnte. refresh=true: minta Fonnte memperbarui daftar (proses async) lalu baca ulang beberapa kali. */
+async function fonnteGroups(refresh, wanted = []) {
+  if (!refresh) { const r = await fonnteGroupsOnce(); return r.groups; }
+  const f = await request(`${FONNTE_BASE}/fetch-group`, form({}, fonnteAuth()));
+  if (!(f.json && f.json.status === true)) warn(`fetch-group: ${reasonOf(f)} (lanjut membaca daftar yang tersimpan)`);
+  let last = { ok: false, reason: "", groups: [] };
+  for (let i = 0; i < 4; i++) {
+    if (i) await new Promise((res) => setTimeout(res, FONNTE_WAIT_MS));
+    last = await fonnteGroupsOnce();
+    if (last.ok && last.groups.length && wanted.every((n) => last.groups.some((g) => norm(g.name) === norm(n)))) break;
+  }
+  if (!last.ok) fail(`Daftar grup Fonnte gagal dibaca: ${last.reason}. Pastikan nomor WhatsApp di device Fonnte sudah masuk grup tujuan dan device berstatus connected.`);
+  return last.groups;
 }
 /** Ubah NAMA grup menjadi ID grup (Fonnte). Tujuan yang sudah berupa ID dibiarkan. */
 async function resolveTargets(targets) {
@@ -421,7 +433,7 @@ async function resolveTargets(targets) {
   if (names.length && GATEWAY !== "fonnte") fail("FO_WA_TARGET berisi nama grup; pencarian nama grup hanya untuk Fonnte. Untuk gateway lain isi dengan ID grup (…@g.us).");
   let groups = names.length ? await fonnteGroups(false) : [];
   const findGroup = (n) => { const hits = groups.filter((g) => norm(g.name) === norm(n)); if (hits.length > 1) warn(`Ada ${hits.length} grup dengan nama yang sama; dipakai yang pertama.`); return hits[0]; };
-  if (names.some((n) => !groups.some((g) => norm(g.name) === norm(n)))) groups = await fonnteGroups(true);
+  if (names.some((n) => !groups.some((g) => norm(g.name) === norm(n)))) groups = await fonnteGroups(true, names);
   return targets.map((t, i) => {
     if (looksLikeId(t)) return { label: `tujuan #${i + 1} ${describeTarget(t)}`, id: t };
     const g = findGroup(t);

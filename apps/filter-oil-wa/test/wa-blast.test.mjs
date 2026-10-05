@@ -51,7 +51,12 @@ async function startMock(db, groups = [], sheet = null) {
       const p = new URLSearchParams(body);
       if (url.pathname === "/fonnte/send") { calls.sent.push({ target: p.get("target"), message: p.get("message") }); return json(200, { status: true, detail: "success! message in queue" }); }
       if (url.pathname === "/fonnte/fetch-group") { calls.fetchGroup++; return json(200, { status: true, detail: "update whatsapp group list" }); }
-      if (url.pathname === "/fonnte/get-whatsapp-group") return calls.fetchGroup ? json(200, { status: true, data: groups }) : json(200, { status: false, reason: "data not found, please fetch" });
+      if (url.pathname === "/fonnte/get-whatsapp-group") {
+        // seperti Fonnte asli: fetch-group bersifat async, daftar baru muncul beberapa saat kemudian
+        calls.getGroup = (calls.getGroup || 0) + 1;
+        if (!calls.fetchGroup || calls.getGroup < 3) return json(200, { status: false, reason: "you have no whatsapp group yet" });
+        return json(200, { status: true, data: groups });
+      }
       return json(404, {});
     }
     if (!["Bearer tok-123", "Bearer direct-tok"].includes(req.headers.authorization)) return json(401, { error: { code: 401, message: "unauthenticated", status: "UNAUTHENTICATED" } });
@@ -106,7 +111,7 @@ async function startMock(db, groups = [], sheet = null) {
 
 function run(mock, envOver) {
   const out = mkdtempSync(join(tmpdir(), "fo-wa-"));
-  const env = { PATH: process.env.PATH, OUT_DIR: out, FO_SA_KEY: JSON.stringify(SA), FO_TEST_FIRESTORE_BASE: `${mock.base}/v1`, FO_TEST_TOKEN_URL: `${mock.base}/token`, FO_TEST_FONNTE_BASE: `${mock.base}/fonnte`, FO_TEST_SHEETS_BASE: mock.base, ...envOver };
+  const env = { PATH: process.env.PATH, OUT_DIR: out, FO_SA_KEY: JSON.stringify(SA), FO_TEST_FIRESTORE_BASE: `${mock.base}/v1`, FO_TEST_TOKEN_URL: `${mock.base}/token`, FO_TEST_FONNTE_BASE: `${mock.base}/fonnte`, FO_TEST_SHEETS_BASE: mock.base, FO_TEST_FONNTE_WAIT_MS: "20", ...envOver };
   for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
   return new Promise((resolve) => execFile(process.execPath, [SCRIPT], { env }, (err, stdout, stderr) => {
     const files = readdirSync(out); const text = files.filter((f) => f.startsWith("laporan-")).map((f) => readFileSync(join(out, f), "utf8"))[0] || "";
