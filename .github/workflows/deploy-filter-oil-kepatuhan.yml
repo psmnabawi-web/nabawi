@@ -1,0 +1,60 @@
+name: Deploy Kepatuhan Filter Oil
+
+# Halaman web Kepatuhan Filter Oil (apps/filter-oil-kepatuhan/public) → situs Firebase Hosting TERPISAH di project
+# trecking-filter-oil-store (mis. kepatuhan-filter-oil.web.app). Situs utama app Filter Oil tidak disentuh.
+# Login tanpa key: GitHub OIDC → Workload Identity → service account kepatuhan-deployer (Firebase Hosting Admin),
+# disiapkan sekali dengan apps/filter-oil-kepatuhan/setup-cloudshell.sh.
+on:
+  push:
+    branches: ["claude/adoring-dijkstra-78ese7", "claude/ecstatic-franklin-hhjvmk", "main"]
+    paths: ["apps/filter-oil-kepatuhan/**", ".github/workflows/deploy-filter-oil-kepatuhan.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-filter-oil-kepatuhan
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Deploy hanya dari branch default (atau dijalankan manual); push ke branch lain cukup menjalankan tes.
+      DO_DEPLOY: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/claude/adoring-dijkstra-78ese7' || github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tes logika kepatuhan & script deploy
+        working-directory: apps/filter-oil-kepatuhan
+        run: npm test
+      - name: Login Google (Workload Identity, tanpa key)
+        id: auth
+        if: ${{ env.DO_DEPLOY == 'true' }}
+        # Saat push: kalau setup-cloudshell.sh belum dijalankan, lewati deploy dengan peringatan (bukan gagal).
+        continue-on-error: ${{ github.event_name == 'push' }}
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: trecking-filter-oil-store
+          workload_identity_provider: projects/696588727829/locations/global/workloadIdentityPools/github-actions/providers/nabawi-repo
+          service_account: kepatuhan-deployer@trecking-filter-oil-store.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Setup belum dijalankan
+        if: ${{ env.DO_DEPLOY == 'true' && steps.auth.outcome == 'failure' }}
+        run: echo "::warning::Login Google gagal. Jalankan apps/filter-oil-kepatuhan/setup-cloudshell.sh di Cloud Shell (Owner), lalu jalankan workflow ini lagi."
+      - name: Terbitkan ke Firebase Hosting
+        if: ${{ env.DO_DEPLOY == 'true' && steps.auth.outcome == 'success' }}
+        working-directory: apps/filter-oil-kepatuhan
+        env:
+          FO_ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          FO_PROJECT_ID: trecking-filter-oil-store
+          FO_SITE_CANDIDATES: ${{ vars.FO_KEPATUHAN_SITE || 'kepatuhan-filter-oil,kepatuhan-filter-oil-bba,trecking-filter-oil-kepatuhan' }}
+        run: node scripts/deploy-hosting.mjs

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Kepatuhan Filter Oil</title>
+  <meta name="description" content="Kepatuhan filter minyak per store dan per slot, dengan export Excel. Data langsung dari app Trecking Filter Oil.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f3864'/%3E%3Cpath d='M16 6c-4 6-7 9.5-7 13a7 7 0 0 0 14 0c0-3.5-3-7-7-13z' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-inner">
+      <div>
+        <h1>Kepatuhan Filter Oil</h1>
+        <p class="sub" id="sub">Memuat data…</p>
+      </div>
+      <button class="btn primary" id="btnExport" type="button" disabled>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v9m0 0-3.5-3.5M10 12l3.5-3.5M4 14v2.5h12V14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Export Excel
+      </button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="filters" aria-label="Filter">
+      <div class="presets" role="group" aria-label="Periode">
+        <button type="button" data-preset="today">Hari ini</button>
+        <button type="button" data-preset="yesterday">Kemarin</button>
+        <button type="button" data-preset="7">7 hari</button>
+        <button type="button" data-preset="30">30 hari</button>
+        <button type="button" data-preset="month">Bulan ini</button>
+      </div>
+      <label class="field">Dari <input type="date" id="start"></label>
+      <label class="field">Sampai <input type="date" id="end"></label>
+      <label class="field">Area <select id="area"><option value="">Semua area</option></select></label>
+      <label class="field">Target skor <span class="pct"><input type="number" id="target" min="0" max="100" step="5" value="90"> %</span></label>
+      <button class="btn" id="btnReload" type="button" title="Ambil data terbaru">Muat ulang</button>
+    </section>
+
+    <div id="error" class="alert" hidden></div>
+
+    <section class="kpis" id="kpis" aria-label="Ringkasan"></section>
+
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Peringkat store</h2>
+          <p class="hint">Diurutkan dari skor terendah. Klik baris untuk melihat detail slot store tersebut.</p>
+        </div>
+      </div>
+      <div class="scroll"><table class="tbl" id="tblStores"></table></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2>Peta kepatuhan harian</h2>
+          <p class="hint">Angka di kotak = slot terlaksana / slot wajib per hari. Arahkan kursor atau ketuk kotak untuk rincian.</p>
+        </div>
+        <ul class="legend" id="legendHeat"></ul>
+      </div>
+      <div class="scroll"><table class="heat" id="heat"></table></div>
+      <p class="hint" id="heatNote" hidden></p>
+    </section>
+
+    <section class="card" id="detailCard">
+      <div class="card-head">
+        <div>
+          <h2>Detail slot</h2>
+          <p class="hint" id="detailHint"></p>
+        </div>
+        <div class="detail-filters">
+          <label class="field">Store <select id="storeFilter"><option value="">Semua store</option></select></label>
+          <label class="check"><input type="checkbox" id="onlyIssues" checked> Hanya yang bermasalah</label>
+        </div>
+      </div>
+      <div class="scroll"><table class="tbl" id="tblDetail"></table></div>
+      <p class="hint" id="detailNote" hidden></p>
+    </section>
+
+    <section class="card rules">
+      <h2>Aturan penilaian</h2>
+      <ul id="rules"></ul>
+    </section>
+  </main>
+
+  <div class="tip" id="tip" role="tooltip" hidden></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

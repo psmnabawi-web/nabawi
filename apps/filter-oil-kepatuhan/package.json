@@ -1,0 +1,13 @@
+{
+  "name": "filter-oil-kepatuhan",
+  "private": true,
+  "description": "Halaman web Kepatuhan Filter Oil (situs statis di public/) + script deploy ke Firebase Hosting. Tanpa dependensi npm.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/kepatuhan.test.mjs test/deploy.test.mjs",
+    "deploy": "node scripts/deploy-hosting.mjs"
+  }
+}
