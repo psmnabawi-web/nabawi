@@ -104,7 +104,7 @@ jobs:
       # Salinan pesan/daftar grup hanya untuk uji manual (Run workflow → dry_run / list_groups), bukan untuk push atau kiriman
       # terjadwal: repo ini publik, artifact bisa diunduh siapa pun yang login GitHub. Hapus artifact setelah dibaca.
       - name: Simpan salinan (hanya uji manual)
-        if: ${{ always() && github.event_name == 'workflow_dispatch' && env.ACTION != 'send' }}
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && (env.ACTION == 'dry_run' || env.ACTION == 'list_groups' || env.ACTION == 'discover') }}
         uses: actions/upload-artifact@v4
         with:
           name: filter-oil-wa-${{ github.run_number }}
