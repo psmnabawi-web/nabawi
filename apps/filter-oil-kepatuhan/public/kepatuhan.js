@@ -139,6 +139,9 @@ export function buildReport({ stores, records, settings = {}, start, end, nowMs,
           crew: r ? String(r.crewName || "") : "",
           photo: r ? photoSource(r) : "",
           note: r ? String(r.note || "") : "",
+          recordId: r ? String(r.id || "") : "",
+          trust: r ? String(r.metadataTrust || "").toUpperCase() : "",
+          review: r ? r.integrity === "REVIEW" || String(r.status || "").toUpperCase() === "REVIEW" : false,
         });
       }
     }

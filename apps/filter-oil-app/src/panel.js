@@ -1,55 +1,15 @@
-// Tambahan untuk app Trecking Filter Oil (tanpa mengubah app.js):
+// Tambahan untuk app Trecking Filter Oil (titik masuk, dimuat setelah app.js):
 //   1. Menu "Export Kepatuhan": ringkasan, peringkat store, peta harian, detail slot, export Excel.
-//   2. Tombol "Export Excel" di Dashboard, memakai periode & store yang sedang dipilih di Dashboard.
+//   2. Dashboard baru (dashboard.js); bila gagal dipasang, Dashboard lama tetap jalan + tombol Export Excel.
 // Data dibaca dari Firestore (REST, hanya baca). Tidak ada yang ditulis ke database.
-import { buildReport, STATUS, ymdWib, addDays, fmtDate, dayName } from "./kepatuhan.js";
-import { loadStores, loadSettings, loadRecords, loadExcelJS, buildWorkbook, downloadWorkbook, wibNowLabel, exportFileName } from "./core.js";
+import { STATUS, ymdWib, addDays, fmtDate, dayName } from "./kepatuhan.js";
+import {
+  $, esc, pct, poin, short, pref, PRESETS, getData, report, exportExcel, toast, busy,
+  statusBadge, compliantBadge, dayTone, periodLabel, stackHtml, legendHtml, wibClock, initTooltip,
+} from "./common.js";
 
-const $ = (id) => document.getElementById(id);
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-const num = (x, d = 0) => Number(x).toFixed(d).replace(".", ",");
-const pct = (x, d = 0) => (x === null || x === undefined || Number.isNaN(x) ? "–" : `${num(x * 100, d)}%`);
-const poin = (x) => `${num(Math.abs(x * 100), 1)} poin`;
-const short = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}`;
 const MAX_HEAT_DAYS = 31;
 const PAGE = 150;
-const pref = {
-  get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(k, v); } catch { /* mode privat / storage diblokir */ } },
-};
-
-// ---------- data (cache per sesi halaman) ----------
-const cache = { stores: null, settings: null, records: new Map(), at: new Map() };
-async function getData(start, end, force = false) {
-  if (force || !cache.stores) [cache.stores, cache.settings] = await Promise.all([loadStores(), loadSettings()]);
-  const key = `${start}|${end}`;
-  if (force || !cache.records.has(key)) { cache.records.set(key, await loadRecords(start, end)); cache.at.set(key, Date.now()); }
-  return { stores: cache.stores, settings: cache.settings || {}, records: cache.records.get(key), at: cache.at.get(key) };
-}
-function report({ start, end, storeId = "", target = 0.95 }, data) {
-  const stores = storeId ? data.stores.filter((s) => s.id === storeId) : data.stores;
-  return buildReport({ stores, records: data.records, settings: data.settings, start, end, nowMs: Date.now(), target });
-}
-async function exportExcel(params, data) {
-  const r = report(params, data);
-  if (!r.rows.length) throw new Error("Tidak ada slot wajib pada periode ini.");
-  const ExcelJS = await loadExcelJS();
-  const storeName = params.storeId ? (data.stores.find((s) => s.id === params.storeId)?.name || params.storeId) : "";
-  const wb = await buildWorkbook(ExcelJS, r, { area: storeName ? `Store ${storeName}` : "", generatedAt: wibNowLabel() });
-  await downloadWorkbook(wb, exportFileName(r, storeName));
-  return r;
-}
-
-function toast(msg) {
-  const t = $("toast");
-  if (!t) return;
-  t.textContent = msg; t.classList.remove("hidden");
-  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.add("hidden"), 3500);
-}
-async function busy(btn, label, fn) {
-  const old = btn.innerHTML; btn.disabled = true; btn.innerHTML = `<span class="kp-spin" aria-hidden="true"></span>${esc(label)}`;
-  try { return await fn(); } finally { btn.disabled = false; btn.innerHTML = old; }
-}
 
 // ---------- 1. tombol Export di Dashboard ----------
 function initDashboardExport() {
@@ -74,15 +34,6 @@ function initDashboardExport() {
 }
 
 // ---------- 2. panel Export Kepatuhan ----------
-const PRESETS = [
-  ["today", "Hari ini", (t) => [t, t]],
-  ["yesterday", "Kemarin", (t) => [addDays(t, -1), addDays(t, -1)]],
-  ["7", "7 hari", (t) => [addDays(t, -6), t]],
-  ["30", "30 hari", (t) => [addDays(t, -29), t]],
-  ["month", "Bulan ini", (t) => [`${t.slice(0, 8)}01`, t]],
-];
-// Urutan segmen batang = urutan status; "Tidak dikerjakan" digambar sebagai sisa batang bergaris (tekstur), bukan warna solid.
-const SEGMENTS = [["ONTIME", "s-ontime"], ["EARLY", "s-early"], ["LATE", "s-late"], ["MISSED", "s-missed"]];
 const DETAIL_FILTERS = [
   { key: "issues", icon: "", label: "Bermasalah", test: (x) => x.status !== "ONTIME" },
   { key: "MISSED", icon: STATUS.MISSED.icon, label: "Tidak dikerjakan", test: (x) => x.status === "MISSED" },
@@ -125,7 +76,7 @@ const TEMPLATE = `
           <button type="button" data-view="bar">Grafik</button><button type="button" data-view="table">Tabel</button>
         </div>
       </div>
-      <ul class="kp-legend" id="kpRankLegend">${SEGMENTS.map(([k, c]) => `<li><span class="kp-sw ${c}"></span>${STATUS[k].icon} ${esc(STATUS[k].label)}</li>`).join("")}<li><span class="kp-sw kp-sw-target"></span>Target</li></ul>
+      <ul class="kp-legend" id="kpRankLegend">${legendHtml()}</ul>
       <div id="kpRank"></div>
     </div>
     <div class="card">
@@ -145,30 +96,12 @@ const TEMPLATE = `
   </div>
   <div class="kp-tip" id="kpTip" role="tooltip" hidden></div>`;
 
-const statusBadge = (key) => {
-  const s = STATUS[key] || STATUS.MISSED;
-  const cls = { good: "good", warning: "early", serious: "late", critical: "bad" }[s.tone];
-  return `<span class="status kp-st-${cls}"><span aria-hidden="true">${s.icon}</span>&nbsp;${esc(s.label)}</span>`;
-};
-const compliantBadge = (ok) => (ok ? `<span class="status good">✓&nbsp;Patuh</span>` : `<span class="status bad">✕&nbsp;Tidak patuh</span>`);
-function dayTone(d, target) {
-  if (!d || !d.expected) return "none";
-  if (d.pctDone >= target - 1e-9) return "good";
-  if (d.pctDone >= 0.5) return "warning";
-  if (d.pctDone > 0) return "serious";
-  return "critical";
-}
 const params = () => {
   const a = $("kpFrom").value, b = $("kpTo").value;
   const [start, end] = a <= b ? [a, b] : [b, a];
   const t = Math.min(100, Math.max(0, Number($("kpTarget").value) || 0));
   return { start, end, storeId: $("kpStore").value, target: t / 100 };
 };
-function periodLabel(start, end) {
-  if (start === end) return `${dayName(start)}, ${fmtDate(start)}`;
-  const n = Math.round((Date.parse(end) - Date.parse(start)) / 864e5) + 1;
-  return `${start.slice(0, 4) === end.slice(0, 4) ? short(start) : fmtDate(start)} – ${fmtDate(end)} · ${n} hari`;
-}
 function syncPresets() {
   const today = ymdWib(Date.now()), a = $("kpFrom").value, b = $("kpTo").value;
   for (const [k, , f] of PRESETS) {
@@ -218,7 +151,7 @@ async function loadPanel(force = false) {
 function render() {
   const r = ui.report, p = params();
   $("kpBody").hidden = false;
-  const at = ui.data?.at ? new Date(ui.data.at + 7 * 3600_000).toISOString().slice(11, 16) : "";
+  const at = wibClock(ui.data?.at);
   $("kpMeta").innerHTML = `<strong>${esc(periodLabel(p.start, r.end))}</strong>${at ? ` · data ${at} WIB` : ""}${r.pending ? ` · <span title="Slot hari ini yang jamnya belum lewat (jam filter + toleransi) belum dihitung">${r.pending} slot hari ini belum jatuh tempo</span>` : ""}`;
   renderInsight(); renderKpis(); renderRank(); renderHeat(); renderDetail();
 }
@@ -265,9 +198,6 @@ function renderKpis() {
     <div class="kpi kpi-ontime"><span>${STATUS.ONTIME.icon} Tepat waktu</span><strong>${t.ONTIME}</strong><small>${pct(t.pctOntime, 1)} · toleransi ±${r.tol} menit</small></div>`;
 }
 
-function stackTip(s) {
-  return `${s.name} · ${s.expected} slot wajib\n${SEGMENTS.map(([k]) => `${STATUS[k].icon} ${STATUS[k].label}: ${s[k]}`).join("\n")}\nCompliance ${pct(s.pctDone, 1)}${s.gallery ? `\nFoto dari galeri: ${s.gallery}` : ""}`;
-}
 function renderRank() {
   const r = ui.report, tgt = r.target;
   document.querySelectorAll("#kepatuhan [data-view]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === ui.view)));
@@ -285,12 +215,11 @@ function renderRank() {
   }
   $("kpRank").innerHTML = `<div class="kp-rank" role="list">${r.stores.map((s, i) => {
     const gap = s.pctDone - tgt;
-    const segs = SEGMENTS.filter(([k]) => s[k] > 0).map(([k, c]) => `<i class="${c}" style="width:${(s[k] / s.expected) * 100}%"></i>`).join("");
     const sel = ui.storeDetail === s.id;
     return `<div role="listitem"><button type="button" class="kp-rank-row${sel ? " kp-selected" : ""}" data-store="${esc(s.id)}" aria-pressed="${sel}">
       <span class="kp-rank-no">${i + 1}</span>
       <span class="kp-rank-name"><strong>${esc(s.name)}</strong><small>${esc(s.area || "–")} · ${s.expected} slot${s.gallery ? ` · <em>${s.gallery} foto galeri</em>` : ""}</small></span>
-      <span class="kp-stack" data-tip="${esc(stackTip(s))}" aria-label="${esc(stackTip(s))}">${segs}<b class="kp-tmark" style="left:${tgt * 100}%"></b></span>
+      ${stackHtml(s, tgt)}
       <span class="kp-rank-val ${s.compliant ? "ok" : "no"}"><strong>${pct(s.pctDone, 1)}</strong><small>${s.compliant ? `✓ ${gap > 1e-9 ? `+${poin(gap)}` : "tepat target"}` : `✕ −${poin(gap)}`}</small></span>
       <span class="kp-rank-badge">${compliantBadge(s.compliant)}</span>
     </button></div>`;
@@ -350,29 +279,6 @@ function renderDetail() {
     : "";
 }
 
-// ---------- tooltip (mouse, keyboard, sentuh) ----------
-function initTooltip() {
-  const tip = $("kpTip"), root = $("kepatuhan");
-  let current = null;
-  const show = (el) => {
-    const text = el.getAttribute("data-tip"); if (!text) return;
-    current = el;
-    tip.textContent = ""; text.split("\n").forEach((line, i) => { if (i) tip.appendChild(document.createElement("br")); tip.appendChild(document.createTextNode(line)); });
-    tip.hidden = false;
-    const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
-    tip.style.left = `${Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8))}px`;
-    tip.style.top = `${r.top - h - 8 < 8 ? r.bottom + 8 : r.top - h - 8}px`;
-  };
-  const hide = () => { tip.hidden = true; current = null; };
-  root.addEventListener("mouseover", (e) => { const el = e.target.closest("[data-tip]"); if (el && el !== current) show(el); });
-  root.addEventListener("mouseout", (e) => { const el = e.target.closest("[data-tip]"); if (el && !el.contains(e.relatedTarget)) hide(); });
-  root.addEventListener("focusin", (e) => { const el = e.target.closest("[data-tip]"); if (el) show(el); });
-  root.addEventListener("focusout", hide);
-  document.addEventListener("click", (e) => { if (!e.target.closest("#kepatuhan [data-tip]")) hide(); });
-  window.addEventListener("scroll", hide, { passive: true });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") hide(); });
-}
-
 function initPanel() {
   const sec = $("kepatuhan");
   if (!sec || sec.dataset.ready) return;
@@ -421,11 +327,14 @@ function initPanel() {
     try { const r = await exportExcel(p, await getData(p.start, p.end)); toast(`Excel terunduh: ${r.stores.length} store, ${r.rows.length} slot.`); }
     catch (err) { toast(`Export gagal: ${err.message}`); }
   }));
-  initTooltip();
+  initTooltip(sec, $("kpTip"));
 }
 
 function init() {
+  // Tombol Export dipasang dulu di Dashboard lama; Dashboard baru (dimuat terpisah) memindahkannya ke tata letak baru.
+  // Bila dashboard.js gagal dimuat, Dashboard lama tetap jalan lengkap dengan tombol Export.
   try { initDashboardExport(); } catch (e) { console.error("kepatuhan: tombol export dashboard", e); }
+  import("./dashboard.js").then((m) => m.initDashboard()).catch((e) => console.error("kepatuhan: dashboard baru", e));
   try { initPanel(); } catch (e) { console.error("kepatuhan: panel", e); }
 }
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();

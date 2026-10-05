@@ -5,7 +5,7 @@ import { fmtDate } from "./kepatuhan.js";
 export const PROJECT = "trecking-filter-oil-store";
 const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
 const RECORD_FIELDS = ["storeId", "storeName", "slotId", "dateKey", "deviationMin", "complianceScore", "status", "metadataTrust",
-  "evidenceTimeSource", "evidenceLocalIso", "submittedAt", "crewName", "note", "dedupArchived"];
+  "evidenceTimeSource", "evidenceLocalIso", "submittedAt", "crewName", "note", "dedupArchived", "integrity"];
 
 // ---------- Firestore REST ----------
 export async function api(url, body) {
@@ -38,6 +38,12 @@ export async function loadStores() {
     out.push(...(j.documents || []).map(flat)); token = j.nextPageToken || "";
   } while (token);
   return out;
+}
+/** Foto bukti satu catatan (dimuat terpisah karena besar). Hanya data:image/... atau https:// yang diterima. */
+export async function loadEvidenceImage(id) {
+  const j = await api(`${BASE}/filterRecords/${encodeURIComponent(id)}?mask.fieldPaths=evidenceImage`);
+  const src = String(val(j && j.fields && j.fields.evidenceImage) || "");
+  return /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(src) || /^https:\/\//i.test(src) ? src : "";
 }
 export async function loadSettings() {
   try { return flat(await api(`${BASE}/settings/app`)); } catch { return {}; }
