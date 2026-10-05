@@ -365,3 +365,30 @@ test("AKTIF tapi grup kosong / Sheet belum dibagikan / data error: gagal jelas &
     assert.match(m3.calls.riwayat[0][3], /^ERROR: Koleksi scoring "scorings" kosong/);
   } finally { await m3.close(); }
 });
+
+test("struktur app Filter Oil: filterRecords + dateKey + slotId, store activeFrom setelah tanggal laporan tidak dihitung", async () => {
+  const mock = await startMock({
+    stores: [
+      { id: "s1", fields: { name: S("Store A"), active: B(true), activeFrom: S("2026-09-01") } },
+      { id: "s2", fields: { name: S("Store B"), active: B(true), activeFrom: S("2026-09-01") } },
+      { id: "s3", fields: { name: S("Store C"), active: B(true), activeFrom: S("2026-10-10") } }, // pilot belum mulai
+      { id: "s4", fields: { name: S("Store D"), active: B(false), activeFrom: S("2026-09-01") } },
+    ],
+    oilChanges: [{ id: "o", fields: { storeId: S("s2"), changeDate: S("2026-10-05") } }],
+    filterRecords: [
+      { id: "a", fields: { storeId: S("s1"), slotId: S("slot1"), dateKey: S("2026-10-05"), submittedAt: TS("2026-10-05T03:00:00Z"), complianceScore: { doubleValue: 100 } } },
+      { id: "b", fields: { storeId: S("s1"), slotId: S("slot2"), dateKey: S("2026-10-05"), submittedAt: TS("2026-10-05T04:00:00Z") } },
+      { id: "c", fields: { storeId: S("s1"), slotId: S("slot2"), dateKey: S("2026-10-05"), submittedAt: TS("2026-10-05T04:01:00Z") } }, // slot sama, dobel
+      { id: "d", fields: { storeId: S("s2"), slotId: S("slot3"), dateKey: S("2026-10-04"), submittedAt: TS("2026-10-04T13:00:00Z") } }, // kemarin
+    ],
+  });
+  try {
+    const r = await run(mock, { ACTION: "dry_run", FO_TEST_NOW: NOON, FO_SCORE_COLLECTION: "filterRecords", FO_SCORE_DATE_FIELD: "dateKey", FO_SCORE_STORE_FIELD: "storeId" });
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+    assert.match(r.text, /Sudah scoring: 1 dari 2 store \(50%\)\*\n1\. Store A \(2 slot\)\n/);
+    assert.match(r.text, /Belum scoring: 1 dari 2 store \(50%\)\*\n1\. Store B\n/);
+    assert.doesNotMatch(r.text, /Store C|Store D/);
+    assert.match(r.stdout, /1 belum mulai \(activeFrom\)/);
+    assert.match(r.stdout, /field tanggal=dateKey \(teks YYYY-MM-DD\), field slot=slotId/);
+  } finally { await mock.close(); }
+});

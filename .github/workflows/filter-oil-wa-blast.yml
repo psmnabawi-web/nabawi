@@ -81,9 +81,12 @@ jobs:
           FO_STORE_NAME_FIELD: ${{ vars.FO_STORE_NAME_FIELD }}
           FO_STORE_ACTIVE_FIELD: ${{ vars.FO_STORE_ACTIVE_FIELD }}
           FO_STORE_LIST: ${{ vars.FO_STORE_LIST }}
-          FO_SCORE_COLLECTION: ${{ vars.FO_SCORE_COLLECTION }}
-          FO_SCORE_STORE_FIELD: ${{ vars.FO_SCORE_STORE_FIELD }}
-          FO_SCORE_DATE_FIELD: ${{ vars.FO_SCORE_DATE_FIELD }}
+          # Struktur app Filter Oil (terbaca 05/10/2026): data scoring = koleksi filterRecords (storeId, dateKey "YYYY-MM-DD",
+          # slotId, complianceScore); master store = koleksi stores (name, active, activeFrom). oilChanges = ganti minyak, bukan scoring.
+          FO_SCORE_COLLECTION: ${{ vars.FO_SCORE_COLLECTION || 'filterRecords' }}
+          FO_SCORE_STORE_FIELD: ${{ vars.FO_SCORE_STORE_FIELD || 'storeId' }}
+          FO_SCORE_DATE_FIELD: ${{ vars.FO_SCORE_DATE_FIELD || 'dateKey' }}
+          FO_SCORE_SLOT_FIELD: ${{ vars.FO_SCORE_SLOT_FIELD || 'slotId' }}
           FO_SCORE_DATE_FORMAT: ${{ vars.FO_SCORE_DATE_FORMAT }}
           FO_TITLE: ${{ vars.FO_TITLE }}
           REPORT_DATE: ${{ inputs.report_date }}

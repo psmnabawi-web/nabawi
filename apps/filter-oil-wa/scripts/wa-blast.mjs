@@ -29,6 +29,7 @@
 //   FO_SCORE_STORE_FIELD   field penunjuk store di data scoring (default: deteksi otomatis storeId/store/namaStore/...)
 //   FO_SCORE_DATE_FIELD    field tanggal/waktu scoring (default: deteksi otomatis date/tanggal/createdAt/timestamp/...)
 //   FO_SCORE_DATE_FORMAT   khusus tanggal teks "5/10/2026": dmy (default) atau mdy
+//   FO_SCORE_SLOT_FIELD    field slot/sesi (default: deteksi otomatis slotId/slot/shift); bila ada, pesan menampilkan jumlah slot per store
 //   FO_TITLE               judul pesan (default "Scoring Filter Oil")
 //   FO_CUTOFF_HOUR         sebelum jam ini (WIB) laporan = rekap final kemarin (default 6)
 //   REPORT_DATE            YYYY-MM-DD, paksa tanggal laporan (untuk uji)
@@ -68,6 +69,7 @@ const CFG = {
   scoreCollection: env("FO_SCORE_COLLECTION"),
   scoreStoreField: env("FO_SCORE_STORE_FIELD"),
   scoreDateField: env("FO_SCORE_DATE_FIELD"),
+  scoreSlotField: env("FO_SCORE_SLOT_FIELD"),
   dateFormat: env("FO_SCORE_DATE_FORMAT").toLowerCase(),
 };
 // Alamat & jam pengganti HANYA untuk uji lokal (diabaikan di GitHub Actions).
@@ -82,6 +84,8 @@ const NAME_FIELDS = ["name", "nama", "storeName", "namaStore", "nama_store", "st
 const CODE_FIELDS = ["code", "kode", "storeCode", "kodeStore", "kode_store", "store_code", "storeId", "store_id", "idStore", "outletCode", "kodeOutlet"];
 const ACTIVE_FIELDS = ["active", "aktif", "isActive", "is_active", "status", "enabled"];
 const SCORE_STORE_FIELDS = ["storeId", "store_id", "idStore", "storeRef", "storeCode", "kodeStore", "kode_store", "store", "storeName", "namaStore", "nama_store", "store_name", "toko", "namaToko", "outletId", "outlet", "namaOutlet", "nama_outlet", "lokasi", "location"];
+const SCORE_SLOT_FIELDS = ["slotId", "slot", "slot_id", "shift", "sesi"];
+const ACTIVE_FROM_FIELDS = ["activeFrom", "active_from", "aktifSejak", "startDate", "tanggalMulai"];
 const SCORE_DATE_FIELDS = ["date", "tanggal", "tgl", "scoreDate", "scoringDate", "tanggalScoring", "tanggal_scoring", "createdAt", "created_at", "timestamp", "submittedAt", "submitted_at", "waktu", "time", "updatedAt", "updated_at"];
 const INACTIVE = new Set(["false", "0", "no", "tidak", "inactive", "nonaktif", "non-aktif", "non aktif", "tidak aktif", "tutup", "closed", "disabled", "off", "deleted", "dihapus", "archived"]);
 
@@ -255,7 +259,7 @@ export function dateFilters(sample, field, w, dateFormat = "") {
 
 // ---------- data store & scoring ----------
 const isInactive = (v) => v === false || (v !== undefined && v !== null && v !== true && INACTIVE.has(norm(v)));
-async function loadStores(db) {
+async function loadStores(db, w) {
   if (CFG.storeList) {
     const names = [...new Set(CFG.storeList.split(/\s*[,;\n]\s*/).filter(Boolean))];
     return { stores: names.map((n) => ({ id: n, name: n, keys: [norm(n)] })).sort((a, b) => a.name.localeCompare(b.name, "id")), info: `FO_STORE_LIST (${names.length} nama)` };
@@ -264,10 +268,14 @@ async function loadStores(db) {
   if (!docs.length) fail(`Koleksi store "${CFG.storeCollection}" kosong/tidak ada. Isi variabel FO_STORE_COLLECTION (lihat hasil ACTION=discover) atau FO_STORE_LIST.`);
   const nameF = CFG.storeNameField || NAME_FIELDS.find((c) => docs.some((d) => d.fields && typeof valOf(d.fields[c]) === "string"));
   const activeF = CFG.storeActiveField || ACTIVE_FIELDS.find((c) => docs.some((d) => d.fields && c in d.fields));
-  const stores = []; let skipped = 0;
+  const fromF = ACTIVE_FROM_FIELDS.find((c) => docs.some((d) => d.fields && typeof valOf(d.fields[c]) === "string"));
+  const stores = []; let skipped = 0, notYet = 0;
   for (const d of docs) {
     const f = d.fields || {};
     if (activeF && isInactive(valOf(getField(f, activeF)))) { skipped++; continue; }
+    // Store yang baru mulai setelah tanggal laporan (mis. activeFrom "2026-10-10") belum wajib scoring.
+    const from = fromF ? String(valOf(f[fromF]) || "").slice(0, 10) : "";
+    if (w && /^\d{4}-\d{2}-\d{2}$/.test(from) && from > w.date) { notYet++; continue; }
     const nm = nameF ? valOf(getField(f, nameF)) : undefined;
     const name = typeof nm === "string" && nm.trim() ? nm.trim() : docId(d);
     const keys = new Set([norm(docId(d)), norm(name)]);
@@ -275,7 +283,7 @@ async function loadStores(db) {
     stores.push({ id: docId(d), path: relPath(d), name, keys: [...keys] });
   }
   stores.sort((a, b) => a.name.localeCompare(b.name, "id"));
-  return { stores, info: `koleksi "${CFG.storeCollection}": ${docs.length} dok, ${skipped} nonaktif dilewati, field nama=${nameF || "(ID dokumen)"}, field aktif=${activeF || "-"}` };
+  return { stores, info: `koleksi "${CFG.storeCollection}": ${docs.length} dok, ${skipped} nonaktif dilewati, ${notYet} belum mulai (${fromF || "-"}), field nama=${nameF || "(ID dokumen)"}, field aktif=${activeF || "-"}` };
 }
 
 /** Cadangan bila nama di data scoring tidak persis sama: cocok hanya jika tepat SATU store yang namanya memuat teks tsb (atau sebaliknya). */
@@ -293,7 +301,8 @@ async function latestWithField(db, parent, collectionId, dateF) {
 async function loadScores(db, stores, w) {
   const spec = CFG.scoreCollection;
   const sub = spec.match(/^([^/]+)\/\{store\}\/([^/]+)$/);
-  const done = new Set(); let docsCount = 0; let unmatched = 0; let fuzzy = 0;
+  const done = new Map(); let docsCount = 0; let unmatched = 0; let fuzzy = 0; // storeId → Set(slot)
+  const mark = (id, slot) => { if (!done.has(id)) done.set(id, new Set()); if (slot !== undefined && slot !== null && slot !== "") done.get(id).add(String(slot)); };
   if (sub) {
     // Sub-koleksi per store: stores/{store}/scorings → query per store (indeks otomatis per koleksi).
     if (CFG.storeList) fail("FO_SCORE_COLLECTION berbentuk sub-koleksi butuh master store dari Firestore, bukan FO_STORE_LIST.");
@@ -306,7 +315,7 @@ async function loadScores(db, stores, w) {
     for (const s of stores) {
       const seen = new Set();
       for (const where of filters) for (const d of await db.query(`${parentColl}/${encodeURIComponent(s.id)}`, { from: [{ collectionId }], where, select: { fields: [{ fieldPath: fieldPath(dateF) }] } })) seen.add(d.name);
-      docsCount += seen.size; if (seen.size) done.add(s.id);
+      docsCount += seen.size; if (seen.size) mark(s.id);
     }
     return { done, info: `sub-koleksi "${spec}", field tanggal=${dateF} (${kind}), ${docsCount} dok pada ${w.date}` };
   }
@@ -316,6 +325,7 @@ async function loadScores(db, stores, w) {
   const fields = first.fields || {};
   const dateF = pickField(fields, CFG.scoreDateField, SCORE_DATE_FIELDS);
   const storeF = pickField(fields, CFG.scoreStoreField, SCORE_STORE_FIELDS);
+  const slotF = pickField(fields, CFG.scoreSlotField, SCORE_SLOT_FIELDS);
   const names = Object.keys(fields).join(", ");
   if (!dateF) fail(`Field tanggal di koleksi "${spec}" tidak terdeteksi. Field yang ada: ${names}. Isi variabel FO_SCORE_DATE_FIELD.`);
   if (!storeF) fail(`Field store di koleksi "${spec}" tidak terdeteksi. Field yang ada: ${names}. Isi variabel FO_SCORE_STORE_FIELD.`);
@@ -324,18 +334,18 @@ async function loadScores(db, stores, w) {
   const byKey = new Map(); for (const s of stores) for (const k of s.keys) if (!byKey.has(k)) byKey.set(k, s);
   const seen = new Set();
   for (const where of filters) {
-    const docs = await db.query("", { from: [{ collectionId: spec }], where, select: { fields: [{ fieldPath: fieldPath(storeF) }, { fieldPath: fieldPath(dateF) }] } });
+    const docs = await db.query("", { from: [{ collectionId: spec }], where, select: { fields: [storeF, dateF, slotF].filter(Boolean).map((f) => ({ fieldPath: fieldPath(f) })) } });
     for (const d of docs) {
       if (seen.has(d.name)) continue; seen.add(d.name); docsCount++;
       const key = norm(valOf(getField(d.fields || {}, storeF)));
       let s = byKey.get(key);
       if (!s && key) { s = similarStore(stores, key); if (s) { byKey.set(key, s); fuzzy++; } }
-      if (s) done.add(s.id); else unmatched++;
+      if (s) mark(s.id, slotF ? valOf(getField(d.fields || {}, slotF)) : undefined); else unmatched++;
     }
   }
   if (fuzzy) log(`${fuzzy} data scoring dicocokkan lewat nama store yang mirip (mis. tanpa awalan brand).`);
   if (unmatched) warn(`${unmatched} data scoring pada ${w.date} tidak cocok dengan master store (store nonaktif, salah ketik, atau field store berbeda). Data ini tidak dihitung.`);
-  return { done, info: `koleksi "${spec}", field store=${storeF}, field tanggal=${dateF} (${kind}), ${docsCount} dok pada ${w.date}, ${unmatched} tidak cocok` };
+  return { done, info: `koleksi "${spec}", field store=${storeF}, field tanggal=${dateF} (${kind}), field slot=${slotF || "-"}, ${docsCount} dok pada ${w.date}, ${unmatched} tidak cocok` };
 }
 
 // ---------- pesan ----------
@@ -349,7 +359,7 @@ export function buildMessage(stores, done, w, title = TITLE) {
   L.push(w.final ? `${w.dayName}, ${w.dateLabel} · ditutup ${w.sentAt} WIB` : `${w.dayName}, ${w.dateLabel} · posisi ${w.sentAt} WIB`);
   L.push("");
   L.push(`✅ *Sudah scoring: ${sudah.length} dari ${total} store (${pct}%)*`);
-  sudah.forEach((s, i) => L.push(`${i + 1}. ${s.name}`));
+  sudah.forEach((s, i) => { const n = done.get(s.id) instanceof Set ? done.get(s.id).size : 0; L.push(`${i + 1}. ${s.name}${n ? ` (${n} slot)` : ""}`); });
   L.push("");
   L.push(`❌ *${w.final ? "Tidak" : "Belum"} scoring: ${belum.length} dari ${total} store (${total ? 100 - pct : 0}%)*`);
   belum.forEach((s, i) => L.push(`${i + 1}. ${s.name}`));
@@ -519,7 +529,7 @@ async function main() {
     }
     if (!CFG.scoreCollection) fail("Variabel FO_SCORE_COLLECTION belum diisi (koleksi data scoring). Jalankan ACTION=dry_run/discover untuk melihat daftar koleksi.");
     log(`laporan ${w.final ? "REKAP FINAL" : "progress"} tanggal ${w.date} (WIB), dibuat ${w.sentAt} WIB`);
-    const { stores, info: storeInfo } = await loadStores(db);
+    const { stores, info: storeInfo } = await loadStores(db, w);
     log(`master store: ${storeInfo} → ${stores.length} store aktif`);
     if (!stores.length) fail("Tidak ada store aktif di master store.");
     const { done, info: scoreInfo } = await loadScores(db, stores, w);
