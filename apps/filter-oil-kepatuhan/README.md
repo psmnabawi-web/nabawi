@@ -17,18 +17,19 @@ Halaman web untuk melihat **store mana yang tidak patuh** menjalankan filter min
 
 ## Aturan penilaian
 
-Aturan mengikuti pengaturan app, dokumen `settings/app`:
+Aturan mengikuti pengaturan app (dokumen `settings/app`) dan definisi di dashboard app:
 
-| Kondisi | Status | Skor |
-|---|---|---|
-| Catatan filter dalam ±`toleranceMin` (30) menit dari jam slot | Tepat waktu | 1 |
-| Lebih awal dari toleransi | Terlalu awal | 0,5 |
-| Lebih lambat dari toleransi | Terlambat | 0,5 |
-| Tidak ada catatan untuk slot itu | Tidak dikerjakan | 0 |
+| Kondisi | Status | Dihitung dikerjakan? | Skor tertimbang |
+|---|---|---|---|
+| Catatan filter dalam ±`toleranceMin` (30) menit dari jam slot | Tepat waktu | ya | 1 |
+| Lebih awal dari toleransi | Terlalu awal | ya | 0,5 |
+| Lebih lambat dari toleransi | Terlambat | ya | 0,5 |
+| Tidak ada catatan untuk slot itu | Tidak dikerjakan | tidak | 0 |
 
 - **Slot wajib:** setiap slot (`slot1`..`slotN`, saat ini 09.00, 16.00, 23.30) per store aktif per hari, mulai `activeFrom` store.
-- **Slot hari ini** baru dihitung setelah jam slot + toleransi lewat.
-- **Skor kepatuhan** = total skor ÷ slot wajib. Store *Tidak patuh* bila skornya di bawah target (default 90%, bisa diubah di halaman).
+- **Compliance** = slot dikerjakan ÷ slot wajib, sama dengan dashboard app. Store *Tidak patuh* bila compliance di bawah target. Default target 95%, sama dengan target di dashboard app, dan bisa diubah di halaman maupun di sheet Parameter.
+- **Skor tertimbang** = total skor ÷ slot wajib. Angka ini pelengkap untuk melihat ketepatan waktu.
+- **Slot hari ini** baru dihitung setelah jam slot + toleransi lewat. Dashboard app sudah menghitung slot yang belum jatuh tempo sebagai wajib, jadi angka hari berjalan bisa sedikit berbeda. Untuk hari yang sudah lewat, angkanya sama.
 - **Foto galeri** = bukti foto yang waktunya diambil dari berkas (`evidenceTimeSource` = File lastModified, trust LOW), bukan dari kamera app. Angka ini perlu diawasi.
 
 ## Setup & deploy

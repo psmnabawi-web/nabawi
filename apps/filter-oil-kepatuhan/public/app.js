@@ -16,7 +16,7 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch { return 
 
 const state = {
   stores: null, settings: null, records: [], loadedRange: null, loadedAt: 0,
-  start: "", end: "", area: store.get("fo.area") || "", target: Number(store.get("fo.target")) || 90,
+  start: "", end: "", area: store.get("fo.area") || "", target: Number(store.get("fo.target95")) || 95,
   storeFilter: "", onlyIssues: true, report: null, preset: store.get("fo.preset") || "7",
 };
 
@@ -115,9 +115,9 @@ const badge = (key) => { const s = STATUS[key] || STATUS.MISSED; return `<span c
 const compliantBadge = (ok) => (ok ? `<span class="badge t-good"><span class="ic" aria-hidden="true">✓</span>Patuh</span>` : `<span class="badge t-critical"><span class="ic" aria-hidden="true">✕</span>Tidak patuh</span>`);
 function dayTone(d, target) {
   if (!d || !d.expected) return "none";
-  if (d.score >= target - 1e-9) return "good";
-  if (d.score >= 0.5) return "warning";
-  if (d.score > 0) return "serious";
+  if (d.pctDone >= target - 1e-9) return "good";
+  if (d.pctDone >= 0.5) return "warning";
+  if (d.pctDone > 0) return "serious";
   return "critical";
 }
 
@@ -133,11 +133,11 @@ function render() {
   // KPI
   const t = r.total;
   const tiles = [
-    { label: "Skor kepatuhan", value: pct(t.score), note: `Target ${state.target}% · ON TIME = 1, awal/terlambat = 0,5`, cls: t.score === null ? "" : t.score >= r.target ? "ok-kpi" : "alert-kpi" },
-    { label: "Slot terlaksana", value: pct(t.pctDone), note: `${t.done} dari ${t.expected} slot wajib` },
-    { label: "Tepat waktu", value: pct(t.pctOntime), note: `${t.ONTIME} slot dalam ±${r.tol} menit` },
-    { label: "Tidak dikerjakan", value: String(t.MISSED), note: `${t.EARLY} terlalu awal · ${t.LATE} terlambat`, cls: t.MISSED ? "alert-kpi" : "ok-kpi" },
-    { label: "Store tidak patuh", value: `${r.nonCompliant}/${r.stores.length}`, note: `skor di bawah ${state.target}%`, cls: r.nonCompliant ? "alert-kpi" : "ok-kpi" },
+    { label: "Compliance", value: pct(t.pctDone, 1), note: `${t.done} dari ${t.expected} slot dikerjakan · target ${state.target}%`, cls: t.pctDone === null ? "" : t.pctDone >= r.target ? "ok-kpi" : "alert-kpi" },
+    { label: "Tepat waktu", value: String(t.ONTIME), note: `${pct(t.pctOntime, 1)} slot dalam ±${r.tol} menit` },
+    { label: "Early / Late", value: String(t.EARLY + t.LATE), note: `${t.EARLY} terlalu awal · ${t.LATE} terlambat` },
+    { label: "Tidak dikerjakan", value: String(t.MISSED), note: `${pct(t.expected ? t.MISSED / t.expected : null, 1)} dari slot wajib`, cls: t.MISSED ? "alert-kpi" : "ok-kpi" },
+    { label: "Store tidak patuh", value: `${r.nonCompliant}/${r.stores.length}`, note: `compliance di bawah ${state.target}%`, cls: r.nonCompliant ? "alert-kpi" : "ok-kpi" },
   ];
   $("kpis").innerHTML = tiles.map((k) => `<div class="kpi ${k.cls || ""}"><div class="label">${esc(k.label)}</div><div class="value">${esc(k.value)}</div><div class="note">${esc(k.note)}</div></div>`).join("");
 
@@ -145,12 +145,13 @@ function render() {
   const rows = r.stores.map((s, i) => `<tr class="clickable${state.storeFilter === s.id ? " selected" : ""}" data-store="${esc(s.id)}" tabindex="0">
     <td class="num muted">${i + 1}</td><td><strong>${esc(s.name)}</strong></td><td>${esc(s.area)}</td>
     <td class="num">${s.expected}</td><td class="num">${s.ONTIME}</td><td class="num">${s.EARLY}</td><td class="num">${s.LATE}</td>
-    <td class="num">${s.MISSED ? `<strong>${s.MISSED}</strong>` : 0}</td><td class="num">${pct(s.pctDone)}</td>
-    <td><span class="scorecell"><span class="scorebar" aria-hidden="true"><i style="width:${Math.round((s.score || 0) * 100)}%"></i></span><strong>${pct(s.score)}</strong></span></td>
+    <td class="num">${s.MISSED ? `<strong>${s.MISSED}</strong>` : 0}</td>
+    <td><span class="scorecell"><span class="scorebar" aria-hidden="true"><i style="width:${Math.round((s.pctDone || 0) * 100)}%"></i></span><strong>${pct(s.pctDone, 1)}</strong></span></td>
+    <td class="num">${pct(s.pctOntime)}</td><td class="num">${pct(s.score)}</td>
     <td>${compliantBadge(s.compliant)}</td><td class="num">${s.gallery}</td></tr>`).join("");
-  $("tblStores").innerHTML = `<thead><tr><th class="num">#</th><th>Store</th><th>Area</th><th class="num">Slot wajib</th><th class="num">Tepat waktu</th><th class="num">Terlalu awal</th><th class="num">Terlambat</th><th class="num">Tidak dikerjakan</th><th class="num">Terlaksana</th><th>Skor</th><th>Status</th><th class="num" title="Foto bukti diambil dari galeri/berkas, bukan kamera app (tingkat kepercayaan rendah)">Foto galeri</th></tr></thead>
-    <tbody>${rows || `<tr><td colspan="12" class="muted">Tidak ada slot wajib pada periode ini.</td></tr>`}</tbody>
-    ${r.stores.length ? `<tfoot><tr><td></td><td>Total</td><td></td><td class="num">${t.expected}</td><td class="num">${t.ONTIME}</td><td class="num">${t.EARLY}</td><td class="num">${t.LATE}</td><td class="num">${t.MISSED}</td><td class="num">${pct(t.pctDone)}</td><td>${pct(t.score)}</td><td></td><td class="num">${t.gallery}</td></tr></tfoot>` : ""}`;
+  $("tblStores").innerHTML = `<thead><tr><th class="num">#</th><th>Store</th><th>Area</th><th class="num">Slot wajib</th><th class="num">Tepat waktu</th><th class="num">Terlalu awal</th><th class="num">Terlambat</th><th class="num">Tidak dikerjakan</th><th>Compliance</th><th class="num">% Tepat waktu</th><th class="num" title="Tepat waktu = 1, terlalu awal / terlambat = 0,5, tidak dikerjakan = 0">Skor tertimbang</th><th>Status</th><th class="num" title="Foto bukti diambil dari galeri/berkas, bukan kamera app (tingkat kepercayaan rendah)">Foto galeri</th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="13" class="muted">Tidak ada slot wajib pada periode ini.</td></tr>`}</tbody>
+    ${r.stores.length ? `<tfoot><tr><td></td><td>Total</td><td></td><td class="num">${t.expected}</td><td class="num">${t.ONTIME}</td><td class="num">${t.EARLY}</td><td class="num">${t.LATE}</td><td class="num">${t.MISSED}</td><td>${pct(t.pctDone, 1)}</td><td class="num">${pct(t.pctOntime)}</td><td class="num">${pct(t.score)}</td><td></td><td class="num">${t.gallery}</td></tr></tfoot>` : ""}`;
 
   renderHeat(r);
   renderDetail(r);
@@ -158,9 +159,9 @@ function render() {
   const sl = r.slots.map((s) => `${s.label} jam ${s.time.replace(":", ".")}`).join(", ");
   $("rules").innerHTML = [
     `Slot wajib per store per hari: ${esc(sl)} (dari pengaturan app), mulai tanggal aktif store.`,
-    `Tepat waktu = dalam ±${r.tol} menit dari jam slot (skor 1). Terlalu awal / terlambat = di luar toleransi (skor 0,5). Tidak ada catatan = tidak dikerjakan (skor 0).`,
-    `Slot hari ini baru dihitung setelah jam slot + ${r.tol} menit lewat${r.pending ? ` (saat ini ${r.pending} slot belum jatuh tempo)` : ""}.`,
-    `Skor kepatuhan = total skor ÷ slot wajib. Store "Tidak patuh" bila skor di bawah target ${state.target}%.`,
+    `Compliance = slot dikerjakan ÷ slot wajib (sama dengan dashboard app). Store "Tidak patuh" bila compliance di bawah target ${state.target}%.`,
+    `Tepat waktu = dalam ±${r.tol} menit dari jam slot. Di luar itu = terlalu awal / terlambat (tetap dihitung dikerjakan). Skor tertimbang: tepat waktu 1, awal/terlambat 0,5, tidak dikerjakan 0.`,
+    `Slot hari ini baru dihitung setelah jam slot + ${r.tol} menit lewat${r.pending ? ` (saat ini ${r.pending} slot belum jatuh tempo)` : ""}. Dashboard app sudah menghitung slot yang belum jatuh tempo sebagai wajib, jadi angka hari ini bisa sedikit berbeda; untuk hari yang sudah lewat angkanya sama.`,
     `Foto galeri = waktu bukti diambil dari berkas foto (trust LOW), bukan kamera app. Perlu dicek bila jumlahnya tinggi.`,
   ].map((x) => `<li>${x}</li>`).join("");
 }
@@ -169,14 +170,14 @@ function renderHeat(r) {
   const days = r.days.slice(-MAX_HEAT_DAYS);
   $("heatNote").hidden = r.days.length <= MAX_HEAT_DAYS;
   $("heatNote").textContent = `Menampilkan ${MAX_HEAT_DAYS} hari terakhir dari ${r.days.length} hari. Excel memuat semua hari.`;
-  const tones = [["good", `≥ target (${state.target}%)`], ["warning", "50% s/d di bawah target"], ["serious", "di bawah 50%"], ["critical", "0 (tidak ada filter)"], ["none", "belum wajib"]];
+  const tones = [["good", `semua/≥ target (${state.target}%)`], ["warning", "50% s/d di bawah target"], ["serious", "di bawah 50%"], ["critical", "0 (tidak ada filter)"], ["none", "belum wajib"]];
   $("legendHeat").innerHTML = tones.map(([k, l]) => `<li><span class="sw" style="background:var(--${k === "none" ? "none" : k}-bg);box-shadow:inset 0 -3px 0 var(--${k === "none" ? "border" : k})"></span>${esc(l)}</li>`).join("");
   const head = `<thead><tr><th class="store">Store</th>${days.map((d) => `<th class="d">${esc(dayName(d).slice(0, 3))}<br>${d.slice(8, 10)}/${d.slice(5, 7)}</th>`).join("")}</tr></thead>`;
   const body = r.stores.map((s) => `<tr><th class="store" scope="row">${esc(s.name)}</th>${days.map((d) => {
     const x = s.daily[d];
     const tn = dayTone(x, r.target);
     if (!x) return `<td class="h-none" tabindex="0" data-tip="${esc(`${s.name} · ${fmtDate(d)}: belum wajib`)}">–</td>`;
-    const tip = `${s.name} · ${dayName(d)} ${fmtDate(d)}\nTerlaksana ${x.done}/${x.expected} · skor ${pct(x.score)}\nTepat waktu ${x.ONTIME} · awal ${x.EARLY} · terlambat ${x.LATE} · tidak dikerjakan ${x.MISSED}`;
+    const tip = `${s.name} · ${dayName(d)} ${fmtDate(d)}\nDikerjakan ${x.done}/${x.expected} (${pct(x.pctDone)})\nTepat waktu ${x.ONTIME} · awal ${x.EARLY} · terlambat ${x.LATE} · tidak dikerjakan ${x.MISSED}`;
     return `<td class="h-${tn}" tabindex="0" data-tip="${esc(tip)}" aria-label="${esc(tip)}">${x.done}/${x.expected}</td>`;
   }).join("")}</tr>`).join("");
   $("heat").innerHTML = head + `<tbody>${body}</tbody>`;
@@ -267,14 +268,15 @@ export async function buildWorkbook(ExcelJS, r, opts) {
   P.addRow(["Parameter", "Nilai", "Keterangan"]); headerStyle(P.getRow(1));
   const prm = [
     ["Periode awal", xlDate(r.start), "Tanggal pertama laporan"],
-    ["Target skor kepatuhan", r.target, "INPUT: ubah angka ini, kolom Status di Ringkasan Store ikut berubah"],
+    ["Target compliance", r.target, "INPUT: ubah angka ini, kolom Status di Ringkasan Store ikut berubah"],
     ["Periode akhir", xlDate(r.end), "Tanggal terakhir laporan (maksimal hari ini)"],
     ["Toleransi (menit)", r.tol, "Selisih dari jam slot yang masih dihitung tepat waktu (dari pengaturan app)"],
     ...r.slots.map((s) => [`Jam ${s.label}`, s.time, "Slot wajib per store per hari (dari pengaturan app)"]),
     ["Area", opts.area || "Semua area", "Filter area saat export"],
     ["Dibuat (WIB)", opts.generatedAt, "Waktu file dibuat"],
     ["Sumber data", "Firestore app Trecking Filter Oil (trecking-filter-oil-store), koleksi filterRecords, stores, settings", ""],
-    ["Skor per slot", "Tepat waktu = 1; Terlalu awal / Terlambat = 0,5; Tidak dikerjakan = 0", "Mengikuti complianceScore di app"],
+    ["Compliance", "Slot dikerjakan ÷ slot wajib (sama dengan dashboard app)", "Dasar status Patuh / Tidak patuh"],
+    ["Skor tertimbang", "Tepat waktu = 1; Terlalu awal / Terlambat = 0,5; Tidak dikerjakan = 0", "Mengikuti complianceScore di app"],
     ["Slot hari ini", `${r.pending} slot belum jatuh tempo tidak dihitung`, "Slot dihitung setelah jam slot + toleransi lewat"],
   ];
   // urutan baris dijaga agar target ada di B3 (dipakai rumus Status)
@@ -309,9 +311,9 @@ export async function buildWorkbook(ExcelJS, r, opts) {
   R.getCell("A1").value = `Kepatuhan Filter Oil per Store · ${fmtDate(r.start)} s/d ${fmtDate(r.end)}${opts.area ? ` · ${opts.area}` : ""}`;
   R.getCell("A1").font = { bold: true, size: 14, color: { argb: NAVY }, name: "Arial" };
   R.mergeCells("A2:M2");
-  R.getCell("A2").value = `Status "Tidak patuh" = skor di bawah target di sheet Parameter (B3). Angka dihitung dengan rumus dari sheet Detail Slot. Urutan: skor terendah di atas.`;
+  R.getCell("A2").value = `Status "Tidak patuh" = compliance (slot dikerjakan ÷ slot wajib) di bawah target di sheet Parameter (B3). Angka dihitung dengan rumus dari sheet Detail Slot. Urutan: compliance terendah di atas.`;
   R.getCell("A2").font = { italic: true, size: 9, color: { argb: "FF55534E" }, name: "Arial" };
-  const heads = ["Store", "Area", "Slot wajib", "Tepat waktu", "Terlalu awal", "Terlambat", "Tidak dikerjakan", "Slot terlaksana", "% Terlaksana", "% Tepat waktu", "Skor kepatuhan", "Status", "Foto dari galeri"];
+  const heads = ["Store", "Area", "Slot wajib", "Tepat waktu", "Terlalu awal", "Terlambat", "Tidak dikerjakan", "Slot dikerjakan", "Compliance", "% Tepat waktu", "Skor tertimbang", "Status", "Foto dari galeri"];
   R.getRow(4).values = heads; headerStyle(R.getRow(4));
   R.columns = [22, 14, 10, 10, 10, 10, 12, 11, 11, 11, 12, 13, 11].map((w) => ({ width: w }));
   const first = 5;
@@ -331,7 +333,7 @@ export async function buildWorkbook(ExcelJS, r, opts) {
     row.getCell(9).value = { formula: `IF(C${n}=0,"",H${n}/C${n})`, result: s.pctDone };
     row.getCell(10).value = { formula: `IF(C${n}=0,"",D${n}/C${n})`, result: s.pctOntime };
     row.getCell(11).value = { formula: `IF(C${n}=0,"",SUMIFS(${rng("J")},${rng("C")},${A})/C${n})`, result: s.score };
-    row.getCell(12).value = { formula: `IF(K${n}="","",IF(K${n}<Parameter!$B$3,"Tidak patuh","Patuh"))`, result: s.compliant ? "Patuh" : "Tidak patuh" };
+    row.getCell(12).value = { formula: `IF(I${n}="","",IF(I${n}<Parameter!$B$3,"Tidak patuh","Patuh"))`, result: s.compliant ? "Patuh" : "Tidak patuh" };
     row.getCell(13).value = { formula: `COUNTIFS(${rng("C")},${A},${rng("L")},"Dari galeri")`, result: s.gallery };
     row.font = { name: "Arial", size: 10 };
   });
@@ -349,7 +351,7 @@ export async function buildWorkbook(ExcelJS, r, opts) {
     tot.getCell(12).value = { formula: `COUNTIF(L${first}:L${lastS},"Tidak patuh")&" store tidak patuh"`, result: `${r.nonCompliant} store tidak patuh` };
     tot.font = { bold: true, name: "Arial", size: 10 };
     tot.eachCell((c) => { c.border = { top: { style: "medium", color: { argb: NAVY } } }; });
-    for (const col of ["I", "J", "K"]) for (let i = first; i <= lastS + 1; i++) R.getCell(`${col}${i}`).numFmt = "0%";
+    for (const col of ["I", "J", "K"]) for (let i = first; i <= lastS + 1; i++) R.getCell(`${col}${i}`).numFmt = col === "I" ? "0.0%" : "0%";
     R.autoFilter = { from: "A4", to: `M${lastS}` };
     R.addConditionalFormatting({ ref: `L${first}:L${lastS}`, rules: [
       { type: "containsText", operator: "containsText", text: "Tidak patuh", priority: 1, style: { fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFF7D6D6" } }, font: { bold: true, color: { argb: "FF9C1C1C" } } } },
@@ -362,7 +364,7 @@ export async function buildWorkbook(ExcelJS, r, opts) {
 
   // --- Harian (store x tanggal, rumus) ---
   if (H) {
-    H.getCell("A1").value = "Skor kepatuhan harian per store (skor ÷ slot wajib hari itu). Kosong = belum wajib.";
+    H.getCell("A1").value = "Compliance harian per store (slot dikerjakan ÷ slot wajib hari itu). Kosong = belum wajib.";
     H.getCell("A1").font = { italic: true, size: 9, color: { argb: "FF55534E" }, name: "Arial" };
     const hr = H.getRow(3);
     hr.getCell(1).value = "Store";
@@ -376,7 +378,7 @@ export async function buildWorkbook(ExcelJS, r, opts) {
         const L = colLetter(j + 2);
         const crit = `${rng("C")},$A${n},${rng("A")},${L}$3`;
         const x = s.daily[d];
-        row.getCell(j + 2).value = { formula: `IFERROR(SUMIFS(${rng("J")},${crit})/COUNTIFS(${crit}),"")`, result: x ? x.score : "" };
+        row.getCell(j + 2).value = { formula: `IFERROR(1-COUNTIFS(${crit},${rng("I")},"Tidak dikerjakan")/COUNTIFS(${crit}),"")`, result: x ? x.pctDone : "" };
         row.getCell(j + 2).numFmt = "0%";
       });
       row.font = { name: "Arial", size: 10 };
@@ -427,7 +429,7 @@ function init() {
   $("end").addEventListener("change", onDate);
   $("area").addEventListener("change", (e) => { state.area = e.target.value; store.set("fo.area", state.area); state.storeFilter = ""; recompute(); });
   $("target").value = state.target;
-  $("target").addEventListener("change", (e) => { const v = Math.min(100, Math.max(0, Number(e.target.value) || 0)); e.target.value = v; state.target = v; store.set("fo.target", String(v)); recompute(); });
+  $("target").addEventListener("change", (e) => { const v = Math.min(100, Math.max(0, Number(e.target.value) || 0)); e.target.value = v; state.target = v; store.set("fo.target95", String(v)); recompute(); });
   $("btnReload").addEventListener("click", () => refresh(true));
   $("btnExport").addEventListener("click", exportExcel);
   $("storeFilter").addEventListener("change", (e) => { state.storeFilter = e.target.value; render(); });

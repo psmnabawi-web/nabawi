@@ -6,7 +6,9 @@
 //   - Status per slot dari data filterRecords: ON TIME (|selisih| <= toleransi) skor 1,
 //     EARLY / LATE skor 0,5, tidak ada data = TIDAK DIKERJAKAN skor 0.
 //   - Slot hari ini baru dihitung setelah jam slot + toleransi lewat (sebelum itu "belum jatuh tempo").
-//   - Skor kepatuhan store = total skor / jumlah slot wajib. Store "Tidak patuh" bila skor < target.
+//   - Compliance (sama dengan dashboard app) = slot dikerjakan (status apa pun) / slot wajib.
+//     Store "Tidak patuh" bila compliance < target (default 95%, sama dengan target di dashboard app).
+//   - Skor tertimbang = total skor / slot wajib (tepat waktu dihargai penuh), sebagai pelengkap.
 
 export const WIB_MS = 7 * 3600_000;
 const DAY_MS = 86_400_000;
@@ -92,9 +94,9 @@ export function photoSource(rec) {
  * @param {string} p.end             YYYY-MM-DD
  * @param {number} p.nowMs
  * @param {string} [p.area]          kosong = semua area
- * @param {number} [p.target]        0..1, default 0.9
+ * @param {number} [p.target]        0..1, target compliance (default 0.95)
  */
-export function buildReport({ stores, records, settings = {}, start, end, nowMs, area = "", target = 0.9 }) {
+export function buildReport({ stores, records, settings = {}, start, end, nowMs, area = "", target = 0.95 }) {
   const tol = Number.isFinite(Number(settings.toleranceMin)) ? Number(settings.toleranceMin) : 30;
   const slots = slotsFromSettings(settings);
   const today = ymdWib(nowMs);
@@ -147,7 +149,8 @@ export function buildReport({ stores, records, settings = {}, start, end, nowMs,
   const finish = (acc) => {
     const done = acc.expected - acc.MISSED;
     const score = acc.expected ? acc.scoreSum / acc.expected : null;
-    return { ...acc, done, pctDone: acc.expected ? done / acc.expected : null, pctOntime: acc.expected ? acc.ONTIME / acc.expected : null, score, compliant: score === null ? null : score >= target - 1e-9 };
+    const pctDone = acc.expected ? done / acc.expected : null;
+    return { ...acc, done, pctDone, pctOntime: acc.expected ? acc.ONTIME / acc.expected : null, score, compliant: pctDone === null ? null : pctDone >= target - 1e-9 };
   };
 
   const perStore = new Map(storeList.map((s) => [s.id, { store: s, acc: blank(), daily: new Map() }]));
@@ -165,7 +168,7 @@ export function buildReport({ stores, records, settings = {}, start, end, nowMs,
       ...finish(p.acc),
       daily: Object.fromEntries([...p.daily.entries()].map(([d, a]) => [d, finish(a)])),
     }))
-    .sort((a, b) => a.score - b.score || b.MISSED - a.MISSED || a.name.localeCompare(b.name, "id"));
+    .sort((a, b) => a.pctDone - b.pctDone || a.pctOntime - b.pctOntime || a.name.localeCompare(b.name, "id"));
 
   return {
     start, end: last, today, days, slots, tol, target, rows, pending,
