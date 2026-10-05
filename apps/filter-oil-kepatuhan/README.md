@@ -2,7 +2,7 @@
 
 Halaman web untuk melihat **store mana yang tidak patuh** menjalankan filter minyak sesuai jadwal slot. Halaman ini juga bisa **export Excel** yang rapi dan berformula. Data dibaca langsung dari Firestore app Trecking Filter Oil (`trecking-filter-oil-store`). Halaman ini hanya membaca dan tidak pernah menulis ke database.
 
-- **Alamat:** situs Firebase Hosting terpisah di project yang sama, mis. `https://kepatuhan-filter-oil.web.app`. Nama pastinya tertulis di ringkasan run workflow *Deploy Kepatuhan Filter Oil*. Situs utama app (`trecking-filter-oil-store.web.app`) tidak disentuh, dan script deploy menolak menerbitkan ke situs itu.
+- **Alamat:** **https://kepatuhan-filter-oil.web.app**, situs Firebase Hosting terpisah di project yang sama. Situs utama app (`trecking-filter-oil-store.web.app`) tidak disentuh, dan script deploy menolak menerbitkan ke situs itu.
 - **Isi halaman:**
   - KPI: skor kepatuhan, % slot terlaksana, % tepat waktu, jumlah slot tidak dikerjakan, jumlah store tidak patuh.
   - Peringkat store dari skor terendah.
@@ -10,8 +10,8 @@ Halaman web untuk melihat **store mana yang tidak patuh** menjalankan filter min
   - Detail per slot, dengan pilihan hanya menampilkan yang bermasalah.
   - Filter periode, area, dan target skor.
 - **Export Excel**, 4 sheet:
-  - *Ringkasan Store*: rumus COUNTIFS/SUMIFS ke sheet Detail; status *Tidak patuh* mengikuti target di sheet Parameter.
-  - *Harian*: skor per store per hari, dalam bentuk rumus, dengan skala warna.
+  - *Ringkasan Store*: rumus COUNTIFS/SUMIFS ke sheet Detail; status *Tidak patuh* = compliance di bawah target di sheet Parameter.
+  - *Harian*: compliance per store per hari, dalam bentuk rumus, dengan skala warna.
   - *Detail Slot*: data per slot, dengan filter dan freeze pane.
   - *Parameter*: periode, target (sel input), toleransi, jam slot, sumber data.
 

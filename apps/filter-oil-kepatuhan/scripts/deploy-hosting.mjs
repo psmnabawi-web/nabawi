@@ -108,6 +108,23 @@ async function main() {
   const msg = (env("GITHUB_SHA") ? `commit ${env("GITHUB_SHA").slice(0, 7)}` : "deploy manual").slice(0, 100);
   const rel = await call("POST", `${API}/sites/${site}/releases?versionName=${encodeURIComponent(version)}`, { message: msg });
   if (!rel.ok) fail(`Gagal merilis versi: ${why(rel)}`);
+  // Cek situs benar-benar melayani versi baru (CDN butuh beberapa detik).
+  if (!env("FO_SKIP_SMOKE")) {
+    const base = `https://${site}.web.app`;
+    let ok = false, lastErr = "";
+    for (let i = 0; i < 6 && !ok; i++) {
+      if (i) await new Promise((r) => setTimeout(r, 5000));
+      try {
+        const page = await fetch(`${base}/?v=${Date.now()}`);
+        const html = await page.text();
+        const lib = await fetch(`${base}/vendor/exceljs.min.js`, { method: "HEAD" });
+        ok = page.ok && html.includes("<title>Kepatuhan Filter Oil</title>") && lib.ok;
+        lastErr = `halaman HTTP ${page.status}, exceljs HTTP ${lib.status}`;
+      } catch (e) { lastErr = e.message; }
+    }
+    if (!ok) fail(`Situs ${base} belum melayani halaman dengan benar (${lastErr}).`);
+    log(`cek situs OK: ${base} melayani halaman & pustaka Excel`);
+  }
   console.log(`\nSELESAI: https://${site}.web.app`);
   if (process.env.GITHUB_STEP_SUMMARY) {
     const { appendFileSync } = await import("node:fs");

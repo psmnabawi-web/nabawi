@@ -45,7 +45,7 @@ async function mock({ sites = [{ id: "trecking-filter-oil-store", type: "DEFAULT
   return { base, calls, close: () => new Promise((r) => server.close(r)) };
 }
 const run = (m, extra = {}) => new Promise((resolve) => execFile(process.execPath, [SCRIPT], {
-  env: { PATH: process.env.PATH, FO_ACCESS_TOKEN: "tok", FO_TEST_HOSTING_BASE: m.base, FO_TEST_UPLOAD_BASE: m.base, ...extra },
+  env: { PATH: process.env.PATH, FO_ACCESS_TOKEN: "tok", FO_TEST_HOSTING_BASE: m.base, FO_TEST_UPLOAD_BASE: m.base, FO_SKIP_SMOKE: "1", ...extra },
 }, (err, stdout, stderr) => resolve({ code: err ? err.code : 0, stdout, stderr })));
 
 test("buat situs baru (lewati nama yang sudah dipakai project lain), upload, finalisasi, rilis", async () => {
