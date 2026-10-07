@@ -62,7 +62,7 @@ const splitTargets = (v) => String(v || "").split(/\s*[,;\n]\s*/).filter(Boolean
 let TOKEN = env("WA_TOKEN");
 let TARGETS = splitTargets(env("WA_TARGET"));
 let TITLE = env("FO_TITLE") || "Scoring Filter Oil";
-let TAGS = []; // nomor WA yang di-tag di setiap pesan (dari baris "tag" di Sheet atau env WA_TAG)
+let TAGS = []; // nama (atau nomor) yang ditulis "cc @…" di setiap pesan (dari baris "tag" di Sheet atau env WA_TAG)
 const CONFIG_SHEET = env("FO_CONFIG_SHEET_ID");
 const RUN_LABEL = env("FO_RUN_LABEL");
 const CUTOFF_HOUR = Number(env("FO_CUTOFF_HOUR", "6"));
@@ -477,17 +477,26 @@ async function listGroups() {
 }
 
 // ---------- tag (mention) ----------
-/** "Imanuel=0812-3456-7890, +62 813 1111 2222" → ["6281234567890", "6281311112222"]. Entri tanpa nomor valid diabaikan (dengan peringatan). */
+/**
+ * Daftar orang yang ditulis di akhir pesan ("cc @Nama").
+ * "Imanuel RM=0812-3456-7890, Budi, +62 813 1111 2222" → ["Imanuel RM", "Budi", "6281311112222"]
+ * Yang tampil: NAMA bila ada (nomor setelah "=" disimpan saja, tidak ditampilkan); nomor hanya dipakai bila entri tanpa nama.
+ * Catatan: Fonnte tidak membuat mention sungguhan dari teks, jadi ini penanda nama di pesan, bukan notifikasi mention.
+ */
 export function parseTags(raw) {
   const out = [];
   for (const part of String(raw || "").split(/[,;\n]+/)) {
     const p = part.trim(); if (!p) continue;
-    const num = (p.includes("=") ? p.slice(p.lastIndexOf("=") + 1) : p).replace(/[^\d+]/g, "");
-    let d = num.replace(/^\+/, "");
-    if (d.startsWith("0")) d = "62" + d.slice(1);
-    else if (d.startsWith("8")) d = "62" + d;
-    if (/^62\d{8,13}$/.test(d)) { if (!out.includes(d)) out.push(d); }
-    else warn(`Entri tag ke-${out.length + 1} bukan nomor WhatsApp yang valid (contoh benar: 628xxxxxxxxxx); dilewati.`);
+    const rawName = p.includes("=") ? p.slice(0, p.lastIndexOf("=")) : /[A-Za-z]/.test(p) ? p : "";
+    let label = rawName.replace(/[*_~`@\r]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+    if (!label) {
+      let d = p.slice(p.lastIndexOf("=") + 1).replace(/[^\d+]/g, "").replace(/^\+/, "");
+      if (d.startsWith("0")) d = "62" + d.slice(1);
+      else if (d.startsWith("8")) d = "62" + d;
+      if (/^62\d{8,13}$/.test(d)) label = d;
+      else { warn(`Entri tag ke-${out.length + 1} bukan nama atau nomor WhatsApp yang valid; dilewati.`); continue; }
+    }
+    if (!out.includes(label)) out.push(label);
   }
   return out;
 }

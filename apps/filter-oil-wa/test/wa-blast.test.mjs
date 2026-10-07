@@ -412,15 +412,23 @@ test("dry_run dengan nama grup yang salah: tidak mengirim, tapi Riwayat memberi 
   } finally { await mock.close(); }
 });
 
-test("tag dari Sheet: nomor dinormalisasi ke 62…, muncul sebagai @nomor di pesan, nomor tidak bocor ke log", async () => {
-  const sheet = { id: SHEET_ID, config: [["status", "AKTIF"], ["fonnte_token", "fonnte-token"], ["grup_tujuan", "Filter Oil BBA"], ["tag", "Imanuel RM=0812-3456-7890, +62 813 1111 2222, salah"]] };
+test("parseTags: nama ditampilkan, nomor hanya bila tanpa nama, format WhatsApp dibersihkan", async () => {
+  const { parseTags } = await import("../scripts/wa-blast.mjs");
+  assert.deepEqual(parseTags("Imanuel RM Bangor Jabodetabek=+62 857-8221-5753"), ["Imanuel RM Bangor Jabodetabek"]);
+  assert.deepEqual(parseTags("Budi *Ops*, 0812-3456-7890; =0813 1111 2222\nBudi *Ops*"), ["Budi Ops", "6281234567890", "6281311112222"]);
+  assert.deepEqual(parseTags(""), []);
+});
+
+test("tag dari Sheet: pesan menulis cc @Nama (nomor tidak tampil), nomor & nama tidak bocor ke log", async () => {
+  const sheet = { id: SHEET_ID, config: [["status", "AKTIF"], ["fonnte_token", "fonnte-token"], ["grup_tujuan", "Filter Oil BBA"], ["tag", "Imanuel RM=0812-3456-7890, +62 813 1111 2222, 12345"]] };
   const mock = await startMock(SCORES_TODAY, GROUPS, sheet);
   try {
     const r = await run(mock, viaSheet({ ACTION: "send" }));
     assert.equal(r.code, 0, r.stderr + r.stdout);
-    assert.match(mock.calls.sent[0].message, /\ncc @6281234567890 @6281311112222\n_Pesan otomatis_$/);
+    assert.match(mock.calls.sent[0].message, /\ncc @Imanuel RM @6281311112222\n_Pesan otomatis_$/);
+    assert.doesNotMatch(mock.calls.sent[0].message, /6281234567890/);
     assert.match(r.stdout, /tag=2/);
-    assert.match(r.stdout, /Entri tag ke-3 bukan nomor WhatsApp yang valid/);
+    assert.match(r.stdout, /Entri tag ke-3 bukan nama atau nomor WhatsApp yang valid/);
     assert.doesNotMatch(r.stdout + r.stderr, /6281234567890|Imanuel/);
   } finally { await mock.close(); }
 });
