@@ -23,6 +23,8 @@ const SAMPLE_STORES = [
   { id: 'afc-kmm', code: 'AFC-KMM', name: 'Almaz Fried Chicken - Kapten Muslim Medan', city: 'Medan' },
   { id: 'afc-mrp', code: 'AFC-MRP', name: 'Almaz Fried Chicken - Marpoyan PKU', city: 'Pekanbaru' },
   { id: 'afc-pnm', code: 'AFC-PNM', name: 'Almaz Fried Chicken - Panam PKU', city: 'Pekanbaru' },
+  { id: 'afc-pkl', code: 'AFC-PKL', name: 'Almaz Fried Chicken - Perumnas Klender', city: 'Jakarta Timur' },
+  { id: 'afc-tpc', code: 'AFC-TPC', name: 'Almaz Fried Chicken - Teluk Pucung', city: 'Bekasi' },
   { id: 'afc-adm', code: 'AFC-ADM', name: 'Almaz Fried Chicken - Adam Malik Medan', city: 'Medan', excludedIndicatorIds: ['IND-17', 'IND-29', 'IND-30', 'IND-31', 'IND-48', 'IND-50'] },
 ];
 
