@@ -31,7 +31,7 @@ const PROVIDERS: { value: NotifyProvider; label: string; tokenLabel: string; tar
       'Daftar di fonnte.com, tambah Device, klik Connect, scan QR dari WhatsApp nomor KHUSUS bot (bukan nomor pribadi) lewat menu Perangkat Tertaut.',
       'Masukkan nomor bot itu ke grup WhatsApp tujuan.',
       'Salin Token dari halaman Device di Fonnte, tempel di kolom token.',
-      'Tekan "Ambil daftar grup dari Fonnte", pilih grupnya, Simpan, lalu "Kirim tes sekarang".',
+      'Tekan "Ambil daftar grup dari Fonnte", centang satu atau beberapa grup, Simpan, lalu "Kirim tes sekarang".',
     ],
   },
   {
@@ -53,7 +53,8 @@ const PROVIDERS: { value: NotifyProvider; label: string; tokenLabel: string; tar
 export default function NotifySettingsPage() {
   const { profile } = useAuth();
   const [data, setData] = useState<Resp | null>(null);
-  const [form, setForm] = useState({ enabled: false, provider: 'fonnte' as NotifyProvider, token: '', target: '', baseUrl: '' });
+  const [form, setForm] = useState({ enabled: false, provider: 'fonnte' as NotifyProvider, token: '', targets: [] as string[], baseUrl: '' });
+  const [manualTarget, setManualTarget] = useState('');
   const [report, setReport] = useState<Report | null>(null);
   const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -66,7 +67,7 @@ export default function NotifySettingsPage() {
       .then((r) => {
         if (!alive) return;
         setData(r);
-        setForm({ enabled: r.settings.enabled, provider: r.settings.provider, token: '', target: r.settings.target, baseUrl: r.settings.baseUrl });
+        setForm({ enabled: r.settings.enabled, provider: r.settings.provider, token: '', targets: r.settings.targets?.length ? r.settings.targets : r.settings.target ? [r.settings.target] : [], baseUrl: r.settings.baseUrl });
       })
       .catch((e) => alive && setMsg({ kind: 'error', text: e instanceof Error ? e.message : 'Gagal memuat.' }));
     return () => {
@@ -98,7 +99,7 @@ export default function NotifySettingsPage() {
       const r = await apiFetch<{ groups: { id: string; name: string }[] }>('/api/admin/notify/groups', { method: 'POST', body: JSON.stringify({ token: form.token || undefined }) });
       setGroups(r.groups);
       if (r.groups.length === 0) setMsg({ kind: 'info', text: 'Tidak ada grup ditemukan. Pastikan nomor bot sudah dimasukkan ke grup dan perangkat Fonnte tersambung.' });
-      else if (r.groups.length === 1) setForm((f) => ({ ...f, target: r.groups[0].id }));
+      else if (r.groups.length === 1 && form.targets.length === 0) setForm((f) => ({ ...f, targets: [r.groups[0].id] }));
     } catch (e) {
       setMsg({ kind: 'error', text: e instanceof Error ? e.message : 'Gagal mengambil daftar grup.' });
     } finally {
@@ -167,22 +168,45 @@ export default function NotifySettingsPage() {
               <Input id="token" type="password" autoComplete="off" value={form.token} onChange={(e) => setForm((f) => ({ ...f, token: e.target.value }))} placeholder={data?.settings.token ? `Tersimpan: ${data.settings.token} (kosongkan jika tidak diubah)` : 'Tempel token di sini'} />
             </div>
             <div>
-              <Label htmlFor="target">{prov.targetLabel}</Label>
-              <Input id="target" value={form.target} onChange={(e) => setForm((f) => ({ ...f, target: e.target.value }))} />
+              <Label>{prov.targetLabel}</Label>
+              {form.targets.length === 0 ? (
+                <p className="text-xs text-muted">Belum ada grup tujuan.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {form.targets.map((t) => (
+                    <li key={t} className="flex items-center justify-between gap-2 rounded-lg bg-surface px-3 py-1.5 text-sm text-ink">
+                      <span className="truncate">{groups.find((g) => g.id === t)?.name ? `${groups.find((g) => g.id === t)!.name} · ${t}` : t}</span>
+                      <button type="button" className="shrink-0 text-xs font-semibold text-danger hover:underline" onClick={() => setForm((f) => ({ ...f, targets: f.targets.filter((x) => x !== t) }))}>
+                        Hapus
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="mt-2 flex gap-2">
+                <Input value={manualTarget} onChange={(e) => setManualTarget(e.target.value)} placeholder="Tambah ID grup manual" />
+                <Button type="button" size="sm" variant="secondary" onClick={() => { const t = manualTarget.trim(); if (t && !form.targets.includes(t)) setForm((f) => ({ ...f, targets: [...f.targets, t] })); setManualTarget(''); }} disabled={!manualTarget.trim()}>
+                  Tambah
+                </Button>
+              </div>
               {form.provider === 'fonnte' && (
                 <div className="mt-2 space-y-2">
                   <Button type="button" size="sm" variant="secondary" loading={busy === 'groups'} onClick={fetchGroups} disabled={!form.token && !data?.settings.token}>
                     Ambil daftar grup dari Fonnte
                   </Button>
                   {groups.length > 0 && (
-                    <Select value={form.target} onChange={(e) => setForm((f) => ({ ...f, target: e.target.value }))}>
-                      <option value="">— Pilih grup —</option>
-                      {groups.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.name || g.id} · {g.id}
-                        </option>
-                      ))}
-                    </Select>
+                    <div className="max-h-56 space-y-1 overflow-y-auto rounded-xl border border-line p-2">
+                      {groups.map((g) => {
+                        const on = form.targets.includes(g.id);
+                        return (
+                          <label key={g.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm text-ink hover:bg-surface">
+                            <input type="checkbox" className="h-4 w-4 accent-brand" checked={on} onChange={(e) => setForm((f) => ({ ...f, targets: e.target.checked ? [...f.targets, g.id] : f.targets.filter((x) => x !== g.id) }))} />
+                            <span className="truncate">{g.name || g.id}</span>
+                            <span className="ml-auto shrink-0 text-[11px] text-muted">{g.id}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
               )}
@@ -198,7 +222,7 @@ export default function NotifySettingsPage() {
               Aktifkan pengiriman otomatis jam 09.00 & 14.00 WIB
             </label>
             <div className="flex flex-wrap gap-2">
-              <Button loading={busy === 'save'} onClick={save} disabled={!form.target}>
+              <Button loading={busy === 'save'} onClick={save} disabled={form.targets.length === 0}>
                 Simpan
               </Button>
               <Button variant="secondary" loading={busy === 'send'} onClick={sendNow} disabled={!data?.configured}>

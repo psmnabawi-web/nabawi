@@ -18,8 +18,14 @@ export function maskToken(t: string) {
   return t.length <= 6 ? '•'.repeat(t.length) : `${'•'.repeat(Math.max(4, t.length - 4))}${t.slice(-4)}`;
 }
 
+/** Daftar tujuan efektif: targets, atau target tunggal lama. */
+export function targetsOf(s: NotifySettings): string[] {
+  const list = (s.targets && s.targets.length ? s.targets : [s.target]).map((t) => t.trim()).filter(Boolean);
+  return [...new Set(list)];
+}
+
 export function isConfigured(s: NotifySettings) {
-  if (!s.token || !s.target) return false;
+  if (!s.token || targetsOf(s).length === 0) return false;
   if (s.provider === 'wablas' && !s.baseUrl) return false;
   return true;
 }
@@ -43,23 +49,37 @@ async function post(url: string, init: RequestInit): Promise<{ status: number; b
  * - wablas  : POST <baseUrl>/api/send-message (Authorization: <token>.<secret>), phone = id grup, isGroup=true
  * - telegram: POST https://api.telegram.org/bot<token>/sendMessage, chat_id = id grup (negatif)
  */
-export async function sendNotification(s: NotifySettings, text: string): Promise<{ ok: boolean; detail: string }> {
+export async function sendNotification(s: NotifySettings, text: string): Promise<{ ok: boolean; detail: string; results: { target: string; ok: boolean; detail: string }[] }> {
   if (!isConfigured(s)) throw new HttpError(400, 'Notifikasi belum dikonfigurasi (token/target kosong).');
+  const results: { target: string; ok: boolean; detail: string }[] = [];
+  for (const target of targetsOf(s)) {
+    try {
+      results.push({ target, ...(await sendOne(s, target, text)) });
+    } catch (e) {
+      results.push({ target, ok: false, detail: e instanceof Error ? e.message : 'gagal' });
+    }
+  }
+  const ok = results.every((r) => r.ok);
+  const detail = results.map((r) => `${r.target}: ${r.ok ? 'OK' : 'GAGAL'} ${r.detail.slice(0, 160)}`).join(' | ');
+  return { ok, detail, results };
+}
+
+async function sendOne(s: NotifySettings, target: string, text: string): Promise<{ ok: boolean; detail: string }> {
   let r: { status: number; body: string };
   if (s.provider === 'fonnte') {
-    r = await post('https://api.fonnte.com/send', { method: 'POST', headers: { Authorization: s.token, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ target: s.target, message: text, countryCode: '0' }) });
+    r = await post('https://api.fonnte.com/send', { method: 'POST', headers: { Authorization: s.token, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ target, message: text, countryCode: '0' }) });
     const ok = r.status < 300 && /"status"\s*:\s*true/.test(r.body);
     return { ok, detail: `${r.status} ${r.body}` };
   }
   if (s.provider === 'wablas') {
     const base = s.baseUrl.replace(/\/+$/, '');
-    r = await post(`${base}/api/send-message`, { method: 'POST', headers: { Authorization: s.token, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ phone: s.target, message: text, isGroup: 'true' }) });
+    r = await post(`${base}/api/send-message`, { method: 'POST', headers: { Authorization: s.token, 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ phone: target, message: text, isGroup: 'true' }) });
     const ok = r.status < 300 && /"status"\s*:\s*true/.test(r.body);
     return { ok, detail: `${r.status} ${r.body}` };
   }
   // telegram: Bot API memakai HTML/Markdown; teks kita pakai *bold* gaya WhatsApp -> ganti ke <b>
   const html = text.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] as string).replace(/\*([^*\n]+)\*/g, '<b>$1</b>');
-  r = await post(`https://api.telegram.org/bot${s.token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: s.target, text: html, parse_mode: 'HTML' }) });
+  r = await post(`https://api.telegram.org/bot${s.token}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: target, text: html, parse_mode: 'HTML' }) });
   const ok = r.status < 300 && /"ok"\s*:\s*true/.test(r.body);
   return { ok, detail: `${r.status} ${r.body}` };
 }

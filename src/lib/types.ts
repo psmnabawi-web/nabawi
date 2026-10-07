@@ -290,8 +290,10 @@ export interface NotifySettings {
   provider: NotifyProvider;
   /** Token perangkat (Fonnte), token.secret (Wablas), atau token bot (Telegram). Disimpan hanya di server. */
   token: string;
-  /** ID grup WhatsApp (xxx@g.us) atau chat_id grup Telegram (negatif). */
+  /** ID grup WhatsApp (xxx@g.us) atau chat_id grup Telegram (negatif). Dipertahankan untuk kompatibilitas; pakai targets. */
   target: string;
+  /** Daftar grup tujuan (bisa lebih dari satu). */
+  targets?: string[];
   /** Khusus Wablas: server perangkat, mis. https://bdg.wablas.com */
   baseUrl: string;
   /** Jam kirim (WIB), informasi saja: jadwal sebenarnya di Cloud Scheduler. */

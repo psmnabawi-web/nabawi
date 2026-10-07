@@ -54,7 +54,7 @@ async function handle(req: Request) {
     }
     const result = await sendNotification(settings, report.text);
     await recordSendResult(result.ok, result.detail);
-    await log(actor, result.ok ? 'SEND_SCORING_REPORT' : 'FAIL_SCORING_REPORT', { provider: settings.provider, pctStarted: report.pctStarted, started: report.started, total: report.totalStores, detail: result.detail.slice(0, 200) });
+    await log(actor, result.ok ? 'SEND_SCORING_REPORT' : 'FAIL_SCORING_REPORT', { provider: settings.provider, pctStarted: report.pctStarted, started: report.started, total: report.totalStores, targets: result.results.map((r) => `${r.target}:${r.ok ? 'OK' : 'GAGAL'}`), detail: result.detail.slice(0, 400) });
     if (!result.ok) return NextResponse.json({ sent: false, reason: `Provider menolak: ${result.detail}`, report }, { status: 502 });
     return NextResponse.json({ sent: true, report });
   } catch (err) {
