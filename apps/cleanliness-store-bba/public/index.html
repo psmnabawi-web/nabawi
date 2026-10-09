@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <title>Bangor Cleanliness Control</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="shortcut icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="favicon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="toast" class="toast"></div>
+<div id="bootOverlay" class="boot-overlay">
+  <div class="boot-card">
+    <img class="boot-brand-logo" src="bangor-logo.png" alt="Bangor">
+    <h2>Store Cleanliness Control</h2>
+    <p id="bootText" class="muted">Menghubungkan aplikasi...</p>
+  </div>
+</div>
+
+<div id="appView" class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="brand-logo" src="bangor-logo.png" alt="Bangor">
+      <div class="brand-sub">CLEANLINESS CONTROL</div>
+    </div>
+    <nav>
+      <button class="nav-item active" data-page="dashboard">
+        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9 21v-7h6v7"/></svg></span><span>Dashboard</span>
+      </button>
+      <button class="nav-item" data-page="capture">
+        <span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M8 5l1.5-2h5L16 5"/></svg></span><span>Evidence Kebersihan</span>
+      </button>
+      <div class="nav-section">MASTER</div>
+      <button class="nav-item" data-page="stores">
+        <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M4 21V8l8-5 8 5v13"/><path d="M8 21v-6h8v6M8 10h.01M12 10h.01M16 10h.01"/></svg></span><span>Master Store</span>
+      </button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="foot-label">MODE</div>
+      <div class="foot-value">AI Auto Scoring</div>
+      <div class="foot-sub">Tanpa QA manual</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button id="menuBtn" class="menu-btn">☰</button>
+      <div class="top-title"><h2 id="pageTitle">Dashboard</h2><p id="pageSubtitle" class="muted"></p></div>
+      <div class="topbar-right"><span id="connectionPill" class="connection-pill">Connecting...</span><div id="clock" class="clock"></div></div>
+    </header>
+
+    <section id="page-dashboard" class="page active">
+      <div class="welcome-row">
+        <div><span class="eyebrow">STORE CLEANLINESS CONTROL</span><h1>Dashboard Kebersihan</h1><p>Scoring foto otomatis oleh AI dan monitoring kontrol 3 shift dengan batas waktu submit.</p></div>
+        <div class="filters compact-filters">
+          <select id="dashStoreFilter"><option value="">Semua Store</option></select>
+          <select id="dashPeriod"><option value="30">30 Hari</option><option value="14">14 Hari</option><option value="7">7 Hari</option><option value="90">90 Hari</option></select>
+          <button id="refreshDash" class="btn secondary">Refresh</button>
+        </div>
+      </div>
+      <div id="kpis" class="kpi-grid"></div>
+      <div class="card daily-session-card">
+        <div class="card-head"><div><h3>Rekap Kontrol 3 Shift Hari Ini</h3><span class="muted">Shift 1 max 12:00 · Shift 2 max 17:00 · Shift 3 max 23:59</span></div><span id="dailyRecapDate" class="badge blue">-</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Store</th><th>Shift 1 ≤12:00</th><th>Shift 2 ≤17:00</th><th>Shift 3 ≤23:59</th><th>On-Time Compliance</th></tr></thead><tbody id="dailySessionRecap"></tbody></table></div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><div><h3>Trend Cleanliness Score</h3><span class="muted">Sesi lengkap</span></div></div><div id="trendChart" class="bar-chart"></div></div>
+        <div class="card"><div class="card-head"><div><h3>Score per Area</h3><span class="muted">Weighted AI score</span></div></div><div id="areaChart" class="category-bars"></div></div>
+      </div>
+      <div class="grid-2">
+        <div class="card"><div class="card-head"><div><h3>Titik Kontrol Terlemah</h3><span class="muted">Rata-rata score terendah</span></div></div><div class="table-wrap"><table><thead><tr><th>Titik</th><th>Area</th><th>Check</th><th>Avg Score</th><th>Status</th></tr></thead><tbody id="weakPoints"></tbody></table></div></div>
+        <div class="card"><div class="card-head"><div><h3>Performance per Store</h3><span class="muted">Sesi lengkap</span></div></div><div class="table-wrap"><table><thead><tr><th>Store</th><th>Sesi</th><th>Avg Score</th><th>Clean</th><th>Need Cleaning</th><th>Dirty</th><th>Status</th></tr></thead><tbody id="storeSummary"></tbody></table></div></div>
+      </div>
+      <div class="card"><div class="card-head"><div><h3>Recent Auto Scoring</h3><span class="muted">20 sesi terbaru</span></div></div><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Sesi</th><th>Store</th><th>Score</th><th>Progress</th><th>Petugas</th><th>Status</th></tr></thead><tbody id="recentScores"></tbody></table></div></div>
+    </section>
+
+    <section id="page-capture" class="page">
+      <div class="welcome-row capture-heading">
+        <div><span class="eyebrow">AI EVIDENCE CONTROL</span><h1>Dokumentasi & Scoring Otomatis</h1><p>Ambil foto kondisi aktual. Setelah foto dipilih, aplikasi langsung menganalisis dan memberi score.</p></div>
+      </div>
+      <div class="page-grid">
+        <div class="card sticky-card control-form-card">
+          <div class="form-icon">◎</div>
+          <h3>Data Control</h3>
+          <p class="muted form-intro">Pilih store terlebih dahulu. Nama crew otomatis dibatasi hanya crew yang terdaftar pada store tersebut.</p>
+          <label>Store<select id="captureStore"><option value="">Pilih store</option></select></label>
+          <label>Nama Crew<select id="captureOfficer" disabled><option value="">Pilih store terlebih dahulu</option></select></label>
+          <div class="auto-control-box">
+            <div class="auto-control-row"><span>Tanggal & Jam</span><b id="autoControlTime">-</b></div>
+            <div class="auto-control-row"><span>Shift Aktif</span><span id="autoSessionBadge" class="session-pill">-</span></div>
+            <div class="auto-control-row"><span>Batas Final Submit</span><b id="autoDeadline">-</b></div>
+            <div class="auto-control-note">Timestamp evidence dan final submit menggunakan waktu server WIB. Standar: Shift 1 maksimal 12:00 · Shift 2 maksimal 17:00 · Shift 3 maksimal 23:59. Submit setelah cut-off tercatat LATE.</div>
+          </div>
+          <div class="session-score-box">
+            <span id="sessionScoreLabel">Score Sementara</span><b id="currentSessionScore">-</b><small id="currentSessionStatus">Belum ada evidence yang dinilai</small>
+          </div>
+          <div class="audit-progress"><div class="progress-copy"><span><b id="evidenceCount">0</b>/<span id="evidenceTotal">0</span> scored</span><span id="progressPercent">0%</span></div><div class="progress-track"><div id="evidenceProgress" class="progress-fill"></div></div></div>
+          <button id="submitSessionScore" class="btn primary full submit-session-btn" disabled>Lengkapi 26/26 Evidence</button>
+          <div id="submitSessionHint" class="auto-score-note">Score final dapat disubmit setelah seluruh titik kontrol selesai dinilai AI. Compliance waktu mengikuti cut-off shift.</div>
+        </div>
+        <div>
+          <div class="instruction-card"><div class="instruction-icon">AI</div><div><b>Standar foto untuk auto scoring</b><span>Objek harus terlihat jelas, terang, dan sesuai titik kontrol. Foto salah/blur akan diberi status INVALID dan harus diulang.</span></div></div>
+          <div id="evidenceItems" class="audit-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="page-stores" class="page">
+      <div class="welcome-row capture-heading"><div><span class="eyebrow">MASTER DATA</span><h1>Master Store</h1><p>Master outlet dan crew mengikuti file 11 Store Crew.xlsx.</p></div></div>
+      <div class="card max-card">
+        <div class="card-head"><div><h3>Daftar Store</h3><span class="muted">Master aktif + jumlah crew terdaftar</span></div></div>
+        <div class="master-note">Master operasional dikunci mengikuti file XLSX. Penambahan store/crew dilakukan melalui update master agar mapping crew tetap valid.</div><form id="storeForm" class="inline-form hidden"><input id="storeCode" placeholder="Kode"><input id="storeName" placeholder="Nama store"><button class="btn primary">Tambah Store</button></form>
+        <div id="storeAdminList" class="simple-list"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="finalScoreModal" class="score-modal hidden" aria-hidden="true">
+  <div class="score-modal-backdrop" data-close-score-modal></div>
+  <div class="score-modal-card" role="dialog" aria-modal="true" aria-labelledby="finalScoreTitle">
+    <button class="score-modal-close" data-close-score-modal aria-label="Tutup">×</button>
+    <div class="score-modal-eyebrow">FINAL CLEANLINESS SCORE</div>
+    <h2 id="finalScoreTitle">Hasil Kebersihan Store</h2>
+    <div class="final-score-hero">
+      <div><span id="finalScoreValue">-</span><small>/100</small></div>
+      <span id="finalScoreBadge" class="final-score-badge">-</span>
+    </div>
+    <div id="finalScoreMeta" class="final-score-meta"></div>
+    <div id="finalScoreBreakdown" class="final-score-breakdown"></div>
+    <div id="finalScoreWarning" class="final-score-warning hidden"></div>
+    <div class="score-modal-actions">
+      <button class="btn secondary" data-close-score-modal>Tutup</button>
+      <button id="goDashboardAfterScore" class="btn primary">Lihat Dashboard</button>
+    </div>
+  </div>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

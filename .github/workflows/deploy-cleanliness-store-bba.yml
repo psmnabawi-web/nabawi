@@ -1,0 +1,60 @@
+name: Deploy Cleanliness Store BBA
+
+# App Bangor Cleanliness Control (https://cleanliness-store-bba.web.app): situs statis di apps/cleanliness-store-bba/public.
+#   push      → hanya tes (master data + script deploy terhadap API tiruan), tidak menyentuh situs
+#   manual    → "Run workflow": deploy public/ ke Firebase Hosting project cleanliness-store-bba
+# Login tanpa key: GitHub OIDC → Workload Identity (pool github-actions di project trecking-filter-oil-store)
+# → service account hosting-deployer@cleanliness-store-bba (Firebase Hosting Admin saja),
+# disiapkan sekali dengan apps/cleanliness-store-bba/setup-cloudshell.sh.
+on:
+  push:
+    branches: ["claude/upbeat-babbage-wb9ksk", "claude/adoring-dijkstra-78ese7", "main"]
+    paths: ["apps/cleanliness-store-bba/**", ".github/workflows/deploy-cleanliness-store-bba.yml"]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Paksa deploy walau versi live bukan versi snapshot / hasil workflow ini (menimpa versi asing)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-cleanliness-store-bba
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DO_DEPLOY: ${{ github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tes master data & script deploy (API tiruan)
+        working-directory: apps/cleanliness-store-bba
+        run: npm test
+      - name: Login Google (Workload Identity, tanpa key)
+        id: auth
+        if: ${{ env.DO_DEPLOY == 'true' }}
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: cleanliness-store-bba
+          workload_identity_provider: projects/696588727829/locations/global/workloadIdentityPools/github-actions/providers/nabawi-repo
+          service_account: hosting-deployer@cleanliness-store-bba.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/cloud-platform
+          create_credentials_file: false
+          export_environment_variables: false
+      - name: Terbitkan ke Firebase Hosting
+        if: ${{ env.DO_DEPLOY == 'true' }}
+        working-directory: apps/cleanliness-store-bba
+        env:
+          ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
+          FORCE_DEPLOY: ${{ inputs.force && '1' || '' }}
+        run: node scripts/deploy-hosting.mjs

@@ -1,0 +1,41 @@
+{
+  "site": "cleanliness-store-bba",
+  "version": "sites/cleanliness-store-bba/versions/0deb67c34a2cbd3f",
+  "status": "FINALIZED",
+  "releaseTime": "2026-08-25T07:47:36.295Z",
+  "releaseUser": "nabawim@gmail.com",
+  "deploymentTool": "cli-firebase",
+  "config": {
+    "headers": [
+      {
+        "headers": {
+          "Referrer-Policy": "strict-origin-when-cross-origin",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "X-Content-Type-Options": "nosniff"
+        },
+        "glob": "**/*.@(html|js|css)"
+      },
+      {
+        "headers": {
+          "X-Content-Type-Options": "nosniff",
+          "Referrer-Policy": "strict-origin-when-cross-origin"
+        },
+        "glob": "**"
+      }
+    ]
+  },
+  "files": [
+    "/__/firebase/init.js",
+    "/__/firebase/init.json",
+    "/app.js",
+    "/bangor-logo.png",
+    "/favicon.ico",
+    "/favicon.png",
+    "/firebase-config.js",
+    "/index.html",
+    "/master-data.js",
+    "/styles.css"
+  ],
+  "takenAt": "2026-10-09",
+  "note": "Snapshot versi live yang menjadi dasar public/. Diambil lewat Hosting REST API + unduhan dari situs publik (export-firebase-app.sh)."
+}
