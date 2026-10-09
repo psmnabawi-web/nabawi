@@ -23,7 +23,12 @@ export const STORE_MASTER = [
   {id:"store-dharmawangsa", code:"", name:"DHARMAWANGSA"},
   {id:"store-geluran-sidoarjo", code:"", name:"GELURAN SIDOARJO"},
   {id:"store-bukit-palma", code:"", name:"BUKIT PALMA"},
-  {id:"store-panglima-sudirman-lumajang", code:"", name:"PANGLIMA SUDIRMAN LUMAJANG"}
+  {id:"store-panglima-sudirman-lumajang", code:"", name:"PANGLIMA SUDIRMAN LUMAJANG"},
+  // Tambahan 9 Okt 2026: 4 store Yogyakarta (BBA Jakal UII, Demangan, Tajem, Jakal 88), crew ada di CREW_MASTER.
+  {id:"store-jakal-uii", code:"", name:"JAKAL UII"},
+  {id:"store-demangan", code:"", name:"DEMANGAN"},
+  {id:"store-tajem", code:"", name:"TAJEM"},
+  {id:"store-jakal-88", code:"", name:"JAKAL 88"}
 ];
 
 export const CREW_MASTER = [
@@ -87,7 +92,48 @@ export const CREW_MASTER = [
   {id:"BBT-1957", name:"Aletta Zoya Audina Pesik", storeId:"store-315", storeName:"ZAMRUD"},
   {id:"BBT-2178", name:"Ramadhan Karunia Putra", storeId:"store-315", storeName:"ZAMRUD"},
   {id:"BBT-2264", name:"Aditya Satya Ghani", storeId:"store-315", storeName:"ZAMRUD"},
-  {id:"BBT-2265", name:"Maulana Malikul Ibrohim Soleh", storeId:"store-315", storeName:"ZAMRUD"}
+  {id:"BBT-2265", name:"Maulana Malikul Ibrohim Soleh", storeId:"store-315", storeName:"ZAMRUD"},
+  // JAKAL UII: id crew sementara UII-NN (NIK belum diberikan), ganti dengan NIK asli bila sudah ada
+  {id:"UII-01", name:"Fauzan", storeId:"store-jakal-uii", storeName:"JAKAL UII"},
+  {id:"UII-02", name:"Asya", storeId:"store-jakal-uii", storeName:"JAKAL UII"},
+  {id:"UII-03", name:"Luna", storeId:"store-jakal-uii", storeName:"JAKAL UII"},
+  {id:"UII-04", name:"Ayu", storeId:"store-jakal-uii", storeName:"JAKAL UII"},
+  {id:"UII-05", name:"Sasya", storeId:"store-jakal-uii", storeName:"JAKAL UII"},
+  {id:"UII-06", name:"Arul", storeId:"store-jakal-uii", storeName:"JAKAL UII"},
+  {id:"UII-07", name:"Cello", storeId:"store-jakal-uii", storeName:"JAKAL UII"},
+  {id:"UII-08", name:"Geza", storeId:"store-jakal-uii", storeName:"JAKAL UII"},
+  {id:"UII-09", name:"Catur", storeId:"store-jakal-uii", storeName:"JAKAL UII"},
+  {id:"UII-10", name:"Gani", storeId:"store-jakal-uii", storeName:"JAKAL UII"},
+  // DEMANGAN: id crew sementara DMG-NN (NIK belum diberikan), ganti dengan NIK asli bila sudah ada
+  {id:"DMG-01", name:"Ahmad", storeId:"store-demangan", storeName:"DEMANGAN"},
+  {id:"DMG-02", name:"Sahrul", storeId:"store-demangan", storeName:"DEMANGAN"},
+  {id:"DMG-03", name:"Nico", storeId:"store-demangan", storeName:"DEMANGAN"},
+  {id:"DMG-04", name:"Elgius", storeId:"store-demangan", storeName:"DEMANGAN"},
+  {id:"DMG-05", name:"Intan", storeId:"store-demangan", storeName:"DEMANGAN"},
+  {id:"DMG-06", name:"Dhaka", storeId:"store-demangan", storeName:"DEMANGAN"},
+  {id:"DMG-07", name:"Fikri", storeId:"store-demangan", storeName:"DEMANGAN"},
+  {id:"DMG-08", name:"Yusuf", storeId:"store-demangan", storeName:"DEMANGAN"},
+  {id:"DMG-09", name:"Mirza", storeId:"store-demangan", storeName:"DEMANGAN"},
+  // TAJEM: id crew sementara TJM-NN (NIK belum diberikan), ganti dengan NIK asli bila sudah ada
+  {id:"TJM-01", name:"Aura", storeId:"store-tajem", storeName:"TAJEM"},
+  {id:"TJM-02", name:"Diyan", storeId:"store-tajem", storeName:"TAJEM"},
+  {id:"TJM-03", name:"Dayu", storeId:"store-tajem", storeName:"TAJEM"},
+  {id:"TJM-04", name:"Rian", storeId:"store-tajem", storeName:"TAJEM"},
+  {id:"TJM-05", name:"Angga", storeId:"store-tajem", storeName:"TAJEM"},
+  {id:"TJM-06", name:"Rifai", storeId:"store-tajem", storeName:"TAJEM"},
+  {id:"TJM-07", name:"Fay", storeId:"store-tajem", storeName:"TAJEM"},
+  {id:"TJM-08", name:"Raffi", storeId:"store-tajem", storeName:"TAJEM"},
+  // JAKAL 88: id crew sementara J88-NN (NIK belum diberikan), ganti dengan NIK asli bila sudah ada
+  {id:"J88-01", name:"Hevi", storeId:"store-jakal-88", storeName:"JAKAL 88"},
+  {id:"J88-02", name:"Keysa", storeId:"store-jakal-88", storeName:"JAKAL 88"},
+  {id:"J88-03", name:"Arivita", storeId:"store-jakal-88", storeName:"JAKAL 88"},
+  {id:"J88-04", name:"Abdul", storeId:"store-jakal-88", storeName:"JAKAL 88"},
+  {id:"J88-05", name:"Farel", storeId:"store-jakal-88", storeName:"JAKAL 88"},
+  {id:"J88-06", name:"Reza", storeId:"store-jakal-88", storeName:"JAKAL 88"},
+  {id:"J88-07", name:"Rofiq", storeId:"store-jakal-88", storeName:"JAKAL 88"},
+  {id:"J88-08", name:"Cahya", storeId:"store-jakal-88", storeName:"JAKAL 88"},
+  {id:"J88-09", name:"Adi", storeId:"store-jakal-88", storeName:"JAKAL 88"},
+  {id:"J88-10", name:"Aria", storeId:"store-jakal-88", storeName:"JAKAL 88"}
 ];
 
 export const CONTROL_POINTS = [

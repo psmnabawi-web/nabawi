@@ -13,6 +13,7 @@ const ORIGINAL = [
   ["store-938", "#938", "CIGANJUR JAGAKARSA"], ["store-711", "#711", "CIKANDE"], ["store-840", "#840", "JOMBANG"],
   ["store-metland-puri", "", "METLAND PURI"],
 ];
+const ADDED_YOGYA = { "JAKAL UII": ["UII", 10], "DEMANGAN": ["DMG", 9], "TAJEM": ["TJM", 8], "JAKAL 88": ["J88", 10] };
 const ADDED = [
   "BASUKI RAHMAT TUBAN", "KEDIRI WACHID HASYIM", "TENGGILIS", "LAMONGREJO LAMONGAN", "MULYOSARI", "KRIAN SIDOARJO",
   "GRESIK KOTA BARU", "KENJERAN SURABAYA", "KARANG PILANG", "DHARMAWANGSA", "GELURAN SIDOARJO", "BUKIT PALMA",
@@ -27,9 +28,9 @@ test("10 store lama tidak berubah (id, kode, nama)", () => {
   }
 });
 
-test("13 store baru ada, total 23, id/nama unik dan rapi", () => {
-  assert.equal(STORE_MASTER.length, ORIGINAL.length + ADDED.length);
-  for (const name of ADDED) {
+test("13 store Jawa Timur + 4 store Yogyakarta ada, total 27, id/nama unik dan rapi", () => {
+  assert.equal(STORE_MASTER.length, ORIGINAL.length + ADDED.length + Object.keys(ADDED_YOGYA).length);
+  for (const name of [...ADDED, ...Object.keys(ADDED_YOGYA)]) {
     const s = STORE_MASTER.find((x) => x.name === name);
     assert.ok(s, `store ${name} belum ada`);
     assert.equal(s.code, "", `${name}: kode store belum diketahui, harus kosong`);
@@ -57,6 +58,19 @@ test("daftar store yang belum punya crew hanya 13 store baru (menu Evidence belu
   const withCrew = new Set(CREW_MASTER.map((c) => c.storeId));
   const noCrew = STORE_MASTER.filter((s) => !withCrew.has(s.id)).map((s) => s.name).sort();
   assert.deepEqual(noCrew, [...ADDED].sort());
+});
+
+test("4 store Yogyakarta punya crew lengkap dengan id sementara PREFIX-NN", () => {
+  for (const [storeName, [prefix, count]] of Object.entries(ADDED_YOGYA)) {
+    const store = STORE_MASTER.find((s) => s.name === storeName);
+    const crew = CREW_MASTER.filter((c) => c.storeId === store.id);
+    assert.equal(crew.length, count, `${storeName}: jumlah crew`);
+    crew.forEach((c, i) => {
+      assert.equal(c.id, `${prefix}-${String(i + 1).padStart(2, "0")}`, `${storeName}: id crew urut`);
+      assert.match(c.name, /^[A-Z][a-z]+$/, `${storeName}: nama crew ${c.name}`);
+    });
+  }
+  assert.equal(CREW_MASTER.length, 61 + 37);
 });
 
 test("26 titik kontrol & bobot skor tidak berubah", () => {
