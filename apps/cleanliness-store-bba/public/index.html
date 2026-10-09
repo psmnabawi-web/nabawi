@@ -63,8 +63,9 @@
       </div>
       <div id="kpis" class="kpi-grid"></div>
       <div class="card daily-session-card">
-        <div class="card-head"><div><h3>Rekap Kontrol 3 Shift Hari Ini</h3><span class="muted">Shift 1 max 12:00 · Shift 2 max 17:00 · Shift 3 max 23:59</span></div><span id="dailyRecapDate" class="badge blue">-</span></div>
-        <div class="table-wrap"><table><thead><tr><th>Store</th><th>Shift 1 ≤12:00</th><th>Shift 2 ≤17:00</th><th>Shift 3 ≤23:59</th><th>On-Time Compliance</th></tr></thead><tbody id="dailySessionRecap"></tbody></table></div>
+        <div class="card-head"><div><h3>Rekap Kontrol 3 Shift Hari Ini</h3><span class="muted">Shift 1 max 12:00 · Shift 2 max 17:00 · Shift 3 max 23:59 · store bermasalah ditampilkan paling atas</span></div><span id="dailyRecapDate" class="badge blue">-</span></div>
+        <div id="dailyRecapSummary" class="recap-summary"></div>
+        <div class="table-wrap recap-wrap"><table><thead><tr><th>Store</th><th>Shift 1 ≤12:00</th><th>Shift 2 ≤17:00</th><th>Shift 3 ≤23:59</th><th>On-Time Compliance</th></tr></thead><tbody id="dailySessionRecap"></tbody></table></div>
       </div>
       <div class="grid-2">
         <div class="card"><div class="card-head"><div><h3>Trend Cleanliness Score</h3><span class="muted">Sesi lengkap</span></div></div><div id="trendChart" class="bar-chart"></div></div>
@@ -78,6 +79,11 @@
     </section>
 
     <section id="page-capture" class="page">
+      <div id="captureSticky" class="capture-sticky">
+        <div class="cs-copy"><b id="csCount">0/26</b><span id="csScore">Score -</span></div>
+        <div class="cs-track"><div id="csFill" class="cs-fill"></div></div>
+        <button id="csAction" class="btn secondary small" type="button">Titik berikutnya</button>
+      </div>
       <div class="welcome-row capture-heading">
         <div><span class="eyebrow">AI EVIDENCE CONTROL</span><h1>Dokumentasi & Scoring Otomatis</h1><p>Ambil foto kondisi aktual. Setelah foto dipilih, aplikasi langsung menganalisis dan memberi score.</p></div>
       </div>
@@ -103,16 +109,19 @@
         </div>
         <div>
           <div class="instruction-card"><div class="instruction-icon">AI</div><div><b>Standar foto untuk auto scoring</b><span>Objek harus terlihat jelas, terang, dan sesuai titik kontrol. Foto salah/blur akan diberi status INVALID dan harus diulang.</span></div></div>
+          <div id="captureLockNote" class="lock-note hidden"><b>Pilih store dan nama crew dulu</b><span>Tombol foto aktif setelah Data Control terisi, supaya evidence tercatat ke store dan crew yang benar.</span></div>
+          <nav id="areaNav" class="area-nav" aria-label="Lompat ke area"></nav>
           <div id="evidenceItems" class="audit-list"></div>
         </div>
       </div>
     </section>
 
     <section id="page-stores" class="page">
-      <div class="welcome-row capture-heading"><div><span class="eyebrow">MASTER DATA</span><h1>Master Store</h1><p>Master outlet dan crew mengikuti file 11 Store Crew.xlsx.</p></div></div>
+      <div class="welcome-row capture-heading"><div><span class="eyebrow">MASTER DATA</span><h1>Master Store</h1><p>Daftar store dan crew yang dipakai menu Evidence Kebersihan. Store tanpa crew belum bisa melakukan evidence.</p></div></div>
       <div class="card max-card">
         <div class="card-head"><div><h3>Daftar Store</h3><span class="muted">Master aktif + jumlah crew terdaftar</span></div></div>
-        <div class="master-note">Master operasional dikunci mengikuti file XLSX. Penambahan store/crew dilakukan melalui update master agar mapping crew tetap valid.</div><form id="storeForm" class="inline-form hidden"><input id="storeCode" placeholder="Kode"><input id="storeName" placeholder="Nama store"><button class="btn primary">Tambah Store</button></form>
+        <div class="master-note">Master store dan crew dikelola terpusat agar mapping crew ke store tetap valid. Untuk menambah atau mengubah store dan crew, kirim daftarnya ke admin aplikasi.</div>
+        <div class="master-tools"><input id="storeSearch" type="search" placeholder="Cari store, kode, atau nama crew" autocomplete="off"><span id="storeCount" class="muted tiny"></span></div><form id="storeForm" class="inline-form hidden"><input id="storeCode" placeholder="Kode"><input id="storeName" placeholder="Nama store"><button class="btn primary">Tambah Store</button></form>
         <div id="storeAdminList" class="simple-list"></div>
       </div>
     </section>

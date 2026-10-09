@@ -59,16 +59,24 @@ setInterval(updateClock,1000);updateClock();
 
 $('#evidenceTotal').textContent=CONTROL_POINTS.length;
 function crewForStore(storeId){return CREW_MASTER.filter(c=>c.storeId===storeId).sort((a,b)=>a.name.localeCompare(b.name,'id'))}
+function areaSlug(area){return String(area).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')}
+function captureReady(){return !!($('#captureStore')?.value&&$('#captureOfficer')?.value)}
+function updateCaptureAvailability(){const ready=captureReady();$('#evidenceItems')?.classList.toggle('locked',!ready);$('#captureLockNote')?.classList.toggle('hidden',ready)}
+function pendingPointIds(){return CONTROL_POINTS.filter(p=>!state.currentResults?.[p.id]).map(p=>p.id)}
+function scrollToNextPending(){const id=pendingPointIds()[0];if(!id)return;const card=$(`#card-${id}`);if(!card)return;card.scrollIntoView({behavior:'smooth',block:'center'});card.classList.add('flash');setTimeout(()=>card.classList.remove('flash'),1600)}
+function renderAreaNav(){const nav=$('#areaNav');if(!nav)return;nav.innerHTML=areas.map(area=>`<button type="button" class="area-chip" data-area="${areaSlug(area)}"><span>${esc(area)}</span><b></b></button>`).join('');$$('.area-chip',nav).forEach(b=>b.onclick=()=>{$(`#area-${b.dataset.area}`)?.scrollIntoView({behavior:'smooth',block:'start'})});updateAreaNav()}
+function updateAreaNav(){for(const area of areas){const chip=$(`.area-chip[data-area="${areaSlug(area)}"]`);if(!chip)continue;const items=CONTROL_POINTS.filter(p=>p.area===area),done=items.filter(p=>state.currentResults?.[p.id]).length;chip.querySelector('b').textContent=`${done}/${items.length}`;chip.classList.toggle('done',done===items.length);chip.classList.toggle('partial',done>0&&done<items.length)}}
 function renderCrewMaster(storeId=$('#captureStore')?.value||'',preferredId=''){
   const sel=$('#captureOfficer');if(!sel)return;
   const saved=preferredId||loadLocal('cleanliness_capture_officer_id'),list=crewForStore(storeId);
-  if(!storeId){sel.innerHTML='<option value="">Pilih store terlebih dahulu</option>';sel.disabled=true;return}
-  if(!list.length){sel.innerHTML='<option value="">Belum ada crew terdaftar untuk store ini</option>';sel.disabled=true;return}
+  if(!storeId){sel.innerHTML='<option value="">Pilih store terlebih dahulu</option>';sel.disabled=true;updateCaptureAvailability();return}
+  if(!list.length){sel.innerHTML='<option value="">Belum ada crew terdaftar untuk store ini</option>';sel.disabled=true;updateCaptureAvailability();return}
   sel.innerHTML='<option value="">Pilih crew</option>'+list.map(c=>`<option value="${esc(c.id)}">${esc(c.name)} — ${esc(c.id)}</option>`).join('');
   sel.disabled=false;if(list.some(c=>c.id===saved))sel.value=saved;
+  updateCaptureAvailability();
 }
 renderCrewMaster();
-$('#captureOfficer').addEventListener('change',e=>saveLocal('cleanliness_capture_officer_id',e.target.value));
+$('#captureOfficer').addEventListener('change',e=>{saveLocal('cleanliness_capture_officer_id',e.target.value);updateCaptureAvailability()});
 $('#captureStore').addEventListener('change',async e=>{saveLocal('cleanliness_capture_store_id',e.target.value);renderCrewMaster(e.target.value);await loadCurrentSession(true)});
 $('#menuBtn').onclick=()=>$('.sidebar').classList.toggle('open');
 $$('.nav-item').forEach(b=>b.onclick=()=>{showPage(b.dataset.page);$('.sidebar').classList.remove('open')});
@@ -183,10 +191,11 @@ async function loadCurrentSession(forceRender=true){
 }
 
 function renderCapture(){
-  $('#evidenceItems').innerHTML=areas.map(area=>{const items=CONTROL_POINTS.filter(x=>x.area===area);return`<section class="area-group"><div class="area-title"><h3>${esc(area)}</h3><span>${items.length} titik kontrol</span></div>${items.map(captureCard).join('')}</section>`}).join('');
-  $$('.evidence-file').forEach(i=>i.onchange=()=>handleEvidence(i));renderCaptureResults();updateSessionSummary();
+  $('#evidenceItems').innerHTML=areas.map(area=>{const items=CONTROL_POINTS.filter(x=>x.area===area);return`<section class="area-group" id="area-${areaSlug(area)}"><div class="area-title"><h3>${esc(area)}</h3><span>${items.length} titik kontrol</span></div>${items.map(captureCard).join('')}</section>`}).join('');
+  $$('.evidence-file').forEach(i=>i.onchange=()=>handleEvidence(i));renderAreaNav();updateCaptureAvailability();renderCaptureResults();updateSessionSummary();
 }
-function captureCard(it){return`<article class="audit-item" id="card-${it.id}"><div class="audit-item-head"><div><h4>${esc(it.title)}</h4><div class="audit-meta"><span>${esc(it.area)}</span></div></div><span class="code-pill">${it.id}</span></div><div class="photo-guide"><b>Foto yang diambil:</b> ${esc(it.photoGuide)}</div><ul class="criteria">${it.passCriteria.map(c=>`<li>${esc(c)}</li>`).join('')}</ul><label class="file-box" id="filebox-${it.id}">Ambil / Upload Foto <small class="muted">1 foto wajib, maksimum 2</small><input class="evidence-file" data-id="${it.id}" type="file" accept="image/*" capture="environment" multiple></label><div class="thumbs" id="thumb-${it.id}"></div><div id="result-${it.id}"></div></article>`}
+const CAMERA_ICON='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><circle cx="12" cy="12.5" r="3.2"/><path d="M8.5 6l1.4-2.2h4.2L15.5 6"/></svg>';
+function captureCard(it){return`<article class="audit-item" id="card-${it.id}"><div class="audit-item-head"><div><h4>${esc(it.title)}</h4><div class="audit-meta"><span>${esc(it.area)}</span><span class="point-state" id="state-${it.id}">Belum difoto</span></div></div><span class="code-pill">${it.id}</span></div><div class="photo-guide"><b>Foto yang diambil:</b> ${esc(it.photoGuide)}</div><ul class="criteria">${it.passCriteria.map(c=>`<li>${esc(c)}</li>`).join('')}</ul><label class="file-box" id="filebox-${it.id}"><span class="file-cta">${CAMERA_ICON}<b id="filelabel-${it.id}">Ambil Foto</b><small>1 foto wajib, maksimum 2</small></span><input class="evidence-file" data-id="${it.id}" type="file" accept="image/*" capture="environment" multiple></label><div class="thumbs" id="thumb-${it.id}"></div><div id="result-${it.id}"></div></article>`}
 function renderCaptureResults(){
   for(const p of CONTROL_POINTS){const r=state.currentResults[p.id];if(r)renderPointResult(p.id,r,state.resultUrls[p.id]||[])}
   hydrateResultUrls();
@@ -195,7 +204,11 @@ async function hydrateResultUrls(){
   for(const p of CONTROL_POINTS){const r=state.currentResults[p.id];if(!r||state.resultUrls[p.id]||!Array.isArray(r.evidencePaths))continue;try{const urls=await Promise.all(r.evidencePaths.map(x=>getDownloadURL(ref(storage,x))));state.resultUrls[p.id]=urls;renderPointResult(p.id,r,urls)}catch{}}
 }
 function renderPointResult(id,r,urls=[]){
-  const box=$(`#result-${id}`);if(!box)return;const issues=(r.issues||[]).length?`<ul class="score-issues">${r.issues.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'';const photos=urls.length?`<div class="thumbs">${urls.map(u=>`<a href="${esc(u)}" target="_blank"><img class="result-photo" src="${esc(u)}"></a>`).join('')}</div>`:'';
+  const box=$(`#result-${id}`);if(!box)return;
+  const card=$(`#card-${id}`),st=$(`#state-${id}`),fl=$(`#filelabel-${id}`);
+  if(card){card.classList.add('is-done');card.dataset.status=statusClass(r.status)}
+  if(st){st.textContent=`${fmtScore(r.score)} · ${statusText(r.status)}`;st.className=`point-state ${statusClass(r.status)}`}
+  if(fl)fl.textContent=r.status==='INVALID'?'Ambil Ulang Foto':'Foto Ulang';const issues=(r.issues||[]).length?`<ul class="score-issues">${r.issues.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:'';const photos=urls.length?`<div class="thumbs">${urls.map(u=>`<a href="${esc(u)}" target="_blank"><img class="result-photo" src="${esc(u)}"></a>`).join('')}</div>`:'';
   box.innerHTML=`<div class="score-result ${statusClass(r.status)}"><div class="score-result-head"><div><span class="score-number">${fmtScore(r.score)}</span><span class="tiny muted"> /100</span></div><span class="score-status">${statusText(r.status)}</span></div><div class="score-reason">${esc(r.reason||'')}</div>${issues}<div class="score-meta"><span>${esc(r.capturedDisplay||'')}</span><span>Confidence ${Math.round((Number(r.confidence)||0)*100)}%</span></div>${photos}${r.status==='INVALID'?'<div class="invalid-photo-note">Foto tidak cukup valid. Ambil ulang evidence.</div>':'<div class="retake-hint">Jika kondisi sudah diperbaiki, ambil foto ulang untuk mengganti score.</div>'}</div>`;
 }
 function setScoringUi(id,on,text='AI sedang menganalisis foto...'){
@@ -213,6 +226,12 @@ function updateSessionSummary(){
   const finalized=session.status==='AUTO_SCORED';
   if(btn){btn.disabled=!complete||state.finalizing;btn.textContent=finalized?'Lihat Score Final':complete?'Submit & Lihat Score Kebersihan':`Lengkapi ${done}/${CONTROL_POINTS.length} Evidence`;}
   if(hint){const dl=deadlineText(session.slot||operationalMeta(new Date()).slot);hint.textContent=finalized?`Final submit ${submissionText(session)} pada ${timeFromSession(session)} WIB.`:complete?`Seluruh titik sudah dinilai. Final submit maksimal ${dl} WIB agar tercatat ON TIME.`:`Masih ${CONTROL_POINTS.length-done} titik kontrol yang harus difoto. Batas submit ${dl} WIB.`;}
+  const csCount=$('#csCount'),csScore=$('#csScore'),csFill=$('#csFill'),csAction=$('#csAction');
+  if(csCount)csCount.textContent=`${done}/${CONTROL_POINTS.length}`;
+  if(csScore)csScore.textContent=score==null?'Belum ada score':`Score ${fmtScore(score)}`;
+  if(csFill)csFill.style.width=pct+'%';
+  if(csAction){csAction.disabled=state.finalizing||(complete&&!finalized&&btn?.disabled);csAction.textContent=finalized?'Lihat Score Final':complete?'Submit & Lihat Score':`Berikutnya (${CONTROL_POINTS.length-done})`;csAction.className='btn small '+(complete?'primary':'secondary');$('#captureSticky')?.classList.toggle('complete',complete)}
+  updateAreaNav();
 }
 
 function currentScoreSummary(){
@@ -274,6 +293,7 @@ async function handleEvidence(input){
 
 
 $('#submitSessionScore').onclick=submitAndOpenFinalScore;
+$('#csAction').onclick=()=>{const done=Object.keys(state.currentResults||{}).length;if(done===CONTROL_POINTS.length)return submitAndOpenFinalScore();if(!captureReady()){$('#captureStore').scrollIntoView({behavior:'smooth',block:'center'});return toast('Pilih store dan nama crew terlebih dahulu.',true)}scrollToNextPending()};
 $$('[data-close-score-modal]').forEach(x=>x.onclick=closeFinalScoreModal);
 $('#goDashboardAfterScore').onclick=async()=>{closeFinalScoreModal();await showPage('dashboard')};
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeFinalScoreModal()});
@@ -301,14 +321,33 @@ async function loadDashboard(){
 function sessionCell(a,mode='due',slot=''){
   const dl=deadlineText(slot);
   if(mode==='future')return`<div class="session-status future"><b>Belum waktunya</b><span>Max ${dl}</span></div>`;
-  if(mode==='active'&&!a)return`<div class="session-status active"><b>AKTIF</b><span>Max ${dl}</span></div>`;
+  if(mode==='active'&&!a)return`<div class="session-status active"><b>Belum mulai</b><span>Shift aktif · Max ${dl}</span></div>`;
   if(!a)return`<div class="session-status missing"><b>Belum Submit</b><span>Max ${dl}</span></div>`;
   if(a.status==='AUTO_SCORED'){const legacy=!a.submissionStatus,on=a.submissionStatus==='ON_TIME';return`<div class="session-status ${legacy?'done':on?'done':'late'}"><b>${fmtScore(a.score)} · ${legacy?'FINAL':on?'ON TIME':'LATE'}</b><span>${timeFromSession(a)} WIB${legacy?'':` · Max ${dl}`}</span></div>`;}
   if(a.status==='READY_TO_SUBMIT')return`<div class="session-status ready"><b>Siap Submit</b><span>${a.completedCount||CONTROL_POINTS.length}/${CONTROL_POINTS.length} · Max ${dl}</span></div>`;
   return`<div class="session-status pending"><b>${a.completedCount||0}/${CONTROL_POINTS.length}</b><span>Progress · Max ${dl}</span></div>`;
 }
 function renderDailyRecap(all,current,stores){
-  $('#dailyRecapDate').textContent=displayDateKey(current.operationalDate);const due=dueSlotsFor(current),active=current.slot;$('#dailySessionRecap').innerHTML=stores.length?stores.map(s=>{const cells=SESSION_ORDER.map(slot=>{const a=all.find(x=>x.storeId===s.id&&x.operationalDate===current.operationalDate&&x.slot===slot);const idx=SESSION_ORDER.indexOf(slot),activeIdx=SESSION_ORDER.indexOf(active),mode=due.includes(slot)?'due':slot===active?'active':idx>activeIdx?'future':'due';return`<td>${sessionCell(a,mode,slot)}</td>`}).join(''),onTime=due.filter(slot=>all.some(a=>a.storeId===s.id&&a.operationalDate===current.operationalDate&&a.slot===slot&&a.status==='AUTO_SCORED'&&a.submissionStatus==='ON_TIME')).length,pct=due.length?Math.round(onTime/due.length*100):100;return`<tr><td><b>${esc((s.code?s.code+' - ':'')+s.name)}</b></td>${cells}<td><span class="badge ${pct===100?'green':pct?'amber':'red'}">${due.length?`${onTime}/${due.length} · ${pct}%`:'Belum due'}</span></td></tr>`}).join(''):'<tr><td colspan="5">Belum ada Master Store.</td></tr>'
+  $('#dailyRecapDate').textContent=displayDateKey(current.operationalDate);const due=dueSlotsFor(current),active=current.slot,activeIdx=SESSION_ORDER.indexOf(active);
+  const today=a=>a.operationalDate===current.operationalDate;
+  const rows=stores.map(s=>{
+    const noCrew=!crewForStore(s.id).length,sess=slot=>all.find(x=>x.storeId===s.id&&today(x)&&x.slot===slot);
+    const dueSess=due.map(sess),onTime=dueSess.filter(a=>a?.status==='AUTO_SCORED'&&a.submissionStatus==='ON_TIME').length,late=dueSess.filter(a=>a?.status==='AUTO_SCORED'&&a.submissionStatus==='LATE').length,missing=due.length-onTime-late,act=sess(active);
+    // urutan: belum submit > terlambat > sedang progress > belum mulai > semua beres; store tanpa crew paling bawah
+    const rank=noCrew?9:missing?0:late?1:!act?2:act.status!=='AUTO_SCORED'?3:act.submissionStatus==='LATE'?4:5;
+    return{s,noCrew,onTime,late,missing,act,rank};
+  }).sort((a,b)=>a.rank-b.rank||a.s.name.localeCompare(b.s.name,'id'));
+  const withCrew=rows.filter(r=>!r.noCrew),chips=[];
+  for(const slot of due){const n=withCrew.length,ot=withCrew.filter(r=>all.some(a=>a.storeId===r.s.id&&today(a)&&a.slot===slot&&a.status==='AUTO_SCORED'&&a.submissionStatus==='ON_TIME')).length,lt=withCrew.filter(r=>all.some(a=>a.storeId===r.s.id&&today(a)&&a.slot===slot&&a.status==='AUTO_SCORED'&&a.submissionStatus==='LATE')).length,ms=n-ot-lt;chips.push(`<div class="recap-chip"><span>${SESSION_LABEL[slot]} · lewat ${deadlineText(slot)}</span><b class="g">${ot} on time</b>${lt?`<b class="r">${lt} late</b>`:''}<b class="${ms?'r':'m'}">${ms} belum submit</b></div>`)}
+  {const fin=withCrew.filter(r=>r.act?.status==='AUTO_SCORED').length,prog=withCrew.filter(r=>r.act&&r.act.status!=='AUTO_SCORED').length,idle=withCrew.length-fin-prog;chips.push(`<div class="recap-chip active"><span>${SESSION_LABEL[active]} · aktif s/d ${deadlineText(active)}</span><b class="g">${fin} final</b><b class="b">${prog} progress</b><b class="m">${idle} belum mulai</b></div>`)}
+  if(rows.length-withCrew.length)chips.push(`<div class="recap-chip muted-chip"><span>Tanpa crew</span><b class="m">${rows.length-withCrew.length} store belum bisa evidence</b></div>`);
+  $('#dailyRecapSummary').innerHTML=rows.length?chips.join(''):'';
+  $('#dailySessionRecap').innerHTML=rows.length?rows.map(({s,noCrew,onTime,missing,late,rank})=>{
+    const name=`<td class="store-cell"><b>${esc((s.code?s.code+' - ':'')+s.name)}</b>${noCrew?'<small class="no-crew">Belum ada crew terdaftar</small>':''}</td>`;
+    if(noCrew)return`<tr class="row-nocrew">${name}${SESSION_ORDER.map(()=>'<td><div class="session-status nocrew"><b>–</b><span>Belum ada crew</span></div></td>').join('')}<td><span class="badge">Belum aktif</span></td></tr>`;
+    const cells=SESSION_ORDER.map(slot=>{const a=all.find(x=>x.storeId===s.id&&today(x)&&x.slot===slot);const idx=SESSION_ORDER.indexOf(slot),mode=due.includes(slot)?'due':slot===active?'active':idx>activeIdx?'future':'due';return`<td>${sessionCell(a,mode,slot)}</td>`}).join('');
+    const pct=due.length?Math.round(onTime/due.length*100):100;
+    return`<tr class="${rank===0?'row-missing':rank===1?'row-late':''}">${name}${cells}<td><span class="badge ${pct===100?'green':pct?'amber':'red'}">${due.length?`${onTime}/${due.length} · ${pct}%`:'Belum due'}</span>${missing&&due.length?`<small class="recap-note">${missing} shift belum submit</small>`:late?`<small class="recap-note">${late} shift terlambat</small>`:''}</td></tr>`}).join(''):'<tr><td colspan="5">Belum ada Master Store.</td></tr>'
 }
 function renderTrend(complete){const m={};complete.forEach(a=>(m[a.operationalDate]??=[]).push(Number(a.score)||0));const keys=Object.keys(m).sort().slice(-14);$('#trendChart').innerHTML=keys.length?keys.map(d=>{const v=m[d].reduce((a,b)=>a+b,0)/m[d].length;return`<div class="bar-col"><span class="bar-value">${v.toFixed(0)}</span><div class="bar" style="height:${Math.max(2,v)}%"></div><span class="bar-label">${d.slice(5)}</span></div>`}).join(''):'<div class="empty-state">Belum ada sesi lengkap.</div>'}
 function calcAreaScore(a,area){if(Number.isFinite(a.areaScores?.[area]))return a.areaScores[area];const pts=CONTROL_POINTS.filter(p=>p.area===area&&a.results?.[p.id]),w=pts.reduce((s,p)=>s+p.weight,0),e=pts.reduce((s,p)=>s+p.weight*(Number(a.results[p.id].score)||0)/100,0);return w?e/w*100:null}
@@ -318,6 +357,14 @@ function renderStores(complete){const ids=[...new Set(complete.map(a=>a.storeId)
 function renderRecent(all){const rows=[...all].sort((a,b)=>{const ad=a.submittedAt?.toDate?.()||a.updatedAt?.toDate?.()||a.createdAt?.toDate?.()||new Date(0),bd=b.submittedAt?.toDate?.()||b.updatedAt?.toDate?.()||b.createdAt?.toDate?.()||new Date(0);return bd-ad}).slice(0,20);$('#recentScores').innerHTML=rows.length?rows.map(a=>{const final=a.status==='AUTO_SCORED',sub=final?(a.submissionStatus||'LEGACY'):a.status==='READY_TO_SUBMIT'?'READY_TO_SUBMIT':'IN_PROGRESS';return`<tr><td>${displayDateKey(a.operationalDate)}</td><td><span class="badge blue">${esc(a.slotLabel||a.slot||'-')}</span><br><small>Max ${deadlineText(a.slot)} WIB</small></td><td><b>${esc(a.storeName||'-')}</b></td><td><b>${a.completedCount?fmtScore(a.score):'-'}</b></td><td>${a.completedCount||0}/${CONTROL_POINTS.length}</td><td>${esc(a.officerName||'-')}${a.officerId?`<br><small>${esc(a.officerId)}</small>`:''}</td><td><span class="badge ${badge(sub)}">${sub==='ON_TIME'?'ON TIME':sub==='LATE'?'LATE':sub==='LEGACY'?'FINAL':sub==='READY_TO_SUBMIT'?'SIAP SUBMIT':'IN PROGRESS'}</span>${final?`<br><small>${timeFromSession(a)} WIB</small>`:''}</td></tr>`}).join(''):'<tr><td colspan="7">Belum ada auto scoring.</td></tr>'}
 
 $('#storeForm').onsubmit=async e=>{e.preventDefault();const code=$('#storeCode').value.trim().toUpperCase(),name=$('#storeName').value.trim();if(!code||!name)return;await addDoc(collection(db,'stores'),{code,name,active:true,createdAt:serverTimestamp()});$('#storeCode').value='';$('#storeName').value='';toast('Store ditambahkan.');await loadStoresAdmin();await loadStores()};
-async function loadStoresAdmin(){await loadStores();$('#storeAdminList').innerHTML=state.stores.map(s=>{const n=crewForStore(s.id).length;return`<div class="simple-row"><div><b>${esc((s.code?s.code+' · ':'')+s.name)}</b><small>${n} crew terdaftar dari master XLSX</small></div><span class="badge green">${n} CREW</span></div>`}).join('')||'<p class="muted">Belum ada store.</p>'}
+async function loadStoresAdmin(){await loadStores();renderStoresAdmin()}
+function renderStoresAdmin(){
+  const q=($('#storeSearch')?.value||'').trim().toLowerCase();
+  const rows=state.stores.filter(s=>!q||`${s.code} ${s.name}`.toLowerCase().includes(q)||crewForStore(s.id).some(c=>c.name.toLowerCase().includes(q)||c.id.toLowerCase().includes(q)));
+  const withCrew=state.stores.filter(s=>crewForStore(s.id).length).length;
+  if($('#storeCount'))$('#storeCount').textContent=`${rows.length} dari ${state.stores.length} store · ${withCrew} store punya crew · ${CREW_MASTER.length} crew`;
+  $('#storeAdminList').innerHTML=rows.map(s=>{const crew=crewForStore(s.id),n=crew.length;return`<details class="store-row${n?'':' no-crew'}"${q&&n?' open':''}><summary><div><b>${esc((s.code?s.code+' · ':'')+s.name)}</b><small>${n?`${n} crew terdaftar · klik untuk lihat nama`:'Belum ada crew, menu Evidence belum bisa dipakai'}</small></div><span class="badge ${n?'green':'amber'}">${n?n+' CREW':'BELUM ADA CREW'}</span></summary>${n?`<ul class="crew-list">${crew.map(c=>`<li><span>${esc(c.name)}</span><small>${esc(c.id)}</small></li>`).join('')}</ul>`:'<p class="crew-empty">Kirim daftar nama crew store ini ke admin aplikasi untuk diaktifkan.</p>'}</details>`}).join('')||'<p class="muted">Tidak ada store yang cocok dengan pencarian.</p>'
+}
+$('#storeSearch')?.addEventListener('input',renderStoresAdmin);
 
 boot();

@@ -35,6 +35,24 @@ Script `scripts/deploy-hosting.mjs` menolak deploy bila versi live bukan versi s
 sendiri, supaya deploy dari tempat lain tidak tertimpa tanpa sengaja. `FORCE_DEPLOY=1` (atau input *force* di workflow)
 memaksa. Rollback: Firebase Console → Hosting → riwayat rilis → *Rollback* ke versi sebelumnya.
 
+## Pembaruan UX (Okt 2026)
+
+- **Evidence (crew, HP):** bar progres sticky dengan tombol *Berikutnya* ke titik yang belum difoto, chip navigasi per area
+  dengan progres (mis. Kitchen Equipment 2/6), kartu berpenanda warna status, tombol *Ambil Foto / Foto Ulang* yang besar
+  (tanpa teks bawaan browser), dan tombol foto terkunci sampai store + crew dipilih.
+- **Dashboard:** rekap 3 shift diurutkan dari store bermasalah (belum submit, terlambat, belum mulai, progress) ke yang
+  beres; ringkasan per shift di atas tabel; store tanpa crew ditandai dan ditaruh paling bawah; kolom store sticky saat
+  tabel digeser di HP; KPI 2 kolom di HP.
+- **Master Store:** pencarian store/kode/nama crew, daftar crew per store (klik baris), badge *BELUM ADA CREW*.
+- Perbaikan bug lama: halaman melebar keluar layar di HP (Dashboard & Evidence), teks jumlah crew menempel pada nama store.
+
+Cek visual sebelum deploy (butuh Playwright + Chromium):
+
+```bash
+NODE_PATH=$(npm root -g) node tools/preview.mjs public /tmp/preview-out        # screenshot desktop + HP, deteksi overflow
+INTERACT=1 NODE_PATH=$(npm root -g) node tools/preview.mjs public /tmp/preview-out   # uji alur UX (PASS/FAIL)
+```
+
 ## Tes
 
 ```bash

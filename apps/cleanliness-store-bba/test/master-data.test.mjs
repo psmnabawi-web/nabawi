@@ -94,6 +94,17 @@ test("public/ lengkap dan sama persis dengan daftar file versi live (minus file 
   assert.ok(app.includes('from "./master-data.js"') && app.includes('from "./firebase-config.js"'));
 });
 
+test("elemen UX (bar progres, navigasi area, kunci foto, ringkasan rekap, pencarian master) ada di HTML dan dipakai app.js", () => {
+  const html = readFileSync(join(APP, "public", "index.html"), "utf8");
+  const app = readFileSync(join(APP, "public", "app.js"), "utf8");
+  for (const id of ["captureSticky", "csAction", "areaNav", "captureLockNote", "dailyRecapSummary", "storeSearch", "storeCount"]) {
+    assert.ok(html.includes(`id="${id}"`), `index.html tanpa #${id}`);
+    assert.ok(app.includes(`#${id}`), `app.js tidak memakai #${id}`);
+  }
+  assert.ok(!html.includes("11 Store Crew.xlsx"), "teks lama XLSX masih ada");
+  assert.ok(app.includes("Belum ada crew terdaftar") && app.includes("renderStoresAdmin"));
+});
+
 test("setup-cloudshell.sh mengunduh semua file public/ + script + snapshot", () => {
   const sh = readFileSync(join(APP, "setup-cloudshell.sh"), "utf8");
   for (const n of readdirSync(join(APP, "public"))) assert.ok(sh.includes(`public/${n}`), `setup-cloudshell.sh tidak mengunduh public/${n}`);
