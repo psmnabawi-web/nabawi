@@ -36,7 +36,7 @@ export async function analyzeProduct(input: Omit<ProductAnalyzeInput, 'measureFi
   const model = aiModel();
   const measureFields = MEASURE_FIELDS[input.product.id];
   const full: ProductAnalyzeInput = { ...input, measureFields };
-  const { data, model: used } = await generateJsonWithGoogle({
+  const { data, model: used, usage } = await generateJsonWithGoogle({
     model,
     systemInstruction: PRODUCT_SYSTEM_PROMPT,
     parts: [
@@ -96,7 +96,7 @@ export async function analyzeProduct(input: Omit<ProductAnalyzeInput, 'measureFi
       recommendations: strArr(data.recommendations),
       missingEvidence: strArr(data.missingEvidence),
       photoCount: input.images.length,
-      adjustments,
+      adjustments: usage ? [...adjustments, `token: ${usage.promptTokens} in / ${usage.outputTokens + usage.thoughtTokens} out`] : adjustments,
     },
   };
 }

@@ -72,6 +72,8 @@ export function buildUserText(input: AnalyzeInput): string {
 
 /** Hasil mentah yang harus dikembalikan provider (sebelum dinormalisasi ke AiResult). */
 export interface RawAiOutput {
+  /** Konsumsi token (untuk pemantauan biaya). */
+  usage?: { promptTokens: number; outputTokens: number; thoughtTokens: number; totalTokens: number };
   photoValid: boolean;
   photoIssue: string | null;
   score: number | null;

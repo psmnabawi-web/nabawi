@@ -44,3 +44,6 @@ next-env.d.ts
 serviceAccount*.json
 .firebase/
 firebase-debug.log
+
+# skrip uji lokal
+.ab.ts

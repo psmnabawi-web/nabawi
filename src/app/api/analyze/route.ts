@@ -130,7 +130,7 @@ export async function POST(req: Request) {
       action: 'ANALYZE_ITEM',
       entity: 'auditItem',
       entityId: `${audit.id}/${item.id}`,
-      details: { area: item.area, score: ai.score, photoValid: ai.photoValid, coverage: ai.coverage ?? null, photos: images.length, confidence: ai.confidence, model: ai.model, attempt: attempts, adjustments: ai.adjustments ?? [] },
+      details: { area: item.area, score: ai.score, photoValid: ai.photoValid, coverage: ai.coverage ?? null, photos: images.length, confidence: ai.confidence, model: ai.model, attempt: attempts, adjustments: ai.adjustments ?? [], tokens: ai.usage ?? null },
     });
 
     const fresh = await itemRef.get();

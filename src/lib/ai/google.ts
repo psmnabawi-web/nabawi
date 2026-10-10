@@ -81,6 +81,27 @@ const RETRY_DELAYS_MS = [12_000, 24_000]; // free tier Gemini dibatasi per menit
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+export interface GeminiUsage {
+  promptTokens: number;
+  outputTokens: number;
+  thoughtTokens: number;
+  totalTokens: number;
+}
+
+/** Pengaturan hemat biaya lewat env (tanpa ubah kode): AI_THINKING_LEVEL, AI_MEDIA_RESOLUTION, AI_MAX_OUTPUT_TOKENS. */
+export function thinkingLevelFromEnv(def: ThinkingLevel = ThinkingLevel.HIGH): ThinkingLevel {
+  const v = (process.env.AI_THINKING_LEVEL ?? '').toLowerCase();
+  return v === 'minimal' ? ThinkingLevel.MINIMAL : v === 'low' ? ThinkingLevel.LOW : v === 'medium' ? ThinkingLevel.MEDIUM : v === 'high' ? ThinkingLevel.HIGH : def;
+}
+export function mediaResolutionFromEnv(def: MediaResolution = MediaResolution.MEDIA_RESOLUTION_HIGH): MediaResolution {
+  const v = (process.env.AI_MEDIA_RESOLUTION ?? '').toLowerCase();
+  return v === 'low' ? MediaResolution.MEDIA_RESOLUTION_LOW : v === 'medium' ? MediaResolution.MEDIA_RESOLUTION_MEDIUM : v === 'high' ? MediaResolution.MEDIA_RESOLUTION_HIGH : def;
+}
+/** Model Gemma (gratis di Gemini API) tidak mendukung systemInstruction, thinking, mediaResolution, dan JSON schema: prompt digabung, JSON diminta lewat teks. */
+export function isGemmaModel(model: string) {
+  return /^gemma/i.test(model);
+}
+
 export interface GeminiJsonRequest {
   model: string;
   systemInstruction: string;
@@ -95,22 +116,30 @@ export interface GeminiJsonRequest {
  * Panggilan generik Gemini dengan structured output (JSON schema), retry rate-limit, dan pemetaan error.
  * Dipakai oleh analisa kebersihan dan audit kualitas produk.
  */
-export async function generateJsonWithGoogle(req: GeminiJsonRequest): Promise<{ data: Record<string, unknown>; model: string }> {
+export async function generateJsonWithGoogle(req: GeminiJsonRequest): Promise<{ data: Record<string, unknown>; model: string; usage: GeminiUsage }> {
   const ai = getClient();
-  const request = {
-    model: req.model,
-    contents: [{ role: 'user', parts: req.parts }],
-    config: {
-      systemInstruction: req.systemInstruction,
-      responseMimeType: 'application/json',
-      responseJsonSchema: req.schema,
-      temperature: 0,
-      // resolusi media tinggi + thinking HIGH: AI memeriksa detail kecil (kilap minyak, nat, sudut) lebih teliti
-      mediaResolution: MediaResolution.MEDIA_RESOLUTION_HIGH,
-      thinkingConfig: { thinkingLevel: req.thinkingLevel ?? ThinkingLevel.HIGH },
-      maxOutputTokens: req.maxOutputTokens ?? 16384, // termasuk token thinking pada Gemini 3.x; rencana perbaikan bisa panjang
-    },
-  };
+  const gemma = isGemmaModel(req.model);
+  const maxOutputTokens = req.maxOutputTokens ?? Number(process.env.AI_MAX_OUTPUT_TOKENS || 16384); // termasuk token thinking pada Gemini 3.x
+  const request = gemma
+    ? {
+        model: req.model,
+        contents: [{ role: 'user', parts: [{ text: `${req.systemInstruction}\n\nFORMAT JAWABAN: hanya JSON valid (tanpa teks lain, tanpa code fence) yang mengikuti skema berikut:\n${JSON.stringify(req.schema)}` }, ...req.parts] }],
+        config: { temperature: 0, maxOutputTokens: Math.min(maxOutputTokens, 8192) },
+      }
+    : {
+        model: req.model,
+        contents: [{ role: 'user', parts: req.parts }],
+        config: {
+          systemInstruction: req.systemInstruction,
+          responseMimeType: 'application/json',
+          responseJsonSchema: req.schema,
+          temperature: 0,
+          // resolusi media & thinking bisa diturunkan lewat env untuk menghemat token (default HIGH/HIGH)
+          mediaResolution: mediaResolutionFromEnv(),
+          thinkingConfig: { thinkingLevel: req.thinkingLevel ?? thinkingLevelFromEnv() },
+          maxOutputTokens,
+        },
+      };
 
   let lastErr: unknown = null;
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
@@ -127,8 +156,10 @@ export async function generateJsonWithGoogle(req: GeminiJsonRequest): Promise<{ 
         console.error('[ai/google] respons kosong', JSON.stringify({ finish, usage: response.usageMetadata }));
         throw new HttpError(502, 'AI tidak mengembalikan hasil. Coba analisa ulang.');
       }
+      const u = response.usageMetadata;
+      const usage: GeminiUsage = { promptTokens: u?.promptTokenCount ?? 0, outputTokens: u?.candidatesTokenCount ?? 0, thoughtTokens: u?.thoughtsTokenCount ?? 0, totalTokens: u?.totalTokenCount ?? 0 };
       try {
-        return { data: parseJson(text), model: response.modelVersion ?? req.model };
+        return { data: parseJson(text), model: response.modelVersion ?? req.model, usage };
       } catch (e) {
         console.error('[ai/google] output bukan JSON', JSON.stringify({ finish, usage: response.usageMetadata, head: text.slice(0, 400) }));
         if (finish === 'MAX_TOKENS') throw new HttpError(502, 'Output AI terpotong (batas token). Coba analisa ulang.');
@@ -159,7 +190,7 @@ export async function generateJsonWithGoogle(req: GeminiJsonRequest): Promise<{ 
 }
 
 export async function analyzeWithGoogle(input: AnalyzeInput, model: string): Promise<RawAiOutput> {
-  const { data, model: used } = await generateJsonWithGoogle({
+  const { data, model: used, usage } = await generateJsonWithGoogle({
     model,
     systemInstruction: SYSTEM_PROMPT,
     parts: [
@@ -168,10 +199,11 @@ export async function analyzeWithGoogle(input: AnalyzeInput, model: string): Pro
     ],
     schema: RESPONSE_SCHEMA as unknown as Record<string, unknown>,
   });
-  return normalize(data, used);
+  return { ...normalize(data, used), usage };
 }
 
-function parseJson(text: string): Record<string, unknown> {
+function parseJson(raw: string): Record<string, unknown> {
+  const text = raw.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
   try {
     return JSON.parse(text) as Record<string, unknown>;
   } catch {

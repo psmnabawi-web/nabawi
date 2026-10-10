@@ -68,6 +68,8 @@ export interface AiResult {
   confidence: 'high' | 'medium' | 'low';
   model: string;
   analyzedAt: number;
+  /** Konsumsi token analisa ini (pemantauan biaya). */
+  usage?: { promptTokens: number; outputTokens: number; thoughtTokens: number; totalTokens: number };
 }
 
 export interface AttemptRecord {
