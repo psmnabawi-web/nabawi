@@ -35,6 +35,14 @@ Script `scripts/deploy-hosting.mjs` menolak deploy bila versi live bukan versi s
 sendiri, supaya deploy dari tempat lain tidak tertimpa tanpa sengaja. `FORCE_DEPLOY=1` (atau input *force* di workflow)
 memaksa. Rollback: Firebase Console → Hosting → riwayat rilis → *Rollback* ke versi sebelumnya.
 
+## Desain visual (Okt 2026)
+
+Palet diturunkan dari logo Bangor: lime (`--brand`) sebagai aksen progres/aktif, navy gelap untuk sidebar, latar abu lembut
+dengan kartu putih, font Inter. Token warna, radius, dan bayangan ada di `:root` pada `public/styles.css`.
+Di layar ≤ 900px sidebar diganti **bottom navigation** (Dashboard, Evidence, Master), logo pindah ke topbar, dan toast
+muncul di atas bottom nav. Semua nama class dipertahankan sehingga `app.js` tidak bergantung pada tampilan.
+Pratinjau layar boot dan modal skor final: `EXTRA=1 NODE_PATH=$(npm root -g) node tools/preview.mjs public /tmp/preview-out`.
+
 ## Pembaruan UX (Okt 2026)
 
 - **Evidence (crew, HP):** bar progres sticky dengan tombol *Berikutnya* ke titik yang belum difoto, chip navigasi per area

@@ -76,9 +76,10 @@ const browser = await chromium.launch();
 async function shoot(name, { width, height, mobile = false, page: pageName = "dashboard", before, scrolls = [] } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile, timezoneId: "Asia/Jakarta", locale: "id-ID" });
   await ctx.route("**/www.gstatic.com/**", (route) => { const file = route.request().url().split("/").pop(); route.fulfill({ status: 200, contentType: "text/javascript", body: stub[file] || "export default {}" }); });
+  await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
   await ctx.addInitScript((f) => { globalThis.__fake = f; localStorage.setItem("cleanliness_capture_store_id", f.capStoreId); localStorage.setItem("cleanliness_capture_officer_id", f.capCrewId); }, { ...fake, capStoreId: capStore.id, capCrewId: capCrew.id });
   const page = await ctx.newPage();
-  const errors = []; page.on("pageerror", (e) => errors.push(e.message)); page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+  const errors = []; page.on("pageerror", (e) => errors.push(e.message)); page.on("console", (m) => { if (m.type() === "error" && !/ERR_FAILED|fonts\.g/.test(m.text())) errors.push(m.text()); });
   await page.goto(base + "/", { waitUntil: "networkidle" });
   await page.waitForSelector("#bootOverlay.hidden", { state: "attached", timeout: 15000 });
   if (pageName !== "dashboard") { await page.evaluate((p) => document.querySelector(`.nav-item[data-page="${p}"]`).click(), pageName); await page.waitForTimeout(700); }
@@ -96,6 +97,7 @@ if (process.env.INTERACT) {
   // Uji interaksi UX: tombol "Berikutnya", kunci foto saat store tanpa crew, pencarian master store.
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, timezoneId: "Asia/Jakarta", locale: "id-ID" });
   await ctx.route("**/www.gstatic.com/**", (route) => { const file = route.request().url().split("/").pop(); route.fulfill({ status: 200, contentType: "text/javascript", body: stub[file] || "export default {}" }); });
+  await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
   await ctx.addInitScript((f) => { globalThis.__fake = f; localStorage.setItem("cleanliness_capture_store_id", f.capStoreId); localStorage.setItem("cleanliness_capture_officer_id", f.capCrewId); }, { ...fake, capStoreId: capStore.id, capCrewId: capCrew.id });
   const page = await ctx.newPage(); const errors = []; page.on("pageerror", (e) => errors.push(e.message));
   const check = (name, ok, extra = "") => console.log(`${ok ? "PASS" : "FAIL"}  ${name}${extra ? "  (" + extra + ")" : ""}`);
@@ -129,6 +131,27 @@ if (process.env.INTERACT) {
   check("cari 'fauzan' → 1 store (JAKAL UII) terbuka dengan daftar crew", found.length === 1 && found[0].name === "JAKAL UII" && found[0].open && found[0].crew.includes("Fauzan"), JSON.stringify(found.map((f) => f.name)));
   check("tanpa error JavaScript", errors.length === 0, errors.join(" | ").slice(0, 200));
   await ctx.close(); await browser.close(); server.close(); process.exit(0);
+}
+if (process.env.EXTRA) {
+  for (const [name, vp, mobile] of [["desktop", { width: 1440, height: 900 }, false], ["mobile", { width: 390, height: 844 }, true]]) {
+    const ctx = await browser.newContext({ viewport: vp, deviceScaleFactor: mobile ? 2 : 1, isMobile: mobile, hasTouch: mobile, timezoneId: "Asia/Jakarta", locale: "id-ID" });
+    await ctx.route("**/www.gstatic.com/**", (route) => { const file = route.request().url().split("/").pop(); route.fulfill({ status: 200, contentType: "text/javascript", body: stub[file] || "export default {}" }); });
+    await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.abort());
+    await ctx.addInitScript((f) => { globalThis.__fake = f; }, fake);
+    const page = await ctx.newPage(); await page.goto(base + "/", { waitUntil: "networkidle" }); await page.waitForSelector("#bootOverlay.hidden", { state: "attached" });
+    // layar boot
+    await page.evaluate(() => { document.querySelector("#bootOverlay").classList.remove("hidden"); document.querySelector("#bootText").textContent = "Menghubungkan aplikasi..."; });
+    await page.waitForTimeout(200); await page.screenshot({ path: join(OUT, `${name}-boot.png`) });
+    await page.evaluate(() => document.querySelector("#bootOverlay").classList.add("hidden"));
+    // modal skor final dengan contoh isi
+    await page.evaluate(() => { const $ = (s) => document.querySelector(s); $("#finalScoreValue").textContent = "87.4"; $("#finalScoreBadge").textContent = "GOOD"; $("#finalScoreBadge").className = "final-score-badge green";
+      $("#finalScoreMeta").innerHTML = '<div><span>Store</span><b>JAKAL UII</b></div><div><span>Crew</span><b>Fauzan</b></div><div><span>Shift</span><b>Shift 1 · Max 12:00 WIB</b></div><div><span>Submission</span><b><span class="badge green">ON TIME</span> 10:42 WIB</b></div>';
+      $("#finalScoreBreakdown").innerHTML = '<div class="final-mini clean"><span>Bersih</span><b>21</b></div><div class="final-mini need"><span>Perlu Cleaning</span><b>3</b></div><div class="final-mini dirty"><span>Kotor</span><b>1</b></div><div class="final-mini invalid"><span>Invalid</span><b>1</b></div>';
+      $("#finalScoreWarning").textContent = "1 evidence INVALID dihitung 0."; $("#finalScoreWarning").classList.remove("hidden"); $("#finalScoreModal").classList.remove("hidden"); });
+    await page.waitForTimeout(400); await page.screenshot({ path: join(OUT, `${name}-modal.png`) });
+    console.log(`${name}-boot / ${name}-modal tersimpan`); await ctx.close();
+  }
+  await browser.close(); server.close(); process.exit(0);
 }
 for (const [pg, label] of [["dashboard", "dashboard"], ["capture", "evidence"], ["stores", "master"]]) {
   await shoot(`desktop-${label}`, { width: 1440, height: 900, page: pg });
