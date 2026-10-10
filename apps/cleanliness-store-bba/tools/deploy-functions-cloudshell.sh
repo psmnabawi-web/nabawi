@@ -75,10 +75,22 @@ COMMON=(--gen2 --region "$R" --runtime nodejs22 --source "$W" --trigger-http --a
 gcloud functions deploy scoreEvidence "${COMMON[@]}" --entry-point scoreEvidence --env-vars-file "$W/env.yaml" --set-secrets "$SECRETS"
 gcloud functions deploy finalizeSession "${COMMON[@]}" --entry-point finalizeSession --env-vars-file "$W/env.yaml"
 
-step "5/5 Cek fungsi hidup"
+step "5/6 Cek fungsi hidup"
 for FN in scoreEvidence finalizeSession; do
   printf '%-16s ' "$FN"; curl -s -X POST "https://$R-$P.cloudfunctions.net/$FN" -H 'Content-Type: application/json' -d '{"data":{}}' | head -c 160; echo
 done
 echo; echo "Harapan: keduanya menjawab error INVALID_ARGUMENT (berarti fungsi aktif dan menolak input kosong)."
+
+step "6/6 Izinkan GitHub Actions men-deploy functions berikutnya (tanpa Cloud Shell)"
+DEPLOYER="hosting-deployer@$P.iam.gserviceaccount.com"
+if gcloud iam service-accounts describe "$DEPLOYER" >/dev/null 2>&1; then
+  for ROLE in roles/cloudfunctions.admin roles/run.admin roles/cloudbuild.builds.editor roles/secretmanager.viewer roles/serviceusage.serviceUsageConsumer roles/artifactregistry.reader; do
+    gcloud projects add-iam-policy-binding "$P" --member="serviceAccount:$DEPLOYER" --role="$ROLE" --condition=None --quiet >/dev/null
+  done
+  gcloud iam service-accounts add-iam-policy-binding "$SA" --member="serviceAccount:$DEPLOYER" --role=roles/iam.serviceAccountUser --quiet >/dev/null
+  echo "OK: workflow GitHub 'Deploy Cleanliness Store BBA' dengan target 'functions' kini bisa men-deploy backend tanpa Cloud Shell."
+else
+  echo "service account $DEPLOYER belum ada (setup-cloudshell.sh belum pernah dijalankan); langkah ini dilewati."
+fi
 echo "Setelah crew memotret 1 titik, cek mesin yang dipakai:"
 echo "  gcloud functions logs read scoreEvidence --region $R --limit 20 | grep -E 'scoreEvidence ok|fallback|rate limit'"

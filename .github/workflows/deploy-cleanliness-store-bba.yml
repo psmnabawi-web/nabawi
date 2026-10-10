@@ -1,21 +1,46 @@
 name: Deploy Cleanliness Store BBA
 
-# App Bangor Cleanliness Control (https://cleanliness-store-bba.web.app): situs statis di apps/cleanliness-store-bba/public.
-#   push      → hanya tes (master data + script deploy terhadap API tiruan), tidak menyentuh situs
-#   manual    → "Run workflow": deploy public/ ke Firebase Hosting project cleanliness-store-bba
+# App Bangor Cleanliness Control (https://cleanliness-store-bba.web.app): situs statis di apps/cleanliness-store-bba/public
+# + Cloud Functions AI scoring di apps/cleanliness-store-bba/functions.
+#   push      → hanya tes (master data, script deploy, modul AI), tidak menyentuh project
+#   manual    → "Run workflow": target hosting = terbitkan public/ ke Firebase Hosting
+#                               target functions = deploy scoreEvidence & finalizeSession (gcloud functions deploy gen2)
 # Login tanpa key: GitHub OIDC → Workload Identity (pool github-actions di project trecking-filter-oil-store)
-# → service account hosting-deployer@cleanliness-store-bba (Firebase Hosting Admin saja),
-# disiapkan sekali dengan apps/cleanliness-store-bba/setup-cloudshell.sh.
+# → service account hosting-deployer@cleanliness-store-bba. Role Hosting dari setup-cloudshell.sh; role functions
+# (Cloud Functions Admin, Run Admin, Service Account User, dll.) dari tools/deploy-functions-cloudshell.sh langkah 6.
 on:
   push:
     branches: ["claude/upbeat-babbage-wb9ksk", "claude/adoring-dijkstra-78ese7", "main"]
     paths: ["apps/cleanliness-store-bba/**", ".github/workflows/deploy-cleanliness-store-bba.yml"]
   workflow_dispatch:
     inputs:
+      target:
+        description: "hosting = situs web | functions = Cloud Functions (AI scoring)"
+        type: choice
+        default: hosting
+        options: [hosting, functions]
       force:
-        description: "Paksa deploy walau versi live bukan versi snapshot / hasil workflow ini (menimpa versi asing)"
+        description: "Hosting: paksa deploy walau versi live bukan versi snapshot / hasil workflow ini"
         type: boolean
         default: false
+      provider:
+        description: "Functions: mesin AI utama"
+        type: choice
+        default: openai
+        options: [openai, gemini]
+      model:
+        description: "Functions: model utama (kosong = qwen-vl-max untuk openai, gemma-4-31b-it untuk gemini)"
+        type: string
+        default: ""
+      base_url:
+        description: "Functions: base URL endpoint OpenAI-compatible"
+        type: string
+        default: "https://bandelbanget.xyz/v1"
+      fallback:
+        description: "Functions: cadangan otomatis"
+        type: choice
+        default: vertex
+        options: [vertex, gemini, openai, none]
 
 concurrency:
   group: deploy-cleanliness-store-bba
@@ -27,6 +52,7 @@ permissions:
 
 jobs:
   deploy:
+    if: ${{ github.event_name == 'push' || inputs.target == 'hosting' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -61,3 +87,60 @@ jobs:
           ACCESS_TOKEN: ${{ steps.auth.outputs.access_token }}
           FORCE_DEPLOY: ${{ inputs.force && '1' || '' }}
         run: node scripts/deploy-hosting.mjs
+
+  functions:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.target == 'functions' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tes modul AI (klien tiruan)
+        working-directory: apps/cleanliness-store-bba/functions
+        run: npm test
+      - name: Login Google (Workload Identity, tanpa key)
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: cleanliness-store-bba
+          workload_identity_provider: projects/696588727829/locations/global/workloadIdentityPools/github-actions/providers/nabawi-repo
+          service_account: hosting-deployer@cleanliness-store-bba.iam.gserviceaccount.com
+          create_credentials_file: true
+          export_environment_variables: true
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Deploy scoreEvidence & finalizeSession
+        working-directory: apps/cleanliness-store-bba/functions
+        env:
+          PROVIDER: ${{ inputs.provider }}
+          MODEL: ${{ inputs.model }}
+          BASE_URL: ${{ inputs.base_url }}
+          FALLBACK: ${{ inputs.fallback }}
+        run: |
+          set -euo pipefail
+          P=cleanliness-store-bba; R=asia-southeast1
+          SECRETS=""; for S in OPENAI_API_KEY GEMINI_API_KEY; do gcloud secrets describe "$S" --project "$P" >/dev/null 2>&1 && SECRETS="${SECRETS:+$SECRETS,}$S=$S:latest" || true; done
+          [ -n "$SECRETS" ] || { echo "::error::Secret API key belum ada di Secret Manager project $P. Jalankan tools/deploy-functions-cloudshell.sh sekali dari Cloud Shell."; exit 1; }
+          case "$PROVIDER" in gemini) DM=gemma-4-31b-it ;; *) DM=qwen-vl-max ;; esac
+          MODEL="${MODEL:-$DM}"; BASE_URL="${BASE_URL%/}"
+          FB_MODEL=gemini-2.5-flash; case "$FALLBACK" in gemini) FB_MODEL=gemma-4-31b-it ;; openai) FB_MODEL="$MODEL" ;; esac
+          cat > env.yaml <<YAML
+          CLEANLINESS_AI_PROVIDER: "$PROVIDER"
+          CLEANLINESS_AI_MODEL: "$MODEL"
+          OPENAI_BASE_URL: "$BASE_URL"
+          CLEANLINESS_AI_FALLBACK: "$FALLBACK"
+          CLEANLINESS_AI_FALLBACK_MODEL: "$FB_MODEL"
+          CLEANLINESS_AI_LOCATION: "global"
+          FIREBASE_CONFIG: '{"projectId":"$P","storageBucket":"$P.firebasestorage.app"}'
+          YAML
+          echo "mesin utama: $PROVIDER / $MODEL · cadangan: $FALLBACK / $FB_MODEL · secret: $SECRETS"
+          COMMON=(--project "$P" --gen2 --region "$R" --runtime nodejs22 --source . --trigger-http --allow-unauthenticated --memory 1Gi --timeout 120s --max-instances 10 --update-labels deployment-tool=cli-firebase,deployment-callable=true --quiet)
+          gcloud functions deploy scoreEvidence "${COMMON[@]}" --entry-point scoreEvidence --env-vars-file env.yaml --set-secrets "$SECRETS"
+          gcloud functions deploy finalizeSession "${COMMON[@]}" --entry-point finalizeSession --env-vars-file env.yaml
+          echo "## Cloud Functions BBA" >> "$GITHUB_STEP_SUMMARY"
+          for FN in scoreEvidence finalizeSession; do
+            OUT=$(curl -s -X POST "https://$R-$P.cloudfunctions.net/$FN" -H 'Content-Type: application/json' -d '{"data":{}}' | head -c 200)
+            echo "$FN → $OUT"; echo "- \`$FN\`: $OUT" >> "$GITHUB_STEP_SUMMARY"
+            echo "$OUT" | grep -q INVALID_ARGUMENT || { echo "::error::$FN tidak menjawab INVALID_ARGUMENT seperti diharapkan"; exit 1; }
+          done
+          echo "- mesin utama: $PROVIDER / $MODEL · cadangan: $FALLBACK / $FB_MODEL" >> "$GITHUB_STEP_SUMMARY"

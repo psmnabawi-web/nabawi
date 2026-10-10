@@ -43,6 +43,10 @@ Deploy dari Cloud Shell (membuat secret, memberi akses, deploy dua fungsi, cek h
 curl -sL https://raw.githubusercontent.com/psmnabawi-web/nabawi/claude/upbeat-babbage-wb9ksk/apps/cleanliness-store-bba/tools/deploy-functions-cloudshell.sh | bash
 ```
 
+Script di atas juga memberi role ke service account `hosting-deployer` (langkah 6), sehingga deploy backend berikutnya
+cukup lewat GitHub Actions: workflow *Deploy Cleanliness Store BBA* → *Run workflow* → target `functions` (pilih provider,
+model, base URL, cadangan). Secret API key tetap hanya dibuat atau diganti dari Cloud Shell.
+
 Hasil tiap scoring menyimpan `aiProvider`, `model`, `structuredOutput`, dan `fallbackReason` di dokumen audit, dan log
 `scoreEvidence ok` menyebut mesin yang dipakai. Tes modul AI: `cd functions && npm test` (tanpa dependensi).
 
