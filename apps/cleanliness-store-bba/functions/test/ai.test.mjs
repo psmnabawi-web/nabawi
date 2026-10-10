@@ -96,3 +96,72 @@ test("resolveConfig: default dan override", () => {
   const d = ai.resolveConfig({ CLEANLINESS_AI_PROVIDER: "gemini", CLEANLINESS_AI_MODEL: "gemma-4-26b-a4b-it", CLEANLINESS_AI_FALLBACK: "none" });
   assert.equal(d.primary.model, "gemma-4-26b-a4b-it"); assert.equal(d.fallback, null);
 });
+
+// ---------- Provider OpenAI-compatible (fetch tiruan) ----------
+function fakeFetchFactory(script) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    const i = calls.length; calls.push({ url, auth: init.headers.Authorization, body: JSON.parse(init.body) });
+    const r = script[Math.min(i, script.length - 1)];
+    if (r instanceof Error) throw r;
+    const { status = 200, json } = r;
+    return { ok: status >= 200 && status < 300, status, text: async () => JSON.stringify(json) };
+  };
+  return { fetchImpl, calls };
+}
+const chat = (content, model = "qwen-vl-max-2026") => ({ json: { model, choices: [{ message: { content }, finish_reason: "stop" }] } });
+const depsOpenAI = (ff, env = {}, google = null) => ({
+  fetch: ff.fetchImpl, logger: { warn() {}, info() {} }, sleep: async () => {},
+  createClient: (o) => (o.openai ? ai.openAiClient(o, ff.fetchImpl) : google ? google.createClient(o) : (() => { throw new Error("klien Google tidak diharapkan"); })()),
+  env: { GCLOUD_PROJECT: "cleanliness-store-bba", CLEANLINESS_AI_PROVIDER: "openai", OPENAI_API_KEY: "sk-test", OPENAI_BASE_URL: "https://relay.example/v1/", CLEANLINESS_AI_MODEL: "qwen-vl-max", ...env },
+});
+
+test("openai: POST chat/completions dengan teks + gambar data URL, response_format json_object, Bearer key", async () => {
+  const ff = fakeFetchFactory([chat(okJson)]);
+  const r = await ai.analyzeImages(point, img, mimes, session, depsOpenAI(ff));
+  assert.equal(ff.calls.length, 1);
+  assert.equal(ff.calls[0].url, "https://relay.example/v1/chat/completions");
+  assert.equal(ff.calls[0].auth, "Bearer sk-test");
+  const b = ff.calls[0].body;
+  assert.equal(b.model, "qwen-vl-max"); assert.deepEqual(b.response_format, { type: "json_object" }); assert.equal(b.temperature, 0);
+  assert.equal(b.messages[0].content[0].type, "text"); assert.match(b.messages[0].content[0].text, /FORMAT OUTPUT/);
+  assert.equal(b.messages[0].content[1].type, "image_url");
+  assert.equal(b.messages[0].content[1].image_url.url, "data:image/jpeg;base64," + Buffer.from("foto").toString("base64"));
+  assert.equal(r.provider, "openai"); assert.equal(r.model, "qwen-vl-max-2026"); assert.equal(r.score, 88); assert.equal(r.structuredOutput, true); assert.equal(r.fallbackReason, "");
+});
+
+test("openai: response_format ditolak (400) → ulang tanpa response_format; konten berbentuk array juga terbaca", async () => {
+  const ff = fakeFetchFactory([{ status: 400, json: { error: { message: "Invalid parameter: response_format is not supported" } } }, chat([{ type: "text", text: okJson }])]);
+  const r = await ai.analyzeImages(point, img, mimes, session, depsOpenAI(ff));
+  assert.equal(ff.calls.length, 2); assert.equal(ff.calls[1].body.response_format, undefined); assert.equal(r.structuredOutput, false); assert.equal(r.score, 88);
+});
+
+test("openai: 429 dua kali → cadangan Vertex; 401 → langsung cadangan dengan alasan AI_AUTH", async () => {
+  const g = fakeFactory([okJson]);
+  const ff = fakeFetchFactory([{ status: 429, json: { error: { message: "rate limit exceeded" } } }]);
+  const r = await ai.analyzeImages(point, img, mimes, session, depsOpenAI(ff, {}, g));
+  assert.equal(ff.calls.length, 2); assert.equal(g.calls.length, 1); assert.equal(g.calls[0].model, "gemini-2.5-flash");
+  assert.equal(r.provider, "vertex"); assert.match(r.fallbackReason, /openai\/qwen-vl-max: AI_QUOTA/);
+  const g2 = fakeFactory([okJson]); const ff2 = fakeFetchFactory([{ status: 401, json: { error: { message: "invalid api key" } } }]);
+  const r2 = await ai.analyzeImages(point, img, mimes, session, depsOpenAI(ff2, {}, g2));
+  assert.equal(ff2.calls.length, 1); assert.equal(r2.provider, "vertex"); assert.match(r2.fallbackReason, /AI_AUTH/);
+});
+
+test("openai: jaringan putus → AI_SERVER → cadangan; 503 dengan FALLBACK=none → pesan ramah; model tidak ada (404) → cadangan", async () => {
+  const g = fakeFactory([okJson]); const ff = fakeFetchFactory([new Error("socket hang up")]);
+  const r = await ai.analyzeImages(point, img, mimes, session, depsOpenAI(ff, {}, g));
+  assert.equal(r.provider, "vertex"); assert.match(r.fallbackReason, /AI_SERVER/);
+  const ff2 = fakeFetchFactory([{ status: 503, json: { error: { message: "upstream unavailable" } } }]);
+  await assert.rejects(ai.analyzeImages(point, img, mimes, session, depsOpenAI(ff2, { CLEANLINESS_AI_FALLBACK: "none" })), (e) => e.code === "AI_SERVER" && /gangguan/.test(e.message));
+  const g3 = fakeFactory([okJson]); const ff3 = fakeFetchFactory([{ status: 404, json: { error: { message: "model not found" } } }]);
+  const r3 = await ai.analyzeImages(point, img, mimes, session, depsOpenAI(ff3, {}, g3));
+  assert.equal(ff3.calls.length, 1); assert.equal(r3.provider, "vertex"); assert.match(r3.fallbackReason, /AI_ERROR HTTP 404/);
+});
+
+test("resolveConfig openai: alias qwen, base URL tanpa slash akhir, cadangan openai untuk provider gemini", () => {
+  const c = ai.resolveConfig({ CLEANLINESS_AI_PROVIDER: "qwen", OPENAI_BASE_URL: "https://relay.example/v1///", OPENAI_API_KEY: "k" });
+  assert.equal(c.primary.provider, "openai"); assert.equal(c.primary.model, "qwen-vl-max"); assert.equal(c.openai.baseUrl, "https://relay.example/v1");
+  assert.deepEqual(c.fallback, { provider: "vertex", model: "gemini-2.5-flash" });
+  const d = ai.resolveConfig({ CLEANLINESS_AI_PROVIDER: "gemini", CLEANLINESS_AI_FALLBACK: "openai", CLEANLINESS_AI_FALLBACK_MODEL: "qwen2.5-vl-72b-instruct" });
+  assert.deepEqual(d.fallback, { provider: "openai", model: "qwen2.5-vl-72b-instruct" });
+});

@@ -29,7 +29,9 @@ Mesin AI dipilih lewat env (`functions/ai.js`):
 
 | Env | Default | Keterangan |
 |---|---|---|
-| `CLEANLINESS_AI_PROVIDER` | `gemini` | `gemini` = Gemini API free tier (butuh secret `GEMINI_API_KEY`), `vertex` = Vertex AI |
+| `CLEANLINESS_AI_PROVIDER` | `gemini` | `openai` = endpoint OpenAI-compatible (chat/completions, mis. relay Qwen; butuh secret `OPENAI_API_KEY`), `gemini` = Gemini API free tier (butuh secret `GEMINI_API_KEY`), `vertex` = Vertex AI |
+| `OPENAI_BASE_URL` | `https://bandelbanget.xyz/v1` | base URL endpoint OpenAI-compatible, tanpa `/chat/completions` |
+| `CLEANLINESS_AI_TIMEOUT_MS` | `75000` | batas waktu satu panggilan ke endpoint OpenAI-compatible |
 | `CLEANLINESS_AI_MODEL` | `gemma-4-31b-it` | model utama; alternatif `gemma-4-26b-a4b-it` (lebih cepat) |
 | `CLEANLINESS_AI_FALLBACK` | `vertex` | cadangan otomatis saat rate limit / gangguan / key kosong / output rusak; `none` untuk mematikan |
 | `CLEANLINESS_AI_FALLBACK_MODEL` | `gemini-2.5-flash` | model cadangan |

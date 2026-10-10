@@ -2,19 +2,30 @@
 // Mesin AI untuk scoring foto (dipakai scoreEvidence). Tanpa dependensi Firebase supaya bisa diuji lokal.
 //
 // Env (set saat deploy):
-//   CLEANLINESS_AI_PROVIDER        gemini (default) = Gemini API free tier dengan GEMINI_API_KEY | vertex = Vertex AI (ADC project)
-//   CLEANLINESS_AI_MODEL           default gemma-4-31b-it (gemini) / gemini-2.5-flash (vertex). Alternatif gemini: gemma-4-26b-a4b-it
+//   CLEANLINESS_AI_PROVIDER        openai = endpoint OpenAI-compatible (chat/completions, mis. relay Qwen) dengan OPENAI_API_KEY
+//                                  gemini (default) = Gemini API free tier dengan GEMINI_API_KEY | vertex = Vertex AI (ADC project)
+//   CLEANLINESS_AI_MODEL           default qwen-vl-max (openai) / gemma-4-31b-it (gemini) / gemini-2.5-flash (vertex)
+//   OPENAI_BASE_URL                default https://bandelbanget.xyz/v1 (tanpa /chat/completions)
+//   OPENAI_API_KEY                 secret untuk provider openai
 //   GEMINI_API_KEY                 secret dari Google AI Studio (wajib untuk provider gemini)
-//   CLEANLINESS_AI_FALLBACK        vertex (default) | gemini | none → dipakai bila provider utama kena rate limit, gangguan server,
-//                                  key belum diisi, atau output tetap tidak valid setelah 2 percobaan
-//   CLEANLINESS_AI_FALLBACK_MODEL  default gemini-2.5-flash (vertex) / gemma-4-31b-it (gemini)
+//   CLEANLINESS_AI_TIMEOUT_MS      batas waktu satu panggilan provider openai, default 75000
+//   CLEANLINESS_AI_FALLBACK        vertex (default) | gemini | openai | none → dipakai bila provider utama kena rate limit, gangguan
+//                                  server, key belum diisi / ditolak, model tidak ada, atau output tetap tidak valid setelah 2 percobaan
+//   CLEANLINESS_AI_FALLBACK_MODEL  default mengikuti provider cadangan
 //   CLEANLINESS_AI_LOCATION        lokasi Vertex, default global
 //   CLEANLINESS_AI_RETRY_WAIT_MS   jeda sebelum mencoba ulang saat rate limit, default 6000
 //
-// Structured output (responseJsonSchema) dicoba lebih dulu. Bila model menolaknya (HTTP 400), permintaan diulang tanpa schema
-// dan model itu ditandai agar permintaan berikutnya langsung tanpa schema; format JSON tetap dipaksa lewat prompt + parser.
+// Structured output (responseJsonSchema / response_format json_object) dicoba lebih dulu. Bila model menolaknya (HTTP 400),
+// permintaan diulang tanpa itu dan model ditandai agar permintaan berikutnya langsung tanpa schema; format JSON tetap dipaksa
+// lewat prompt + parser.
 
-const DEFAULTS = { gemini: { model: 'gemma-4-31b-it' }, vertex: { model: 'gemini-2.5-flash', location: 'global' } };
+const DEFAULTS = {
+  openai: { model: 'qwen-vl-max', baseUrl: 'https://bandelbanget.xyz/v1' },
+  gemini: { model: 'gemma-4-31b-it' },
+  vertex: { model: 'gemini-2.5-flash', location: 'global' },
+};
+const PROVIDERS = ['openai', 'gemini', 'vertex'];
+const normProvider = (v, dflt) => { v = String(v || '').toLowerCase().trim(); if (v === 'qwen') v = 'openai'; return PROVIDERS.includes(v) ? v : dflt; };
 const RESPONSE_SCHEMA = {
   type: 'object', additionalProperties: false,
   properties: {
@@ -24,7 +35,7 @@ const RESPONSE_SCHEMA = {
   required: ['validPhoto', 'score', 'confidence', 'reason', 'issues'], propertyOrdering: ['validPhoto', 'score', 'confidence', 'reason', 'issues'],
 };
 const FIX_TEXT = '\n\nPERBAIKAN OUTPUT: Respons harus berupa SATU object JSON valid sesuai format. Jangan tulis markdown, penjelasan, atau teks di luar JSON.';
-const unsupportedStructured = new Set(); // "provider:model" yang menolak responseJsonSchema
+const unsupportedStructured = new Set(); // "provider:model" yang menolak structured output
 
 function clamp(n, min, max) { n = Number(n); return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : min; }
 function safeShort(s, max = 160) { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > max ? s.slice(0, max - 1) + '…' : s; }
@@ -64,12 +75,16 @@ function responseDiagnostics(response, text = '') {
 }
 
 function resolveConfig(env = process.env) {
-  const prov = (env.CLEANLINESS_AI_PROVIDER || 'gemini').toLowerCase() === 'vertex' ? 'vertex' : 'gemini';
-  const fb = (env.CLEANLINESS_AI_FALLBACK || 'vertex').toLowerCase();
-  const fbProv = fb === 'gemini' ? 'gemini' : fb === 'vertex' ? 'vertex' : null;
+  const prov = normProvider(env.CLEANLINESS_AI_PROVIDER, 'gemini');
+  const fbProv = normProvider(env.CLEANLINESS_AI_FALLBACK || 'vertex', null);
   return {
     primary: { provider: prov, model: (env.CLEANLINESS_AI_MODEL || '').trim() || DEFAULTS[prov].model },
     fallback: fbProv && fbProv !== prov ? { provider: fbProv, model: (env.CLEANLINESS_AI_FALLBACK_MODEL || '').trim() || DEFAULTS[fbProv].model } : null,
+    openai: {
+      baseUrl: String(env.OPENAI_BASE_URL || DEFAULTS.openai.baseUrl).trim().replace(/\/+$/, ''),
+      apiKey: (env.OPENAI_API_KEY || '').trim(),
+      timeoutMs: Number(env.CLEANLINESS_AI_TIMEOUT_MS) > 0 ? Number(env.CLEANLINESS_AI_TIMEOUT_MS) : 75000,
+    },
     project: env.GCLOUD_PROJECT || env.GOOGLE_CLOUD_PROJECT || '',
     location: env.CLEANLINESS_AI_LOCATION || DEFAULTS.vertex.location,
     apiKey: (env.GEMINI_API_KEY || env.GOOGLE_API_KEY || '').trim(),
@@ -77,6 +92,10 @@ function resolveConfig(env = process.env) {
   };
 }
 function clientOptions(provider, cfg) {
+  if (provider === 'openai') {
+    if (!cfg.openai.apiKey) throw Object.assign(new Error('OPENAI_API_KEY belum diisi (secret endpoint OpenAI-compatible).'), { code: 'AI_CONFIG' });
+    return { openai: true, baseUrl: cfg.openai.baseUrl, apiKey: cfg.openai.apiKey, timeoutMs: cfg.openai.timeoutMs };
+  }
   if (provider === 'gemini') {
     if (!cfg.apiKey) throw Object.assign(new Error('GEMINI_API_KEY belum diisi (secret Gemini API).'), { code: 'AI_CONFIG' });
     return { apiKey: cfg.apiKey };
@@ -88,9 +107,10 @@ function classifyError(err) {
   const status = Number(err?.status || err?.error?.code || (typeof err?.code === 'number' ? err.code : 0)) || 0;
   const message = String(err?.message || err || '');
   const quota = status === 429 || /RESOURCE_EXHAUSTED|quota|rate limit|too many requests/i.test(message);
-  const server = [500, 502, 503, 504].includes(status) || /UNAVAILABLE|overloaded|deadline exceeded|ECONNRESET|ETIMEDOUT|fetch failed/i.test(message);
-  const schemaUnsupported = status === 400 && /schema|mime|json|structured|not supported|unsupported|invalid argument/i.test(message);
-  return { status, quota, server, schemaUnsupported, message };
+  const server = [500, 502, 503, 504].includes(status) || /UNAVAILABLE|overloaded|deadline exceeded|ECONNRESET|ETIMEDOUT|fetch failed|socket hang up/i.test(message);
+  const auth = status === 401 || status === 403;
+  const schemaUnsupported = status === 400 && /schema|mime|json|structured|not supported|unsupported|invalid argument|response_format/i.test(message);
+  return { status, quota, server, auth, schemaUnsupported, message };
 }
 
 function buildPrompt(point, session) {
@@ -122,7 +142,36 @@ FORMAT OUTPUT: satu object JSON persis seperti ini, tanpa markdown dan tanpa tek
 score bilangan bulat 0-100, confidence angka 0-1, issues array maksimal 3 string (boleh kosong).`;
 }
 
-function defaultCreateClient(opts) {
+// Klien endpoint OpenAI-compatible (POST {baseUrl}/chat/completions) dengan antarmuka yang sama seperti GoogleGenAI:
+// client.models.generateContent({model, contents, config}) → {text, modelVersion, candidates}.
+function openAiClient({ baseUrl, apiKey, timeoutMs = 75000 }, fetchImpl = globalThis.fetch) {
+  return { models: { generateContent: async ({ model, contents, config = {} }) => {
+    const parts = contents?.[0]?.parts || [];
+    const content = parts.map((p) => (p.text != null
+      ? { type: 'text', text: p.text }
+      : { type: 'image_url', image_url: { url: `data:${p.inlineData?.mimeType || 'image/jpeg'};base64,${p.inlineData?.data || ''}` } }));
+    const body = { model, messages: [{ role: 'user', content }], temperature: config.temperature ?? 0, max_tokens: config.maxOutputTokens || 1024 };
+    if (config.responseJsonSchema || config.responseMimeType === 'application/json') body.response_format = { type: 'json_object' };
+    const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    let res, raw;
+    try {
+      res = await fetchImpl(`${baseUrl}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, body: JSON.stringify(body), signal: ctrl.signal });
+      raw = await res.text();
+    } catch (e) {
+      const timedOut = e?.name === 'AbortError';
+      throw Object.assign(new Error(timedOut ? `Endpoint AI tidak menjawab dalam ${timeoutMs} ms` : `fetch failed: ${e?.message || e}`), { status: 503 });
+    } finally { clearTimeout(timer); }
+    let json = null; try { json = JSON.parse(raw); } catch { /* bukan JSON */ }
+    if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status} ${json?.error?.message || json?.message || String(raw || '').slice(0, 300)}`), { status: res.status });
+    const choice = json?.choices?.[0] || {};
+    let out = choice?.message?.content;
+    if (Array.isArray(out)) out = out.map((x) => (typeof x === 'string' ? x : x?.text || '')).join('\n');
+    return { text: typeof out === 'string' ? out : '', modelVersion: json?.model || model, candidates: [{ finishReason: choice?.finish_reason || '-' }] };
+  } } };
+}
+
+function defaultCreateClient(opts, fetchImpl) {
+  if (opts?.openai) return openAiClient(opts, fetchImpl || globalThis.fetch);
   const { GoogleGenAI } = require('@google/genai');
   return new GoogleGenAI(opts);
 }
@@ -160,6 +209,7 @@ async function runProvider(target, cfg, parts, deps) {
       if (c.quota && !quotaRetried) { quotaRetried = true; deps.logger.warn('AI rate limit, tunggu lalu coba lagi', { target, waitMs: cfg.retryWaitMs }); await deps.sleep(cfg.retryWaitMs); continue; }
       if (c.quota) throw Object.assign(new Error(c.message), { code: 'AI_QUOTA', cause: err });
       if (c.server) throw Object.assign(new Error(c.message), { code: 'AI_SERVER', cause: err });
+      if (c.auth) throw Object.assign(new Error(c.message), { code: 'AI_AUTH', cause: err });
       if (c.status && c.status !== 400) throw Object.assign(new Error(c.message), { code: 'AI_ERROR', cause: err });
       outputAttempts++;
       if (outputAttempts >= 2) throw Object.assign(new Error('Output AI tidak valid setelah 2 percobaan: ' + safeShort(c.message, 180)), { code: 'AI_OUTPUT', cause: err });
@@ -181,7 +231,8 @@ function finalizeResult({ data, model, structured }, target, fallbackReason) {
 }
 
 async function analyzeImages(point, buffers, mimeTypes, session, deps = {}) {
-  const d = { createClient: defaultCreateClient, logger: console, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), env: process.env, ...deps };
+  const d = { logger: console, sleep: (ms) => new Promise((r) => setTimeout(r, ms)), env: process.env, fetch: globalThis.fetch, ...deps };
+  if (!d.createClient) d.createClient = (opts) => defaultCreateClient(opts, d.fetch);
   const cfg = resolveConfig(d.env);
   const parts = [{ text: buildPrompt(point, session) }];
   for (let i = 0; i < buffers.length; i++) parts.push({ inlineData: { data: buffers[i].toString('base64'), mimeType: mimeTypes[i] || 'image/jpeg' } });
@@ -203,9 +254,10 @@ async function analyzeImages(point, buffers, mimeTypes, session, deps = {}) {
   const code = lastErr?.code || 'AI_ERROR';
   const friendly = code === 'AI_QUOTA' ? 'Kuota AI sedang penuh. Tunggu sekitar 1 menit lalu ambil foto lagi.'
     : code === 'AI_SERVER' ? 'Layanan AI sedang gangguan. Coba lagi sebentar.'
+    : code === 'AI_AUTH' ? 'Kredensial AI ditolak penyedia (API key salah atau kedaluwarsa). Hubungi admin.'
     : code === 'AI_CONFIG' ? 'Konfigurasi AI belum lengkap: ' + safeShort(lastErr.message, 160)
     : 'Output AI tidak valid: ' + safeShort(lastErr?.message || 'unknown', 160);
   throw Object.assign(new Error(friendly), { code, cause: lastErr });
 }
 
-module.exports = { analyzeImages, resolveConfig, classifyError, parseModelJson, extractResponseText, buildPrompt, clamp, safeShort, visualStatus, RESPONSE_SCHEMA, DEFAULTS, _resetStructuredCache: () => unsupportedStructured.clear() };
+module.exports = { analyzeImages, openAiClient, resolveConfig, classifyError, parseModelJson, extractResponseText, buildPrompt, clamp, safeShort, visualStatus, RESPONSE_SCHEMA, DEFAULTS, _resetStructuredCache: () => unsupportedStructured.clear() };
