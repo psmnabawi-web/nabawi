@@ -73,6 +73,13 @@ test("5 store Yogyakarta punya crew lengkap dengan id sementara PREFIX-NN", () =
   assert.equal(CREW_MASTER.length, 61 + 37 + 8);
 });
 
+test("titik kontrol di Cloud Functions sama persis dengan master-data app", async () => {
+  const { createRequire } = await import("node:module");
+  const fn = createRequire(import.meta.url)("../functions/control-points.js").CONTROL_POINTS;
+  const pick = (p) => [p.id, p.area, p.weight, p.title, p.photoGuide, p.passCriteria];
+  assert.deepEqual(fn.map(pick), CONTROL_POINTS.map(pick));
+});
+
 test("26 titik kontrol & bobot skor tidak berubah", () => {
   assert.equal(CONTROL_POINTS.length, 26);
   assert.equal(new Set(CONTROL_POINTS.map((p) => p.id)).size, 26);

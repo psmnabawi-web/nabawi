@@ -21,6 +21,29 @@ Tambah store: tambah baris di `STORE_MASTER` (nama huruf besar, `id` slug `store
 Tambah crew: tambah baris di `CREW_MASTER` dengan `storeId`/`storeName` yang persis sama dengan master store.
 Jalankan `npm test` sebelum deploy.
 
+## Cloud Functions (AI scoring)
+
+Source backend ada di `functions/` (Node 22, Firebase Functions v2, region asia-southeast1): `scoreEvidence` menilai foto
+dengan AI lalu menstempel dan menyimpan evidence, `finalizeSession` menutup sesi dan menghitung on time / late.
+Mesin AI dipilih lewat env (`functions/ai.js`):
+
+| Env | Default | Keterangan |
+|---|---|---|
+| `CLEANLINESS_AI_PROVIDER` | `gemini` | `gemini` = Gemini API free tier (butuh secret `GEMINI_API_KEY`), `vertex` = Vertex AI |
+| `CLEANLINESS_AI_MODEL` | `gemma-4-31b-it` | model utama; alternatif `gemma-4-26b-a4b-it` (lebih cepat) |
+| `CLEANLINESS_AI_FALLBACK` | `vertex` | cadangan otomatis saat rate limit / gangguan / key kosong / output rusak; `none` untuk mematikan |
+| `CLEANLINESS_AI_FALLBACK_MODEL` | `gemini-2.5-flash` | model cadangan |
+| `CLEANLINESS_AI_LOCATION` | `global` | lokasi Vertex |
+
+Deploy dari Cloud Shell (membuat secret, memberi akses, deploy dua fungsi, cek hidup):
+
+```bash
+curl -sL https://raw.githubusercontent.com/psmnabawi-web/nabawi/claude/upbeat-babbage-wb9ksk/apps/cleanliness-store-bba/tools/deploy-functions-cloudshell.sh | bash
+```
+
+Hasil tiap scoring menyimpan `aiProvider`, `model`, `structuredOutput`, dan `fallbackReason` di dokumen audit, dan log
+`scoreEvidence ok` menyebut mesin yang dipakai. Tes modul AI: `cd functions && npm test` (tanpa dependensi).
+
 ## Deploy
 
 1. **Pertama kali / dari Cloud Shell** (akun Owner project), sekaligus menyiapkan deploy otomatis GitHub Actions:

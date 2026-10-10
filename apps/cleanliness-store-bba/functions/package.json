@@ -1,0 +1,17 @@
+{
+  "name": "cleanliness-auto-score-functions",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "test": "node --test test/ai.test.mjs"
+  },
+  "dependencies": {
+    "@google/genai": "2.15.0",
+    "firebase-admin": "latest",
+    "firebase-functions": "latest",
+    "sharp": "latest"
+  }
+}

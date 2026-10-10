@@ -39,6 +39,9 @@ jobs:
       - name: Tes master data & script deploy (API tiruan)
         working-directory: apps/cleanliness-store-bba
         run: npm test
+      - name: Tes Cloud Functions (modul AI dengan klien tiruan)
+        working-directory: apps/cleanliness-store-bba/functions
+        run: npm test
       - name: Login Google (Workload Identity, tanpa key)
         id: auth
         if: ${{ env.DO_DEPLOY == 'true' }}
