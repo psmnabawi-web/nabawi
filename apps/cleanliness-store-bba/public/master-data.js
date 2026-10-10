@@ -28,7 +28,9 @@ export const STORE_MASTER = [
   {id:"store-jakal-uii", code:"", name:"JAKAL UII"},
   {id:"store-demangan", code:"", name:"DEMANGAN"},
   {id:"store-tajem", code:"", name:"TAJEM"},
-  {id:"store-jakal-88", code:"", name:"JAKAL 88"}
+  {id:"store-jakal-88", code:"", name:"JAKAL 88"},
+  // Tambahan 10 Okt 2026: BBA Jakal KM 5.
+  {id:"store-jakal-km-5", code:"", name:"JAKAL KM 5"}
 ];
 
 export const CREW_MASTER = [
@@ -133,7 +135,16 @@ export const CREW_MASTER = [
   {id:"J88-07", name:"Rofiq", storeId:"store-jakal-88", storeName:"JAKAL 88"},
   {id:"J88-08", name:"Cahya", storeId:"store-jakal-88", storeName:"JAKAL 88"},
   {id:"J88-09", name:"Adi", storeId:"store-jakal-88", storeName:"JAKAL 88"},
-  {id:"J88-10", name:"Aria", storeId:"store-jakal-88", storeName:"JAKAL 88"}
+  {id:"J88-10", name:"Aria", storeId:"store-jakal-88", storeName:"JAKAL 88"},
+  // JAKAL KM 5: id crew sementara JK5-NN (NIK belum diberikan), ganti dengan NIK asli bila sudah ada
+  {id:"JK5-01", name:"Ahmad", storeId:"store-jakal-km-5", storeName:"JAKAL KM 5"},
+  {id:"JK5-02", name:"Jovan", storeId:"store-jakal-km-5", storeName:"JAKAL KM 5"},
+  {id:"JK5-03", name:"Bima", storeId:"store-jakal-km-5", storeName:"JAKAL KM 5"},
+  {id:"JK5-04", name:"Damar", storeId:"store-jakal-km-5", storeName:"JAKAL KM 5"},
+  {id:"JK5-05", name:"Mega", storeId:"store-jakal-km-5", storeName:"JAKAL KM 5"},
+  {id:"JK5-06", name:"Akbar", storeId:"store-jakal-km-5", storeName:"JAKAL KM 5"},
+  {id:"JK5-07", name:"Salveza", storeId:"store-jakal-km-5", storeName:"JAKAL KM 5"},
+  {id:"JK5-08", name:"Silvi", storeId:"store-jakal-km-5", storeName:"JAKAL KM 5"}
 ];
 
 export const CONTROL_POINTS = [
