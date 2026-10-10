@@ -305,3 +305,58 @@ export interface NotifySettings {
   lastSentAt: number | null;
   lastResult: string | null;
 }
+
+// ===================== Pengaturan provider AI (super admin) =====================
+export type AiProvider = 'google' | 'openai' | 'anthropic';
+
+export interface AiSettings {
+  provider: AiProvider;
+  /** Nama model di provider, mis. gemini-3.5-flash-lite, qwen3-vl-plus, claude-opus-5. */
+  model: string;
+  /** API key provider (server-only). */
+  apiKey: string;
+  /** Khusus provider openai (OpenAI-compatible): base URL tanpa /chat/completions, mis. https://dashscope-intl.aliyuncs.com/compatible-mode/v1 */
+  baseUrl: string;
+  /** Khusus google: pakai Vertex AI (ADC) alih-alih API key. */
+  useVertex: boolean;
+  thinkingLevel: '' | 'minimal' | 'low' | 'medium' | 'high';
+  mediaResolution: '' | 'low' | 'medium' | 'high';
+  /** Panggilan AI bersamaan maksimal per server. */
+  maxConcurrent: number;
+  /** openai: auto = coba response_format json_object lalu fallback prompt; prompt = hanya lewat prompt. */
+  jsonMode: 'auto' | 'prompt';
+  updatedAt: number;
+  updatedByName: string | null;
+}
+
+export interface AiTestItem {
+  area: string;
+  store: string;
+  photos: number;
+  orig: number | null;
+  score: number | null;
+  photoValid: boolean | null;
+  coverage: string | null;
+  ms: number;
+  usage: { promptTokens: number; outputTokens: number; thoughtTokens: number; totalTokens: number } | null;
+  error: string | null;
+  findings: string | null;
+}
+
+export interface AiTestReport {
+  id: string;
+  at: number;
+  by: string;
+  provider: AiProvider;
+  model: string;
+  baseUrl: string;
+  n: number;
+  ok: number;
+  failed: number;
+  exactAgree: number;
+  passAgree: number;
+  avgMs: number;
+  avgPromptTokens: number;
+  avgOutputTokens: number;
+  items: AiTestItem[];
+}

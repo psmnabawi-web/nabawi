@@ -37,9 +37,6 @@ env:
   - variable: AI_MAX_CONCURRENT
     value: "2"
     availability: [ RUNTIME ]
-  - variable: GEMINI_API_KEY
-    secret: GEMINI_API_KEY
-    availability: [ RUNTIME ]
   # Vertex AI lewat ADC service account App Hosting (butuh role Vertex AI User).
   # Untuk Gemini API key: set GOOGLE_GENAI_USE_VERTEXAI "false" dan tambah secret GEMINI_API_KEY.
   - variable: GOOGLE_GENAI_USE_VERTEXAI

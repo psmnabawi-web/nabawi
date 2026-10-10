@@ -37,6 +37,10 @@ service cloud.firestore {
       allow read: if isSuperAdmin();
       allow write: if false;
     }
+    match /aiTests/{id} {
+      allow read: if isSuperAdmin();
+      allow write: if false;
+    }
     match /productAudits/{id} {
       allow read: if isSuperAdmin();
       allow write: if false;

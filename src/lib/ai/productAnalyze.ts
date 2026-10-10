@@ -1,9 +1,7 @@
 import 'server-only';
 import { MEASURE_FIELDS, type ProductDef, type Verdict } from '../productChecklists';
 import type { ProductAuditAi, ProductItemAi } from '../types';
-import { HttpError } from '../utils';
-import { aiModel, aiProvider } from './analyze';
-import { generateJsonWithGoogle } from './google';
+import { generateJson } from './provider';
 import { buildProductUserText, PRODUCT_RESPONSE_SCHEMA, PRODUCT_SYSTEM_PROMPT, type ProductAnalyzeInput } from './productPrompt';
 
 export interface ProductAnalyzeResult {
@@ -32,17 +30,12 @@ const LIMITS: Record<string, Limit[]> = {
 };
 
 export async function analyzeProduct(input: Omit<ProductAnalyzeInput, 'measureFields'> & { product: ProductDef }): Promise<ProductAnalyzeResult> {
-  if (aiProvider() !== 'google') throw new HttpError(500, 'Audit produk saat ini hanya mendukung AI_PROVIDER=google.');
-  const model = aiModel();
   const measureFields = MEASURE_FIELDS[input.product.id];
   const full: ProductAnalyzeInput = { ...input, measureFields };
-  const { data, model: used, usage } = await generateJsonWithGoogle({
-    model,
+  const { data, model: used, usage } = await generateJson({
     systemInstruction: PRODUCT_SYSTEM_PROMPT,
-    parts: [
-      ...input.images.flatMap((img, i) => [{ text: `Foto ${i + 1} dari ${input.images.length}: ${img.label}` }, { inlineData: { mimeType: img.mediaType, data: img.base64 } }]),
-      { text: buildProductUserText(full) },
-    ],
+    images: input.images.map((img, i) => ({ base64: img.base64, mediaType: img.mediaType, label: `Foto ${i + 1} dari ${input.images.length}: ${img.label}` })),
+    text: buildProductUserText(full),
     schema: PRODUCT_RESPONSE_SCHEMA as unknown as Record<string, unknown>,
     maxOutputTokens: 24576,
   });
