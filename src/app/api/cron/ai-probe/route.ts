@@ -26,12 +26,12 @@ function secretMatches(given: string | null) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-async function hit(url: string, init: RequestInit, timeoutMs = 20_000) {
+async function hit(url: string, init: RequestInit, timeoutMs = 20_000, maxChars = 1500) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(url, { ...init, signal: ctrl.signal });
-    const text = (await res.text()).slice(0, 1500);
+    const text = (await res.text()).slice(0, maxChars);
     return { status: res.status, text };
   } catch (e) {
     return { status: 0, text: (e instanceof Error ? `${e.name}: ${e.message}${e.cause ? ' | ' + String((e.cause as Error).message ?? e.cause) : ''}` : String(e)).slice(0, 300) };
@@ -55,11 +55,14 @@ export async function POST(req: Request) {
     const results: Array<Record<string, unknown>> = [];
     for (const raw of body.baseUrls) {
       const base = raw.replace(/\/+$/, '');
-      const models = await hit(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } });
+      const models = await hit(`${base}/models`, { headers: { Authorization: `Bearer ${key}` } }, 20_000, 200_000);
       let modelIds: string[] = [];
       try {
-        const j = JSON.parse(models.text) as { data?: Array<{ id?: string }> };
-        modelIds = (j.data ?? []).map((m) => String(m.id ?? '')).filter(Boolean).slice(0, 80);
+        const j = JSON.parse(models.text) as { data?: Array<{ id?: string; vision?: boolean; enabled?: boolean; available?: boolean; grade?: string; modalities?: { input?: string[] } }> };
+        modelIds = (j.data ?? [])
+          .map((m) => `${m.id ?? ''}${m.vision || m.modalities?.input?.includes('image') ? ' [vision]' : ''}${m.enabled === false || m.available === false ? ' [off]' : ''}${m.grade ? ` (${m.grade})` : ''}`)
+          .filter((x) => !x.startsWith(' '))
+          .slice(0, 200);
       } catch {
         /* bukan JSON */
       }
