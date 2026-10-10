@@ -29,13 +29,21 @@ env:
   - variable: AI_PROVIDER
     value: "google"
     availability: [ RUNTIME ]
+  # Jalur gratis: Gemma 4 lewat Gemini Developer API (API key AI Studio dari proyek TANPA billing).
+  # Untuk kembali ke Vertex: AI_MODEL gemini-3.5-flash-lite, GOOGLE_GENAI_USE_VERTEXAI "true", AI_THINKING_LEVEL low, AI_MEDIA_RESOLUTION medium.
   - variable: AI_MODEL
-    value: "gemini-3.6-flash"
+    value: "gemma-4-26b-a4b-it"
+    availability: [ RUNTIME ]
+  - variable: AI_MAX_CONCURRENT
+    value: "2"
+    availability: [ RUNTIME ]
+  - variable: GEMINI_API_KEY
+    secret: GEMINI_API_KEY
     availability: [ RUNTIME ]
   # Vertex AI lewat ADC service account App Hosting (butuh role Vertex AI User).
   # Untuk Gemini API key: set GOOGLE_GENAI_USE_VERTEXAI "false" dan tambah secret GEMINI_API_KEY.
   - variable: GOOGLE_GENAI_USE_VERTEXAI
-    value: "true"
+    value: "false"
     availability: [ RUNTIME ]
   - variable: GOOGLE_CLOUD_PROJECT
     value: "almaz-cleanliness-508507"

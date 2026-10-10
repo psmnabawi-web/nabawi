@@ -14,7 +14,7 @@ Indikator mengikuti **Form Audit Cleaning** (57 area, 6 kategori): Kitchen, Serv
 |---|---|
 | Auth & Role | Firebase Auth (email/password). Role `crew`, `manager`, `admin`. Email di `ADMIN_EMAILS` otomatis admin **dan super admin** (`superAdmin: true`, tidak bisa diberikan lewat UI). |
 | Audit | Buat audit per store/tanggal/shift → 57 item. Capture foto per item, AI scoring otomatis, submit. Cegah duplikasi audit. |
-| AI Scoring | Google Gemini (default) atau Claude, structured JSON output, rubrik 1-5 seragam. Foto buram/salah objek ditolak (`photoValid=false`). Retry otomatis saat kena rate limit free tier. |
+| AI Scoring | Google Gemini/Gemma (default: Gemma 4 lewat Gemini Developer API free tier; `AI_MODEL`, `AI_THINKING_LEVEL`, `AI_MEDIA_RESOLUTION`, `AI_MAX_CONCURRENT` lewat env) atau Claude, structured JSON output, rubrik 1-5 seragam. Konsumsi token tiap analisa dicatat di audit trail. Foto buram/salah objek ditolak (`photoValid=false`). Retry otomatis saat kena rate limit free tier. |
 | Koreksi manager | Manager/admin dapat override skor AI dengan alasan wajib → tercatat di audit trail. |
 | Alur crew | Urutan area bebas, tetapi **satu area harus selesai dulu** (Submit Area) sebelum area lain boleh difoto. Submit Area hanya bisa jika skor ≥ 75% (skor 4 atau 5); di bawah itu crew harus membersihkan lalu foto ulang. Semua area selesai → audit otomatis submitted. |
 | Kondisi awal | Skor AI percobaan pertama dan jumlah foto ulang per area disimpan (`firstAiScore`, `attempts`, `history`) dan tampil di ringkasan/Excel sebagai indikator kondisi awal store. |

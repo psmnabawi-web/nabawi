@@ -77,9 +77,53 @@ function getClient(): GoogleGenAI {
   return client;
 }
 
-const RETRY_DELAYS_MS = [12_000, 24_000]; // free tier Gemini dibatasi per menit; tunggu lalu coba lagi
+const RETRY_DELAYS_MS = [8_000, 16_000, 30_000]; // free tier Gemini dibatasi per menit (TPM/RPM); tunggu lalu coba lagi
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Gerbang konkurensi per instance: free tier dibatasi token per menit, jadi panggilan dari banyak store diantrekan, bukan ditolak. */
+const MAX_CONCURRENT = Number(process.env.AI_MAX_CONCURRENT || 2);
+const QUEUE_TIMEOUT_MS = 90_000;
+let running = 0;
+const waiters: Array<() => void> = [];
+async function acquire(): Promise<() => void> {
+  if (running < MAX_CONCURRENT) {
+    running += 1;
+  } else {
+    await new Promise<void>((resolve, reject) => {
+      const t = setTimeout(() => {
+        const i = waiters.indexOf(resolve);
+        if (i >= 0) waiters.splice(i, 1);
+        reject(new HttpError(429, 'Antrean analisa AI penuh. Tunggu 1 menit lalu coba lagi.'));
+      }, QUEUE_TIMEOUT_MS);
+      waiters.push(() => {
+        clearTimeout(t);
+        resolve();
+      });
+    });
+    running += 1;
+  }
+  return () => {
+    running -= 1;
+    const next = waiters.shift();
+    if (next) next();
+  };
+}
+
+/** Ringkasan skema JSON yang hemat token untuk model tanpa structured output (Gemma). */
+function schemaGuide(schema: Record<string, unknown>, indent = ''): string {
+  const props = (schema.properties ?? {}) as Record<string, Record<string, unknown>>;
+  const lines: string[] = [];
+  for (const [k, v] of Object.entries(props)) {
+    const type = v.type === 'array' ? `array<${((v.items as Record<string, unknown>)?.type as string) ?? 'string'}>` : String(v.type);
+    const en = Array.isArray(v.enum) ? ` salah satu: ${(v.enum as string[]).join('|')}` : '';
+    const desc = typeof v.description === 'string' ? ` — ${v.description}` : '';
+    lines.push(`${indent}- ${k} (${type})${en}${desc}`);
+    const items = v.items as Record<string, unknown> | undefined;
+    if (items && items.type === 'object') lines.push(schemaGuide(items, indent + '  '));
+  }
+  return lines.join('\n');
+}
 
 export interface GeminiUsage {
   promptTokens: number;
@@ -123,7 +167,7 @@ export async function generateJsonWithGoogle(req: GeminiJsonRequest): Promise<{ 
   const request = gemma
     ? {
         model: req.model,
-        contents: [{ role: 'user', parts: [{ text: `${req.systemInstruction}\n\nFORMAT JAWABAN: hanya JSON valid (tanpa teks lain, tanpa code fence) yang mengikuti skema berikut:\n${JSON.stringify(req.schema)}` }, ...req.parts] }],
+        contents: [{ role: 'user', parts: [{ text: `${req.systemInstruction}\n\nFORMAT JAWABAN: hanya satu objek JSON valid (tanpa teks lain, tanpa code fence, tanpa komentar) dengan field berikut, semua wajib diisi:\n${schemaGuide(req.schema)}` }, ...req.parts] }],
         config: { temperature: 0, maxOutputTokens: Math.min(maxOutputTokens, 8192) },
       }
     : {
@@ -142,6 +186,8 @@ export async function generateJsonWithGoogle(req: GeminiJsonRequest): Promise<{ 
       };
 
   let lastErr: unknown = null;
+  const release = await acquire();
+  try {
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
     try {
       const response = await ai.models.generateContent(request);
@@ -169,16 +215,18 @@ export async function generateJsonWithGoogle(req: GeminiJsonRequest): Promise<{ 
       if (err instanceof HttpError) throw err;
       if (err instanceof ApiError) {
         const msg = err.message ?? '';
-        const billingIssue = /credit|billing|prepayment|payment/i.test(msg);
+        // Free tier: 429 "exceeded your current quota ... billing details" adalah rate limit, bukan kredit habis. Kredit habis hanya jika menyebut prepay/credit.
+        const billingIssue = /prepay|credits? (are|is) depleted|insufficient credit/i.test(msg);
         if (err.status === 429 && billingIssue) {
-          throw new HttpError(402, `Kredit Gemini API habis atau billing belum aktif. Isi ulang / cek di https://ai.studio/projects. Pesan Google: ${msg}`);
+          throw new HttpError(402, `Kredit Gemini API habis. Isi ulang / cek di https://ai.studio/projects. Pesan Google: ${msg}`);
         }
+        if (err.status === 403 && /denied access/i.test(msg)) throw new HttpError(500, 'Proyek API key Gemini diblokir Google. Buat API key baru di AI Studio (proyek baru tanpa billing).');
         if (err.status === 429 && attempt < RETRY_DELAYS_MS.length) {
           lastErr = err;
           await sleep(RETRY_DELAYS_MS[attempt]);
           continue;
         }
-        if (err.status === 429) throw new HttpError(429, `Kuota AI sementara habis (rate limit). Tunggu 1 menit lalu coba lagi. Pesan Google: ${msg}`);
+        if (err.status === 429) throw new HttpError(429, 'AI sedang penuh (batas gratis per menit tercapai). Tunggu 1 menit lalu tekan Analisa lagi.');
         if (err.status === 401 || err.status === 403) throw new HttpError(500, 'Kredensial Google AI tidak valid atau API belum diaktifkan.');
         if (err.status === 404) throw new HttpError(500, `Model ${req.model} tidak ditemukan di provider Google. Cek AI_MODEL.`);
         throw new HttpError(502, `Layanan AI Google error (${err.status}): ${err.message}`);
@@ -186,7 +234,11 @@ export async function generateJsonWithGoogle(req: GeminiJsonRequest): Promise<{ 
       throw err;
     }
   }
-  throw new HttpError(429, `Kuota AI habis: ${lastErr instanceof Error ? lastErr.message : 'rate limit'}`);
+  console.warn('[ai/google] rate limit setelah retry', lastErr instanceof Error ? lastErr.message.slice(0, 200) : lastErr);
+  throw new HttpError(429, 'AI sedang penuh (batas gratis per menit). Tunggu 1 menit lalu coba lagi.');
+  } finally {
+    release();
+  }
 }
 
 export async function analyzeWithGoogle(input: AnalyzeInput, model: string): Promise<RawAiOutput> {
