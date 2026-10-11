@@ -96,6 +96,14 @@ export function photoSource(rec) {
  * @param {string} [p.area]          kosong = semua area
  * @param {number} [p.target]        0..1, target compliance (default 0.95)
  */
+/**
+ * ID record yang sudah tergantikan oleh salinan koreksi (record baru dengan slotCorrection.fromRecordId = ID lama).
+ * Record lama tetap ada di database (app tidak boleh menghapus), tapi tidak dihitung/ditampilkan lagi.
+ */
+export function supersededIds(records) {
+  return new Set(records.map((r) => r && r.slotCorrection && r.slotCorrection.fromRecordId).filter(Boolean));
+}
+
 export function buildReport({ stores, records, settings = {}, start, end, nowMs, area = "", target = 0.95 }) {
   const tol = Number.isFinite(Number(settings.toleranceMin)) ? Number(settings.toleranceMin) : 30;
   const slots = slotsFromSettings(settings);
@@ -105,8 +113,9 @@ export function buildReport({ stores, records, settings = {}, start, end, nowMs,
 
   // satu catatan per store-tanggal-slot; bila dobel, ambil yang statusnya terbaik lalu yang paling awal dikirim
   const byKey = new Map();
+  const superseded = supersededIds(records);
   for (const r of records) {
-    if (r.dedupArchived === true || !r.storeId || !r.dateKey || !r.slotId) continue;
+    if (r.dedupArchived === true || superseded.has(r.id) || !r.storeId || !r.dateKey || !r.slotId) continue;
     const k = `${r.storeId}|${r.dateKey}|${r.slotId}`;
     const prev = byKey.get(k);
     if (!prev) { byKey.set(k, r); continue; }

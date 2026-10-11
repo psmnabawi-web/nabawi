@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Koreksi filterRecords yang salah slot karena bug "foto lewat tengah malam" (aturan baru = hari operasional berganti 05:00 WIB).
 
-Aturan keamanan Firestore hanya mengizinkan app MEMBUAT record; mengubah/menghapus butuh akses owner. Jalankan di Cloud Shell
-akun owner dengan token: FO_TOKEN="$(gcloud auth print-access-token)" python3 scripts/correct-records.py fix-all
+Aturan keamanan Firestore hanya mengizinkan app MEMBUAT record; mengubah/menghapus butuh akses owner.
+- Tanpa token: salinan di slot benar dibuat; record asal tetap ada tapi diabaikan laporan (slotCorrection.fromRecordId).
+- Dengan token owner (opsional, untuk menghapus record asal & mengarsipkan duplikat):
+  FO_TOKEN="$(gcloud auth print-access-token)" python3 scripts/correct-records.py fix-all
 
   correct-records.py plan                 → baca semua record, tampilkan rencana (TIDAK mengubah apa pun)
   correct-records.py fix-all              → pindahkan semua record di rencana yang slot tujuannya kosong + arsipkan duplikat yang disetujui
@@ -101,7 +103,9 @@ def plan(S, recs=None):
         t = rule(r, S)
         if (t["dateKey"], t["slotId"]) == (val(r["dateKey"]), val(r["slotId"])): continue
         occ_rec = live.get((t["dateKey"], val(r["storeId"]), t["slotId"]))
-        if occ_rec is not None and moved_from(occ_rec) == r["_id"]: occ, resume = None, True   # salinan kita sendiri: lanjutkan hapus
+        if occ_rec is not None and moved_from(occ_rec) == r["_id"]:
+            if not os.environ.get("FO_TOKEN"): continue                                         # sudah tergantikan salinannya
+            occ, resume = None, True                                                            # owner: lanjutkan hapus asal
         else: occ, resume = (occ_rec["_id"] if occ_rec else None), False
         out.append({"resume": resume, "id": r["_id"], "store": val(r.get("storeName")), "crew": val(r.get("crewName")), "wall": t["wall"].isoformat(),
                     "localIso": val(r.get("evidenceLocalIso")), "old": f'{val(r["dateKey"])} {val(r["slotId"])} {val(r.get("status"))} {val(r.get("deviationMin"))}',
@@ -148,7 +152,11 @@ def move(old_id, S):
     if code != 200 or chk.get("fields", {}).get("evidenceImage") != f.get("evidenceImage"):
         sys.exit(f"[{old_id}] verifikasi {nid} gagal ({code}); record lama TIDAK dihapus. Jalankan ulang perintah yang sama untuk melanjutkan.")
     code, deleted = curl("DELETE", f"{B}/filterRecords/{old_id}?currentDocument.updateTime={old['updateTime']}")
-    if code == 403: sys.exit(f"[{old_id}] {nid} sudah dibuat, tapi hapus record lama DITOLAK (403): butuh akses owner. Jalankan di Cloud Shell dengan FO_TOKEN (lihat bagian atas file).")
+    if code == 403:
+        # Tanpa akses owner, record asal tidak bisa dihapus. Itu aman: laporan Kepatuhan/Dashboard/Excel mengabaikan record
+        # yang punya salinan (slotCorrection.fromRecordId). Hapus fisiknya opsional, nanti dengan FO_TOKEN owner.
+        print(f"[{old_id}] OK → {nid} ({t['status']} {t['dev']:+d}); foto ikut disalin. Record asal tetap ada (hapus butuh owner) tapi DIABAIKAN laporan.")
+        return
     if code != 200: sys.exit(f"[{old_id}] {nid} sudah ada, tapi hapus record lama gagal ({code}). Jalankan ulang perintah yang sama.")
     print(f"[{old_id}] OK → {nid} ({t['status']} {t['dev']:+d}); foto ikut pindah; cadangan {BACKUP_DIR}/{old_id}.json")
 

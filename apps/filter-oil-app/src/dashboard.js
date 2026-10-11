@@ -2,7 +2,7 @@
 // (window.foDashboard). Input tanggal/store dan tombol milik app (#dashFrom, #dashTo, #dashStore, #btnLoadDashboard)
 // dipindahkan apa adanya, jadi app.js tetap bisa mengisi pilihan store dan tanggal awal seperti biasa.
 // Angka memakai logika yang sama dengan menu Export Kepatuhan: slot hari ini baru dihitung setelah jam slot + toleransi.
-import { STATUS, ymdWib, fmtDate, dayName, statusOf, actualTime, photoSource, toMinutes } from "./kepatuhan.js";
+import { STATUS, ymdWib, fmtDate, dayName, statusOf, actualTime, photoSource, toMinutes, supersededIds } from "./kepatuhan.js";
 import { loadEvidenceImage } from "./core.js";
 import {
   $, esc, pct, poin, short, PRESETS, getData, report, exportExcel, toast, busy,
@@ -359,8 +359,9 @@ const LOG_FILTERS = [
 function logRows() {
   const r = ui.report, p = ui.params, names = new Map(ui.data.stores.map((s) => [s.id, s.name]));
   const slotTime = new Map(r.slots.map((s) => [s.id, s]));
+  const superseded = supersededIds(ui.data.records);
   return ui.data.records
-    .filter((x) => x.dedupArchived !== true && x.dateKey >= p.start && x.dateKey <= r.end && (!p.storeId || x.storeId === p.storeId))
+    .filter((x) => x.dedupArchived !== true && !superseded.has(x.id) && x.dateKey >= p.start && x.dateKey <= r.end && (!p.storeId || x.storeId === p.storeId))
     .map((x) => ({
       id: x.id, date: x.dateKey, time: actualTime(x, x.dateKey), sort: String(x.evidenceLocalIso || x.submittedAt || x.dateKey),
       store: names.get(x.storeId) || x.storeName || x.storeId, crew: String(x.crewName || ""),

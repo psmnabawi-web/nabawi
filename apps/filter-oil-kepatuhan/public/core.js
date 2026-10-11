@@ -1,11 +1,11 @@
 // Inti bersama: baca data Firestore app Filter Oil (REST, hanya baca) dan susun workbook Excel kepatuhan.
 // Dipakai halaman kepatuhan dan panel "Kepatuhan & Export" di dalam app Filter Oil. Tanpa efek samping saat di-import.
-import { fmtDate } from "./kepatuhan.js";
+import { fmtDate, addDays } from "./kepatuhan.js";
 
 export const PROJECT = "trecking-filter-oil-store";
 const BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
 const RECORD_FIELDS = ["storeId", "storeName", "slotId", "dateKey", "deviationMin", "complianceScore", "status", "metadataTrust",
-  "evidenceTimeSource", "evidenceLocalIso", "submittedAt", "crewName", "note", "dedupArchived", "integrity"];
+  "evidenceTimeSource", "evidenceLocalIso", "submittedAt", "crewName", "note", "dedupArchived", "integrity", "slotCorrection"];
 
 // ---------- Firestore REST ----------
 export async function api(url, body) {
@@ -27,6 +27,7 @@ export function val(v) {
   if ("timestampValue" in v) return v.timestampValue;
   if ("nullValue" in v) return null;
   if ("referenceValue" in v) return decodeURIComponent(v.referenceValue.split("/").pop());
+  if ("mapValue" in v) return Object.fromEntries(Object.entries(v.mapValue.fields || {}).map(([k, x]) => [k, val(x)]));
   return undefined;
 }
 export const flat = (doc) => ({ id: decodeURIComponent(doc.name.split("/").pop()), ...Object.fromEntries(Object.entries(doc.fields || {}).map(([k, v]) => [k, val(v)])) });
@@ -48,7 +49,10 @@ export async function loadEvidenceImage(id) {
 export async function loadSettings() {
   try { return flat(await api(`${BASE}/settings/app`)); } catch { return {}; }
 }
+// Satu hari sebelum periode ikut dibaca: salinan koreksi slot (Filter 3 kemarin) harus terlihat supaya record asalnya
+// di hari pertama periode dikenali sebagai sudah tergantikan. Laporan tetap hanya menghitung hari dalam periode.
 export async function loadRecords(start, end) {
+  start = addDays(start, -1);
   const ff = (op, value) => ({ fieldFilter: { field: { fieldPath: "dateKey" }, op, value: { stringValue: value } } });
   const j = await api(`${BASE}:runQuery`, {
     structuredQuery: {

@@ -1,7 +1,8 @@
 // Tes logika kepatuhan (public/kepatuhan.js). Jalankan: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildReport, slotsFromSettings, statusOf, actualTime, photoSource, dateRange, ymdWib } from "../public/kepatuhan.js";
+import { buildReport, slotsFromSettings, statusOf, actualTime, photoSource, dateRange, ymdWib, supersededIds } from "../public/kepatuhan.js";
+import { val } from "../public/core.js";
 
 const settings = { slot1: "09:00", slot2: "16:00", slot3: "23:30", toleranceMin: 30, maxAgeHours: 24 };
 const stores = [
@@ -85,6 +86,28 @@ test("dua catatan untuk slot yang sama: ambil status terbaik", () => {
   const r = buildReport({ stores, records, settings, start: "2026-10-04", end: "2026-10-04", nowMs: NOW });
   const row = r.rows.find((x) => x.storeId === "A" && x.slotId === "FILTER-1");
   assert.equal(row.status, "ONTIME");
+});
+
+test("koreksi slot: record asal yang sudah punya salinan (slotCorrection.fromRecordId) tidak dihitung", () => {
+  const stores = [{ id: "J", name: "Jagakarsa", active: true }];
+  const settings = { slot1: "09:00", slot2: "16:00", slot3: "23:30", toleranceMin: 30 };
+  const orig = { id: "2026-10-11_J_FILTER-1", storeId: "J", dateKey: "2026-10-11", slotId: "FILTER-1", status: "EARLY", deviationMin: -500, evidenceLocalIso: "2026-10-11T00:40:59" };
+  const copy = { ...orig, id: "2026-10-10_J_FILTER-3", dateKey: "2026-10-10", slotId: "FILTER-3", status: "LATE", deviationMin: 70,
+    slotCorrection: { fromRecordId: orig.id, fromDateKey: "2026-10-11", fromSlotId: "FILTER-1" } };
+  assert.deepEqual([...supersededIds([orig, copy])], [orig.id]);
+  const r = buildReport({ stores, records: [orig, copy], settings, start: "2026-10-10", end: "2026-10-11", nowMs: Date.parse("2026-10-11T05:00:00Z") }); // 12.00 WIB
+  const at = (d, s) => r.rows.find((x) => x.date === d && x.slotId === s);
+  assert.equal(at("2026-10-10", "FILTER-3").status, "LATE");
+  assert.equal(at("2026-10-10", "FILTER-3").actual, "11/10 00:40");
+  assert.equal(at("2026-10-11", "FILTER-1").status, "MISSED"); // asal tidak lagi mengisi Filter 1 11/10
+  assert.equal(r.total.expected - r.total.MISSED, 1);            // foto yang sama tidak terhitung dua kali
+  // tanpa salinan, record asal tetap dihitung seperti biasa
+  const r2 = buildReport({ stores, records: [orig], settings, start: "2026-10-11", end: "2026-10-11", nowMs: Date.parse("2026-10-11T05:00:00Z") });
+  assert.equal(r2.rows.find((x) => x.slotId === "FILTER-1").status, "EARLY");
+});
+
+test("val(): mapValue Firestore jadi objek biasa", () => {
+  assert.deepEqual(val({ mapValue: { fields: { fromRecordId: { stringValue: "x" }, n: { integerValue: "3" } } } }), { fromRecordId: "x", n: 3 });
 });
 
 test("utilitas tanggal WIB", () => {
