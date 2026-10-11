@@ -26,7 +26,8 @@ const PRESETS: { label: string; provider: AiProvider; baseUrl: string; model: st
 export default function AiSettingsPage() {
   const { profile } = useAuth();
   const [data, setData] = useState<Resp | null>(null);
-  const [form, setForm] = useState<Omit<AiSettings, 'updatedAt' | 'updatedByName'>>({ provider: 'google', model: '', apiKey: '', baseUrl: '', useVertex: false, thinkingLevel: '', mediaResolution: '', maxConcurrent: 2, jsonMode: 'auto' });
+  const [form, setForm] = useState<Omit<AiSettings, 'updatedAt' | 'updatedByName' | 'extraBody'>>({ provider: 'google', model: '', apiKey: '', baseUrl: '', useVertex: false, thinkingLevel: '', mediaResolution: '', maxConcurrent: 2, jsonMode: 'auto' });
+  const [extraBody, setExtraBody] = useState('{}');
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ kind: 'error' | 'success' | 'info'; text: string } | null>(null);
   const [n, setN] = useState(6);
@@ -34,6 +35,15 @@ export default function AiSettingsPage() {
   function applyResp(r: Resp) {
     setData(r);
     setForm({ provider: r.settings.provider, model: r.settings.model, apiKey: '', baseUrl: r.settings.baseUrl, useVertex: r.settings.useVertex, thinkingLevel: r.settings.thinkingLevel ?? '', mediaResolution: r.settings.mediaResolution ?? '', maxConcurrent: r.settings.maxConcurrent ?? 2, jsonMode: r.settings.jsonMode ?? 'auto' });
+    setExtraBody(JSON.stringify(r.settings.extraBody ?? {}));
+  }
+  function parsedExtra(): Record<string, unknown> {
+    try {
+      const v = JSON.parse(extraBody || '{}') as unknown;
+      return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+    } catch {
+      throw new Error('Field tambahan harus JSON objek, contoh {"thinking":{"type":"disabled"}}');
+    }
   }
   async function load() {
     applyResp(await apiFetch<Resp>('/api/admin/ai'));
@@ -53,7 +63,7 @@ export default function AiSettingsPage() {
     setBusy('save');
     setMsg(null);
     try {
-      await apiFetch('/api/admin/ai', { method: 'PUT', body: JSON.stringify({ ...form, apiKey: form.apiKey || undefined }) });
+      await apiFetch('/api/admin/ai', { method: 'PUT', body: JSON.stringify({ ...form, apiKey: form.apiKey || undefined, extraBody: parsedExtra() }) });
       await load();
       setMsg({ kind: 'success', text: 'Pengaturan AI tersimpan. Berlaku untuk analisa berikutnya (maks 20 detik).' });
     } catch (e) {
@@ -67,7 +77,7 @@ export default function AiSettingsPage() {
     setBusy('test');
     setMsg({ kind: 'info', text: `Menguji ${n} foto audit terbaru. Biasanya 1 sampai 3 menit, jangan tutup halaman.` });
     try {
-      const body = useForm ? { n, settings: { ...form, apiKey: form.apiKey || undefined }, label: 'uji konfigurasi form' } : { n, label: 'uji konfigurasi tersimpan' };
+      const body = useForm ? { n, settings: { ...form, apiKey: form.apiKey || undefined, extraBody: parsedExtra() }, label: 'uji konfigurasi form' } : { n, label: 'uji konfigurasi tersimpan' };
       const r = await apiFetch<{ report: AiTestReport }>('/api/cron/ai-selftest', { method: 'POST', body: JSON.stringify(body) });
       await load();
       setMsg({ kind: r.report.failed === 0 ? 'success' : 'error', text: `Selesai: ${r.report.ok}/${r.report.n} berhasil, lolos/gagal sama ${r.report.passAgree}/${r.report.ok}, rata-rata ${(r.report.avgMs / 1000).toFixed(1)} detik.` });
@@ -156,6 +166,12 @@ export default function AiSettingsPage() {
                 <Label>Maks panggilan bersamaan</Label>
                 <Input type="number" min={1} max={8} value={form.maxConcurrent} onChange={(e) => setForm((f) => ({ ...f, maxConcurrent: Number(e.target.value) || 2 }))} />
               </div>
+              {form.provider === 'openai' && (
+                <div className="col-span-2">
+                  <Label htmlFor="extra">Field tambahan request (JSON, opsional)</Label>
+                  <Input id="extra" value={extraBody} onChange={(e) => setExtraBody(e.target.value)} placeholder='{"thinking":{"type":"disabled"}}' />
+                </div>
+              )}
               {form.provider === 'openai' && (
                 <div>
                   <Label>Mode JSON</Label>

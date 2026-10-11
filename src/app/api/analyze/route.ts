@@ -86,6 +86,7 @@ export async function POST(req: Request) {
     await Promise.allSettled(oldPaths.map((p) => bucket.file(p).delete()));
 
     // 2) Analisa AI (semua foto sekaligus)
+    const tAi = Date.now();
     const ai = await analyzeCleanliness({
       images,
       area: item.area,
@@ -130,7 +131,7 @@ export async function POST(req: Request) {
       action: 'ANALYZE_ITEM',
       entity: 'auditItem',
       entityId: `${audit.id}/${item.id}`,
-      details: { area: item.area, score: ai.score, photoValid: ai.photoValid, coverage: ai.coverage ?? null, photos: images.length, confidence: ai.confidence, model: ai.model, attempt: attempts, adjustments: ai.adjustments ?? [], tokens: ai.usage ?? null },
+      details: { area: item.area, score: ai.score, photoValid: ai.photoValid, coverage: ai.coverage ?? null, photos: images.length, confidence: ai.confidence, model: ai.model, attempt: attempts, adjustments: ai.adjustments ?? [], tokens: ai.usage ?? null, ms: Date.now() - tAi },
     });
 
     const fresh = await itemRef.get();

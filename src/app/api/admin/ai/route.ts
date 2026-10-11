@@ -34,6 +34,7 @@ const Schema = z.object({
   mediaResolution: z.enum(['', 'low', 'medium', 'high']).default(''),
   maxConcurrent: z.number().int().min(1).max(8).default(2),
   jsonMode: z.enum(['auto', 'prompt']).default('auto'),
+  extraBody: z.record(z.string(), z.unknown()).default({}),
 });
 
 /** PUT /api/admin/ai -> simpan pengaturan provider AI. Super admin. */

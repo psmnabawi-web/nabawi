@@ -325,6 +325,8 @@ export interface AiSettings {
   maxConcurrent: number;
   /** openai: auto = coba response_format json_object lalu fallback prompt; prompt = hanya lewat prompt. */
   jsonMode: 'auto' | 'prompt';
+  /** openai: field tambahan yang digabung ke body request (mis. {"thinking":{"type":"disabled"}} untuk GLM, {"reasoning_effort":"low"}). */
+  extraBody?: Record<string, unknown>;
   updatedAt: number;
   updatedByName: string | null;
 }

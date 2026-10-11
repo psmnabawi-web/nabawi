@@ -18,6 +18,7 @@ export function defaultsFromEnv(): AiSettings {
     mediaResolution: (process.env.AI_MEDIA_RESOLUTION ?? '').toLowerCase() as AiSettings['mediaResolution'],
     maxConcurrent: Number(process.env.AI_MAX_CONCURRENT || 2),
     jsonMode: 'auto',
+    extraBody: {},
     updatedAt: 0,
     updatedByName: null,
   };

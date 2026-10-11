@@ -25,6 +25,7 @@ const BodySchema = z.object({
       thinkingLevel: z.enum(['', 'minimal', 'low', 'medium', 'high']).optional(),
       mediaResolution: z.enum(['', 'low', 'medium', 'high']).optional(),
       jsonMode: z.enum(['auto', 'prompt']).optional(),
+      extraBody: z.record(z.string(), z.unknown()).optional(),
     })
     .optional(),
   /** Label laporan. */

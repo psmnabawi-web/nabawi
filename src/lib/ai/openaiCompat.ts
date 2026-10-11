@@ -8,7 +8,7 @@ import { acquire, jsonFormatInstruction, parseJson, sleep, type AiUsage, type Js
  * JSON diminta lewat response_format json_object (jika didukung) dan selalu juga lewat prompt.
  */
 const RETRY_DELAYS_MS = [8_000, 16_000, 30_000];
-const TIMEOUT_MS = 150_000;
+const TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 100_000);
 
 interface ChatResponse {
   choices?: Array<{ message?: { content?: string | Array<{ type?: string; text?: string }> }; finish_reason?: string }>;
@@ -61,6 +61,7 @@ export async function generateJsonWithOpenAI(req: JsonRequest, s: AiSettings): P
     temperature: 0,
     max_tokens: Math.min(req.maxOutputTokens ?? 4096, 8192),
     stream: false,
+    ...(s.extraBody && typeof s.extraBody === 'object' ? s.extraBody : {}),
   };
   let useJsonMode = s.jsonMode !== 'prompt';
 
