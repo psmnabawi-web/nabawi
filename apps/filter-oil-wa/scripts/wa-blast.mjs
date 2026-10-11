@@ -325,7 +325,7 @@ async function latestWithField(db, parent, collectionId, dateF) {
 async function loadScores(db, stores, w) {
   const spec = CFG.scoreCollection;
   const sub = spec.match(/^([^/]+)\/\{store\}\/([^/]+)$/);
-  const done = new Map(); let docsCount = 0; let unmatched = 0; let fuzzy = 0; // storeId → Set(slot)
+  const done = new Map(); let docsCount = 0; let unmatched = 0; let fuzzy = 0; let archived = 0; // storeId → Set(slot)
   const mark = (id, slot) => { if (!done.has(id)) done.set(id, new Set()); if (slot !== undefined && slot !== null && slot !== "") done.get(id).add(String(slot)); };
   if (sub) {
     // Sub-koleksi per store: stores/{store}/scorings → query per store (indeks otomatis per koleksi).
@@ -358,15 +358,18 @@ async function loadScores(db, stores, w) {
   const byKey = new Map(); for (const s of stores) for (const k of s.keys) if (!byKey.has(k)) byKey.set(k, s);
   const seen = new Set();
   for (const where of filters) {
-    const docs = await db.query("", { from: [{ collectionId: spec }], where, select: { fields: [storeF, dateF, slotF].filter(Boolean).map((f) => ({ fieldPath: fieldPath(f) })) } });
+    const docs = await db.query("", { from: [{ collectionId: spec }], where, select: { fields: [storeF, dateF, slotF, "dedupArchived"].filter(Boolean).map((f) => ({ fieldPath: fieldPath(f) })) } });
     for (const d of docs) {
-      if (seen.has(d.name)) continue; seen.add(d.name); docsCount++;
+      if (seen.has(d.name)) continue; seen.add(d.name);
+      if (valOf(getField(d.fields || {}, "dedupArchived")) === true) { archived++; continue; } // diarsipkan admin (duplikat/koreksi): tidak dihitung
+      docsCount++;
       const key = norm(valOf(getField(d.fields || {}, storeF)));
       let s = byKey.get(key);
       if (!s && key) { s = similarStore(stores, key); if (s) { byKey.set(key, s); fuzzy++; } }
       if (s) mark(s.id, slotF ? valOf(getField(d.fields || {}, slotF)) : undefined); else unmatched++;
     }
   }
+  if (archived) log(`${archived} data scoring diarsipkan (dedupArchived) dan tidak dihitung.`);
   if (fuzzy) log(`${fuzzy} data scoring dicocokkan lewat nama store yang mirip (mis. tanpa awalan brand).`);
   if (unmatched) warn(`${unmatched} data scoring pada ${w.date} tidak cocok dengan master store (store nonaktif, salah ketik, atau field store berbeda). Data ini tidak dihitung.`);
   return { done, info: `koleksi "${spec}", field store=${storeF}, field tanggal=${dateF} (${kind}), field slot=${slotF || "-"}, ${docsCount} dok pada ${w.date}, ${unmatched} tidak cocok` };

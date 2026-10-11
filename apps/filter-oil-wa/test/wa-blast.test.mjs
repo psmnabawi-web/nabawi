@@ -401,6 +401,27 @@ test("struktur app Filter Oil: filterRecords + dateKey + slotId, store activeFro
   } finally { await mock.close(); }
 });
 
+test("filterRecords yang diarsipkan (dedupArchived=true) tidak dihitung sebagai sudah scoring", async () => {
+  const mock = await startMock({
+    stores: [
+      { id: "s1", fields: { name: S("Store A"), active: B(true), activeFrom: S("2026-09-01") } },
+      { id: "s2", fields: { name: S("Store B"), active: B(true), activeFrom: S("2026-09-01") } },
+    ],
+    filterRecords: [
+      { id: "a", fields: { storeId: S("s1"), slotId: S("FILTER-1"), dateKey: S("2026-10-05"), submittedAt: TS("2026-10-05T03:00:00Z") } },
+      { id: "b", fields: { storeId: S("s2"), slotId: S("FILTER-1"), dateKey: S("2026-10-05"), submittedAt: TS("2026-10-05T03:00:00Z"), dedupArchived: B(true) } },
+      { id: "c", fields: { storeId: S("s1"), slotId: S("FILTER-2"), dateKey: S("2026-10-05"), submittedAt: TS("2026-10-05T04:00:00Z"), dedupArchived: B(false) } },
+    ],
+  });
+  try {
+    const r = await run(mock, { ACTION: "dry_run", FO_TEST_NOW: NOON, FO_SCORE_COLLECTION: "filterRecords", FO_SCORE_DATE_FIELD: "dateKey", FO_SCORE_STORE_FIELD: "storeId" });
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+    assert.match(r.text, /Sudah scoring: 1 dari 2 store \(50%\)\*\n1\. Store A \(2 slot\)\n/);
+    assert.match(r.text, /Belum scoring: 1 dari 2 store \(50%\)\*\n1\. Store B\n/);
+    assert.match(r.stdout, /1 data scoring diarsipkan \(dedupArchived\) dan tidak dihitung/);
+  } finally { await mock.close(); }
+});
+
 test("dry_run dengan nama grup yang salah: tidak mengirim, tapi Riwayat memberi tahu grup tidak ditemukan", async () => {
   const sheet = { id: SHEET_ID, config: [["status", "UJI"], ["fonnte_token", "fonnte-token"], ["grup_tujuan", "Grup Salah Ketik"]] };
   const mock = await startMock(SCORES_TODAY, GROUPS, sheet);

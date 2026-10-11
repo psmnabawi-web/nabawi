@@ -31,10 +31,26 @@ export const PATCHES = {
   "app.js": [
     // Dashboard baru (kepatuhan/dashboard.js) memasang window.foDashboard. Bila tidak terpasang, Dashboard lama jalan seperti biasa.
     { after: `async function loadDashboard(){\n`, add: `  if(window.foDashboard) return window.foDashboard.load();\n` },
-    // Perbaikan slot lewat tengah malam: slot kemarin & besok ikut dibandingkan, jadi foto 00:40 tercatat sebagai
-    // Filter 3 (23:30) KEMARIN (terlambat 70 menit), bukan Filter 1 hari ini (yang lalu memblokir input Filter 1 pagi).
+
+    // ---- Perbaikan slot filter malam (kasus Jagakarsa 11/10: foto 00:40 tercatat Filter 1 hari ini & mengunci Filter 1 pagi) ----
     {
-      find: `  let best = slots[0], diff = Infinity, signed = 0;
+      before: `function autoSlot(dt){`,
+      add: `// Jam dinding WIB untuk menentukan slot & tanggal. Foto kamera (EXIF) sudah berisi jam lokal; sumber lain dihitung dari
+// waktu absolut, jadi HP dengan zona waktu salah tetap tercatat dengan jam WIB yang benar.
+function wibWall(meta){
+  if(String(meta.source || "").startsWith("EXIF")) return meta.dt;
+  return new Date(meta.dt.getTime() + (meta.dt.getTimezoneOffset() + 420) * 60000);
+}
+// Jam foto untuk daftar; tanggal foto ikut ditulis bila beda dengan tanggal slot (filter malam yang selesai lewat tengah malam).
+function evidenceClock(r){
+  const iso = String(r?.evidenceLocalIso || "");
+  return iso.length >= 16 && iso.slice(0, 10) !== r?.dateKey ? \`foto \${iso.slice(8, 10)}/\${iso.slice(5, 7)} \${iso.slice(11)}\` : iso.slice(11);
+}
+`,
+    },
+    {
+      find: `  const nowMin = dt.getHours() * 60 + dt.getMinutes();
+  let best = slots[0], diff = Infinity, signed = 0;
   for(const s of slots){
     const delta = nowMin - minutesOf(s.time);
     if(Math.abs(delta) < diff){
@@ -43,40 +59,80 @@ export const PATCHES = {
       signed = delta;
     }
   }
-`,
-      replace: `  let best = slots[0], diff = Infinity, signed = 0, dayOffset = 0;
-  for(const s of slots){
-    for(const off of [0, -1, 1]){
-      const delta = nowMin - (minutesOf(s.time) + off * 1440);
-      if(Math.abs(delta) < diff){
-        best = s;
-        diff = Math.abs(delta);
-        signed = delta;
-        dayOffset = off;
-      }
-    }
-  }
-  const slotDay = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() + dayOffset);
-`,
+  let status = "ON TIME";
+  const tol = Number(state.settings.toleranceMin || 30);
+  if(Math.abs(signed) > tol) status = signed < 0 ? "EARLY" : "LATE";
+  return { ...best, deviationMin: signed, status };`,
+      replace: `  const nowMin = dt.getHours() * 60 + dt.getMinutes();
+  // Hari operasional berganti jam 05:00 (bisa diatur lewat settings.dayCutoff): foto 00:00-04:59 milik hari kemarin,
+  // jadi filter malam yang selesai lewat tengah malam tercatat sebagai Filter 3 kemarin, bukan Filter 1 hari ini.
+  const cut = minutesOf(state.settings.dayCutoff || "05:00");
+  const op = mm => (mm < cut ? mm + 1440 : mm);
+  const base = nowMin < cut ? -1 : 0;
+  const tol = Number(state.settings.toleranceMin || 30);
+  const pick = (s, k) => {
+    const delta = op(nowMin) - (op(minutesOf(s.time)) + k * 1440);
+    const slotDay = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate() + base + k);
+    const status = Math.abs(delta) <= tol ? "ON TIME" : (delta < 0 ? "EARLY" : "LATE");
+    return { ...s, deviationMin: delta, status, dayOffset: base + k, slotDay, slotDateKey: toDateKey(slotDay) };
+  };
+  const byGap = (a, b) => Math.abs(a.deviationMin) - Math.abs(b.deviationMin);
+  // Utama: slot terdekat di hari operasional yang sama. Cadangan bila slot utama sudah terisi: slot terdekat lainnya (termasuk hari sebelah).
+  const same = slots.map(s => pick(s, 0)).filter(c => Number.isFinite(c.deviationMin)).sort(byGap);
+  const today = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  const best = same[0] || { ...slots[0], deviationMin: 0, status: "ON TIME", dayOffset: 0, slotDay: today, slotDateKey: toDateKey(today) };
+  const alternatives = [...same.slice(1), ...slots.flatMap(s => [pick(s, -1), pick(s, 1)])]
+    .filter(c => Number.isFinite(c.deviationMin)).sort(byGap).slice(0, 2);
+  return { ...best, alternatives };`,
     },
-    { find: `  return { ...best, deviationMin: signed, status };`, replace: `  return { ...best, deviationMin: signed, status, dayOffset, slotDay, slotDateKey: toDateKey(slotDay) };` },
+    { find: `    const slot = autoSlot(meta.dt);`, replace: `    const wall = wibWall(meta);\n    const slot = autoSlot(wall);` },
+    { find: `    state.evidenceMeta = { ...meta, ...slot, ageHours, integrity, hash };`, replace: `    state.evidenceMeta = { ...meta, ...slot, wall, ageHours, integrity, hash };` },
+    { find: `    $("metaDay").textContent = fmtDay(meta.dt);`, replace: `    $("metaDay").textContent = fmtDay(wall);` },
+    { find: `    $("metaDate").textContent = fmtDate(meta.dt);`, replace: `    $("metaDate").textContent = fmtDate(wall);` },
+    { find: `    $("metaTime").textContent = toTime(meta.dt);`, replace: `    $("metaTime").textContent = toTime(wall);` },
     { find: `    $("metaSlot").textContent = slot.label;`, replace: `    $("metaSlot").textContent = slot.dayOffset ? \`\${slot.label} · \${fmtDay(slot.slotDay)}, \${fmtDate(slot.slotDay)}\` : slot.label;` },
     {
       find: "      alert.textContent = `Timestamp dibaca dari ${meta.source}.`;",
-      replace: "      alert.textContent = `Timestamp dibaca dari ${meta.source}.` + (slot.dayOffset ? ` Foto lewat tengah malam, dicatat sebagai ${slot.label} tanggal ${fmtDate(slot.slotDay)}.` : \"\");",
+      replace: "      alert.textContent = `Timestamp dibaca dari ${meta.source}.` + (slot.dayOffset ? ` Foto sebelum jam ${state.settings.dayCutoff || \"05:00\"} termasuk hari operasional kemarin: dicatat sebagai ${slot.label} tanggal ${fmtDate(slot.slotDay)}.` : \"\");",
     },
-    { find: `  const dateKey = toDateKey(m.dt);`, replace: `  const dateKey = m.slotDateKey || toDateKey(m.dt);` },
     {
-      find: `  const duplicateExists = sameDaySnap.docs.some(x => {
+      find: `  const dateKey = toDateKey(m.dt);
+  const recordId = \`\${dateKey}_\${storeId}_\${m.id}\`.replace(/[^A-Za-z0-9_-]/g, "-");
+  const ref = doc(db, "filterRecords", recordId);
+  const sameDaySnap = await getDocs(query(collection(db, "filterRecords"), where("dateKey", "==", dateKey), limit(500)));
+  const duplicateExists = sameDaySnap.docs.some(x => {
     const d = x.data();
     return d.dedupArchived !== true && d.storeId === storeId && d.slotId === m.id;
   });
   if(duplicateExists) return toast("Slot filter ini sudah memiliki evidence. Duplicate tidak diizinkan.");`,
-      replace: `  const duplicate = sameDaySnap.docs.map(x => x.data()).find(d => d.dedupArchived !== true && d.storeId === storeId && d.slotId === m.id);
-  if(duplicate) return toast(\`\${m.label} tanggal \${dateKey.split("-").reverse().join("/")} sudah terisi oleh \${duplicate.crewName || "crew lain"} (foto \${String(duplicate.evidenceLocalIso || "-").replace("T", " ").slice(0, 16)}). Duplicate tidak diizinkan. Bila slot salah, hubungi admin.\`, 8000);`,
+      replace: `  const findTaken = async (key, slotId) => (await getDocs(query(collection(db, "filterRecords"), where("dateKey", "==", key), limit(500))))
+    .docs.map(x => x.data()).find(d => d.dedupArchived !== true && d.storeId === storeId && d.slotId === slotId);
+  const fmtKey = key => key.split("-").reverse().join("/");
+  let dateKey = m.slotDateKey || toDateKey(m.wall || m.dt);
+  const taken = await findTaken(dateKey, m.id);
+  if(taken){
+    // Slot utama sudah terisi: tawarkan slot terdekat berikutnya bila masih kosong; crew yang memutuskan.
+    const msg = \`\${m.label} tanggal \${fmtKey(dateKey)} sudah terisi oleh \${taken.crewName || "crew lain"} (foto \${String(taken.evidenceLocalIso || "-").replace("T", " ").slice(0, 16)}).\`;
+    const alt = (m.alternatives || [])[0];
+    const altFree = alt && !(await findTaken(alt.slotDateKey, alt.id));
+    if(!altFree || !confirm(\`\${msg}\\n\\nSimpan foto ini sebagai \${alt.label} tanggal \${fmtKey(alt.slotDateKey)} (jadwal \${alt.time}, \${alt.status} \${alt.deviationMin >= 0 ? "+" : ""}\${alt.deviationMin} menit)?\`))
+      return toast(\`\${msg} Duplicate tidak diizinkan. Bila slot salah, hubungi admin.\`, 8000);
+    Object.assign(m, { id: alt.id, label: alt.label, time: alt.time, deviationMin: alt.deviationMin, status: alt.status, dayOffset: alt.dayOffset, slotDay: alt.slotDay, slotDateKey: alt.slotDateKey });
+    dateKey = alt.slotDateKey;
+  }
+  const recordId = \`\${dateKey}_\${storeId}_\${m.id}\`.replace(/[^A-Za-z0-9_-]/g, "-");
+  const ref = doc(db, "filterRecords", recordId);`,
     },
-    { find: `      dayName: fmtDay(m.dt),`, replace: `      dayName: fmtDay(m.slotDay || m.dt),` },
-    { find: "      evidenceLocalIso: `${dateKey}T${toTime(m.dt)}`,", replace: "      evidenceLocalIso: `${toDateKey(m.dt)}T${toTime(m.dt)}`," },
+    { find: `      dayName: fmtDay(m.dt),`, replace: `      dayName: fmtDay(m.slotDay || m.wall || m.dt),` },
+    { find: "      evidenceLocalIso: `${dateKey}T${toTime(m.dt)}`,", replace: "      evidenceLocalIso: `${toDateKey(m.wall || m.dt)}T${toTime(m.wall || m.dt)}`," },
+    // Daftar Evidence Terakhir & log Dashboard lama: tulis tanggal foto bila beda dengan tanggal slot.
+    {
+      find: "        <small>${safe(r.crewName)} • ${safe(r.dayName)}, ${safe(r.dateKey)} ${safe((r.evidenceLocalIso || \"\").slice(11))}</small>",
+      replace: "        <small>${safe(r.crewName)} • ${safe(r.dayName)}, ${safe(r.dateKey)} ${safe(evidenceClock(r))}</small>",
+    },
+    { find: "      <td>${safe((r.evidenceLocalIso || \"\").slice(11))}</td>", replace: "      <td>${safe(evidenceClock(r))}</td>" },
+    // Record yang diarsipkan (dedupArchived) tidak ikut dihitung/ditampilkan, sama seperti laporan Kepatuhan & Dashboard baru.
+    { after: `  for(const raw of records){`, add: `\n    if(raw?.dedupArchived === true) continue;` },
   ],
 };
 export const INSERTS = PATCHES["index.html"];

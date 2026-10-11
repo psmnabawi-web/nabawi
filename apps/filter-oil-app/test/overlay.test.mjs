@@ -32,62 +32,95 @@ test("titik sisip hilang/dobel → build gagal, bukan menyisip sembarangan", () 
   assert.throws(() => patchIndex(LIVE_INDEX + "\n  </main>"), /ditemukan 2x/);
 });
 
-test("app.js: tambalan bisa dibalik persis, sisanya identik dengan live", () => {
+test("app.js: semua tambalan bisa dibalik persis; sisanya identik dengan live", () => {
   const out = patchFile("app.js", LIVE_APP);
   assert.equal(unpatchFile("app.js", out), LIVE_APP);
   assert.match(out, /async function loadDashboard\(\)\{\n  if\(window\.foDashboard\) return window\.foDashboard\.load\(\);\n  const from = \$\("dashFrom"\)\.value;/);
-  // baris yang berubah hanya di autoSlot, pratinjau slot, cek duplikat, dan penanggalan record
-  const liveLines = new Set(LIVE_APP.split("\n"));
-  const added = out.split("\n").filter((l) => !liveLines.has(l));
-  assert.ok(added.length > 0 && added.length <= 20, `${added.length} baris berubah`);
-  for (const l of added) assert.match(l, /foDashboard|dayOffset|slotDay|slotDateKey|for\(const off|const delta|Math\.abs\(delta\) < diff|best = s|diff = Math|signed = delta|^\s*\}$|duplicate|toDateKey\(m\.dt\)\}T/, l);
-  assert.equal(out.split("\n").length - LIVE_APP.split("\n").length, 2); // +1 pengalih dashboard, +4 autoSlot, -3 cek duplikat
+  // fungsi app lain (simpan evidence ke Firestore, master data, pergantian minyak) tidak tersentuh
+  for (const keep of ["await setDoc(ref, {", "async function loadMasters(", "async function loadOilChangeHistory(", "function compressImage(", "async function getMetadataTime("])
+    assert.equal(out.split(keep).length, LIVE_APP.split(keep).length, keep);
 });
 
-// Jalankan autoSlot hasil tambalan apa adanya (diambil dari app.js) dengan pengaturan slot live.
-function loadAutoSlot(settings = { slot1: "09:00", slot2: "16:00", slot3: "23:30", toleranceMin: 30 }) {
+// Ambil fungsi dari app.js hasil tambalan apa adanya, lalu jalankan di Node dengan pengaturan slot live.
+function loadPatched(settings = { slot1: "09:00", slot2: "16:00", slot3: "23:30", toleranceMin: 30 }) {
   const src = patchFile("app.js", LIVE_APP);
-  const start = src.indexOf("function autoSlot(dt){");
-  const end = src.indexOf("\n}\n", start) + 2;
-  const helpers = "function pad(n){ return String(n).padStart(2, \"0\"); }\n" +
-    src.match(/function toDateKey\(d\)\{[^\n]*\n/)[0] + src.match(/function minutesOf\(timeStr\)\{[\s\S]*?\n\}\n/)[0];
-  return new Function("state", `${helpers}${src.slice(start, end)}; return autoSlot;`)({ settings });
+  const fn = (name) => { const i = src.indexOf(`function ${name}(`); return src.slice(i, src.indexOf("\n}\n", i) + 2); };
+  const body = ["pad", "toDateKey", "toTime", "minutesOf", "wibWall", "evidenceClock", "autoSlot"].map((n) => src.match(new RegExp(`function ${n}\\(`)) && (n === "pad" || n === "toDateKey" || n === "toTime" ? src.match(new RegExp(`function ${n}\\([^\\n]*\\n`))[0] : fn(n))).join("");
+  return new Function("state", `${body}; return { autoSlot, wibWall, evidenceClock };`)({ settings });
 }
 const at = (iso) => new Date(`${iso}+07:00`);
+const pickOf = (x) => [x.id, x.dayOffset, x.slotDateKey, x.deviationMin, x.status];
 
-test("autoSlot: foto lewat tengah malam = Filter 3 kemarin (kasus Jagakarsa 11/10 00:40)", () => {
+test("autoSlot: hari operasional berganti 05:00 → filter malam lewat tengah malam = Filter 3 kemarin", () => {
   process.env.TZ = "Asia/Jakarta";
-  const autoSlot = loadAutoSlot();
-  const r = autoSlot(at("2026-10-11T00:40:59"));
-  assert.equal(r.id, "FILTER-3"); assert.equal(r.dayOffset, -1); assert.equal(r.slotDateKey, "2026-10-10");
-  assert.equal(r.deviationMin, 70); assert.equal(r.status, "LATE");
+  const { autoSlot } = loadPatched();
+  assert.deepEqual(pickOf(autoSlot(at("2026-10-11T00:40:59"))), ["FILTER-3", -1, "2026-10-10", 70, "LATE"]); // kasus Jagakarsa
   const cases = [
     ["2026-10-11T09:10:00", "FILTER-1", 0, "2026-10-11", 10, "ON TIME"],
-    ["2026-10-11T08:00:00", "FILTER-1", 0, "2026-10-11", -60, "EARLY"],
-    ["2026-10-11T16:40:00", "FILTER-2", 0, "2026-10-11", 40, "LATE"],
-    ["2026-10-11T23:50:00", "FILTER-3", 0, "2026-10-11", 20, "ON TIME"],
-    ["2026-10-11T23:00:00", "FILTER-3", 0, "2026-10-11", -30, "ON TIME"],
+    ["2026-10-11T06:23:00", "FILTER-1", 0, "2026-10-11", -157, "EARLY"],
+    ["2026-10-11T05:00:00", "FILTER-1", 0, "2026-10-11", -240, "EARLY"],   // tepat jam ganti hari
+    ["2026-10-11T04:59:00", "FILTER-3", -1, "2026-10-10", 329, "LATE"],
+    ["2026-10-11T04:36:20", "FILTER-3", -1, "2026-10-10", 306, "LATE"],    // pola Sektor 9
+    ["2026-10-11T04:15:00", "FILTER-3", -1, "2026-10-10", 285, "LATE"],
     ["2026-10-11T00:00:00", "FILTER-3", -1, "2026-10-10", 30, "ON TIME"],
-    ["2026-10-11T03:54:04", "FILTER-3", -1, "2026-10-10", 264, "LATE"],
-    ["2026-10-11T04:36:20", "FILTER-1", 0, "2026-10-11", -264, "EARLY"],   // lebih dekat ke 09:00 hari ini
+    ["2026-10-11T12:30:00", "FILTER-1", 0, "2026-10-11", 210, "LATE"],     // tengah 09:00-16:00 → slot lebih awal (seperti lama)
+    ["2026-10-11T16:40:00", "FILTER-2", 0, "2026-10-11", 40, "LATE"],
+    ["2026-10-11T23:00:00", "FILTER-3", 0, "2026-10-11", -30, "ON TIME"],
+    ["2026-10-11T23:59:00", "FILTER-3", 0, "2026-10-11", 29, "ON TIME"],
     ["2026-10-01T00:21:25", "FILTER-3", -1, "2026-09-30", 51, "LATE"],     // ganti bulan
     ["2027-01-01T00:10:00", "FILTER-3", -1, "2026-12-31", 40, "LATE"],     // ganti tahun
-    ["2026-03-01T00:10:00", "FILTER-3", -1, "2026-02-28", 40, "LATE"],     // Februari
+    ["2028-03-01T00:10:00", "FILTER-3", -1, "2028-02-29", 40, "LATE"],     // kabisat
   ];
-  for (const [iso, id, off, key, dev, st] of cases) {
-    const x = autoSlot(at(iso));
-    assert.deepEqual([x.id, x.dayOffset, x.slotDateKey, x.deviationMin, x.status], [id, off, key, dev, st], iso);
+  for (const [iso, ...want] of cases) assert.deepEqual(pickOf(autoSlot(at(iso))), want, iso);
+});
+
+test("autoSlot: jam 05:00-23:59 sama persis dengan aturan lama (tidak ada perubahan di siang hari)", () => {
+  process.env.TZ = "Asia/Jakarta";
+  const { autoSlot } = loadPatched();
+  const slots = [["FILTER-1", 540], ["FILTER-2", 960], ["FILTER-3", 1410]];
+  for (let m = 300; m < 1440; m++) {
+    let best = slots[0], diff = Infinity, signed = 0;
+    for (const [id, t] of slots) if (Math.abs(m - t) < diff) { best = [id, t]; diff = Math.abs(m - t); signed = m - t; }
+    const r = autoSlot(at(`2026-10-11T${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}:00`));
+    assert.deepEqual([r.id, r.deviationMin, r.dayOffset], [best[0], signed, 0], `menit ${m}`);
   }
 });
 
-test("autoSlot: jarak sama → slot hari yang sama menang; pengaturan slot lain tetap jalan", () => {
+test("autoSlot: cadangan bila slot utama terisi; slot3 lewat tengah malam & dayCutoff bisa diatur", () => {
   process.env.TZ = "Asia/Jakarta";
-  // 04:15 tepat di tengah 23:30 kemarin dan 09:00: dua-duanya 285 menit → tetap Filter 1 hari ini (perilaku lama)
-  const mid = loadAutoSlot()(at("2026-10-11T04:15:00"));
-  assert.deepEqual([mid.id, mid.dayOffset, mid.deviationMin], ["FILTER-1", 0, -285]);
-  const early = loadAutoSlot({ slot1: "06:00", slot2: "14:00", slot3: "22:00", toleranceMin: 15 });
-  const r = early(at("2026-10-11T01:00:00"));
-  assert.deepEqual([r.id, r.dayOffset, r.slotDateKey, r.deviationMin, r.status], ["FILTER-3", -1, "2026-10-10", 180, "LATE"]);
+  const { autoSlot } = loadPatched();
+  // Sektor 9 23/09 02:50: utama Filter 3 22/09 (sudah terisi) → cadangan pertama Filter 1 23/09 (perilaku lama, atas pilihan crew)
+  const r = autoSlot(at("2026-09-23T02:50:54"));
+  assert.deepEqual(pickOf(r), ["FILTER-3", -1, "2026-09-22", 200, "LATE"]);
+  assert.deepEqual(pickOf(r.alternatives[0]), ["FILTER-1", 0, "2026-09-23", -370, "EARLY"]);
+  const late = loadPatched({ slot1: "10:00", slot2: "17:00", slot3: "00:30", toleranceMin: 30 }).autoSlot;
+  assert.deepEqual(pickOf(late(at("2026-10-10T23:50:00"))), ["FILTER-3", 0, "2026-10-10", -40, "EARLY"]);   // tidak lagi "besok"
+  assert.deepEqual(pickOf(late(at("2026-10-11T00:20:00"))), ["FILTER-3", -1, "2026-10-10", -10, "ON TIME"]);
+  const cut6 = loadPatched({ slot1: "09:00", slot2: "16:00", slot3: "23:30", toleranceMin: 30, dayCutoff: "06:00" }).autoSlot;
+  assert.deepEqual(pickOf(cut6(at("2026-10-11T05:30:00"))), ["FILTER-3", -1, "2026-10-10", 360, "LATE"]);
+  const broken = loadPatched({ slot1: "", slot2: "", slot3: "", toleranceMin: 30 }).autoSlot(at("2026-10-11T10:00:00"));
+  assert.deepEqual(pickOf(broken), ["FILTER-1", 0, "2026-10-11", 0, "ON TIME"]);                           // sama dengan perilaku lama
+});
+
+test("wibWall: HP dengan zona waktu salah tetap memakai jam WIB; EXIF tidak diubah", () => {
+  const instant = Date.parse("2026-10-05T07:16:25Z"); // 14:16:25 WIB (kasus Beringin 04/10, HP di UTC-12)
+  for (const tz of ["Etc/GMT+12", "Asia/Jakarta", "UTC", "Asia/Makassar"]) {
+    process.env.TZ = tz;
+    const { wibWall, autoSlot } = loadPatched();
+    const w = wibWall({ dt: new Date(instant), source: "Capture Session" });
+    assert.deepEqual([w.getFullYear(), w.getMonth() + 1, w.getDate(), w.getHours(), w.getMinutes()], [2026, 10, 5, 14, 16], tz);
+    assert.deepEqual(pickOf(autoSlot(w)), ["FILTER-2", 0, "2026-10-05", -104, "EARLY"], tz);
+    const exif = new Date(2026, 9, 11, 0, 40, 0);
+    assert.equal(wibWall({ dt: exif, source: "EXIF DateTimeOriginal" }), exif);
+  }
+  process.env.TZ = "Asia/Jakarta";
+});
+
+test("evidenceClock: tanggal foto ditulis bila beda dengan tanggal slot", () => {
+  const { evidenceClock } = loadPatched();
+  assert.equal(evidenceClock({ dateKey: "2026-10-11", evidenceLocalIso: "2026-10-11T09:40:41" }), "09:40:41");
+  assert.equal(evidenceClock({ dateKey: "2026-10-10", evidenceLocalIso: "2026-10-11T00:40:59" }), "foto 11/10 00:40:59");
+  assert.equal(evidenceClock({ dateKey: "2026-10-10" }), "");
 });
 
 test("build: overlay berisi file yang ditambal + salinan persis file pendukung", () => {
