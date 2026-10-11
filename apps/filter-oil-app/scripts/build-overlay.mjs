@@ -77,12 +77,13 @@ function evidenceClock(r){
     return { ...s, deviationMin: delta, status, dayOffset: base + k, slotDay, slotDateKey: toDateKey(slotDay) };
   };
   const byGap = (a, b) => Math.abs(a.deviationMin) - Math.abs(b.deviationMin);
-  // Utama: slot terdekat di hari operasional yang sama. Cadangan bila slot utama sudah terisi: slot terdekat lainnya (termasuk hari sebelah).
+  // Utama: slot terdekat di hari operasional yang sama. Cadangan HANYA untuk foto dini hari (00:00-cutoff), yang memang bisa
+  // milik dua hari: slot terdekat di hari kalender foto (mis. Filter 1 hari ini). Foto siang/malam tidak diberi cadangan,
+  // supaya slot yang terisi tidak "dialihkan" ke slot lain hari yang sama (mis. Filter 1 jadi Filter 2).
   const same = slots.map(s => pick(s, 0)).filter(c => Number.isFinite(c.deviationMin)).sort(byGap);
   const today = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
   const best = same[0] || { ...slots[0], deviationMin: 0, status: "ON TIME", dayOffset: 0, slotDay: today, slotDateKey: toDateKey(today) };
-  const alternatives = [...same.slice(1), ...slots.flatMap(s => [pick(s, -1), pick(s, 1)])]
-    .filter(c => Number.isFinite(c.deviationMin)).sort(byGap).slice(0, 2);
+  const alternatives = base === -1 ? slots.map(s => pick(s, 1)).filter(c => Number.isFinite(c.deviationMin)).sort(byGap).slice(0, 1) : [];
   return { ...best, alternatives };`,
     },
     { find: `    const slot = autoSlot(meta.dt);`, replace: `    const wall = wibWall(meta);\n    const slot = autoSlot(wall);` },

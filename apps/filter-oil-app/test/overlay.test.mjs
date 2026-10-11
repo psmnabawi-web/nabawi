@@ -93,6 +93,9 @@ test("autoSlot: cadangan bila slot utama terisi; slot3 lewat tengah malam & dayC
   const r = autoSlot(at("2026-09-23T02:50:54"));
   assert.deepEqual(pickOf(r), ["FILTER-3", -1, "2026-09-22", 200, "LATE"]);
   assert.deepEqual(pickOf(r.alternatives[0]), ["FILTER-1", 0, "2026-09-23", -370, "EARLY"]);
+  assert.equal(r.alternatives.length, 1);
+  // foto siang/malam: tidak ada cadangan (Filter 1 yang terisi tidak dialihkan ke Filter 2/3 hari yang sama)
+  for (const iso of ["2026-10-11T10:20:00", "2026-10-11T16:40:00", "2026-10-11T23:50:00", "2026-10-11T05:00:00"]) assert.deepEqual(autoSlot(at(iso)).alternatives, [], iso);
   const late = loadPatched({ slot1: "10:00", slot2: "17:00", slot3: "00:30", toleranceMin: 30 }).autoSlot;
   assert.deepEqual(pickOf(late(at("2026-10-10T23:50:00"))), ["FILTER-3", 0, "2026-10-10", -40, "EARLY"]);   // tidak lagi "besok"
   assert.deepEqual(pickOf(late(at("2026-10-11T00:20:00"))), ["FILTER-3", -1, "2026-10-10", -10, "ON TIME"]);
