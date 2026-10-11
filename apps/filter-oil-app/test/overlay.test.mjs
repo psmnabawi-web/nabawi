@@ -32,12 +32,62 @@ test("titik sisip hilang/dobel → build gagal, bukan menyisip sembarangan", () 
   assert.throws(() => patchIndex(LIVE_INDEX + "\n  </main>"), /ditemukan 2x/);
 });
 
-test("app.js: hanya 1 baris pengalih di awal loadDashboard, sisanya identik", () => {
+test("app.js: tambalan bisa dibalik persis, sisanya identik dengan live", () => {
   const out = patchFile("app.js", LIVE_APP);
   assert.equal(unpatchFile("app.js", out), LIVE_APP);
-  const diff = out.split("\n").filter((l, i, a) => !LIVE_APP.split("\n").includes(l));
-  assert.deepEqual(diff, ["  if(window.foDashboard) return window.foDashboard.load();"]);
   assert.match(out, /async function loadDashboard\(\)\{\n  if\(window\.foDashboard\) return window\.foDashboard\.load\(\);\n  const from = \$\("dashFrom"\)\.value;/);
+  // baris yang berubah hanya di autoSlot, pratinjau slot, cek duplikat, dan penanggalan record
+  const liveLines = new Set(LIVE_APP.split("\n"));
+  const added = out.split("\n").filter((l) => !liveLines.has(l));
+  assert.ok(added.length > 0 && added.length <= 20, `${added.length} baris berubah`);
+  for (const l of added) assert.match(l, /foDashboard|dayOffset|slotDay|slotDateKey|for\(const off|const delta|Math\.abs\(delta\) < diff|best = s|diff = Math|signed = delta|^\s*\}$|duplicate|toDateKey\(m\.dt\)\}T/, l);
+  assert.equal(out.split("\n").length - LIVE_APP.split("\n").length, 2); // +1 pengalih dashboard, +4 autoSlot, -3 cek duplikat
+});
+
+// Jalankan autoSlot hasil tambalan apa adanya (diambil dari app.js) dengan pengaturan slot live.
+function loadAutoSlot(settings = { slot1: "09:00", slot2: "16:00", slot3: "23:30", toleranceMin: 30 }) {
+  const src = patchFile("app.js", LIVE_APP);
+  const start = src.indexOf("function autoSlot(dt){");
+  const end = src.indexOf("\n}\n", start) + 2;
+  const helpers = "function pad(n){ return String(n).padStart(2, \"0\"); }\n" +
+    src.match(/function toDateKey\(d\)\{[^\n]*\n/)[0] + src.match(/function minutesOf\(timeStr\)\{[\s\S]*?\n\}\n/)[0];
+  return new Function("state", `${helpers}${src.slice(start, end)}; return autoSlot;`)({ settings });
+}
+const at = (iso) => new Date(`${iso}+07:00`);
+
+test("autoSlot: foto lewat tengah malam = Filter 3 kemarin (kasus Jagakarsa 11/10 00:40)", () => {
+  process.env.TZ = "Asia/Jakarta";
+  const autoSlot = loadAutoSlot();
+  const r = autoSlot(at("2026-10-11T00:40:59"));
+  assert.equal(r.id, "FILTER-3"); assert.equal(r.dayOffset, -1); assert.equal(r.slotDateKey, "2026-10-10");
+  assert.equal(r.deviationMin, 70); assert.equal(r.status, "LATE");
+  const cases = [
+    ["2026-10-11T09:10:00", "FILTER-1", 0, "2026-10-11", 10, "ON TIME"],
+    ["2026-10-11T08:00:00", "FILTER-1", 0, "2026-10-11", -60, "EARLY"],
+    ["2026-10-11T16:40:00", "FILTER-2", 0, "2026-10-11", 40, "LATE"],
+    ["2026-10-11T23:50:00", "FILTER-3", 0, "2026-10-11", 20, "ON TIME"],
+    ["2026-10-11T23:00:00", "FILTER-3", 0, "2026-10-11", -30, "ON TIME"],
+    ["2026-10-11T00:00:00", "FILTER-3", -1, "2026-10-10", 30, "ON TIME"],
+    ["2026-10-11T03:54:04", "FILTER-3", -1, "2026-10-10", 264, "LATE"],
+    ["2026-10-11T04:36:20", "FILTER-1", 0, "2026-10-11", -264, "EARLY"],   // lebih dekat ke 09:00 hari ini
+    ["2026-10-01T00:21:25", "FILTER-3", -1, "2026-09-30", 51, "LATE"],     // ganti bulan
+    ["2027-01-01T00:10:00", "FILTER-3", -1, "2026-12-31", 40, "LATE"],     // ganti tahun
+    ["2026-03-01T00:10:00", "FILTER-3", -1, "2026-02-28", 40, "LATE"],     // Februari
+  ];
+  for (const [iso, id, off, key, dev, st] of cases) {
+    const x = autoSlot(at(iso));
+    assert.deepEqual([x.id, x.dayOffset, x.slotDateKey, x.deviationMin, x.status], [id, off, key, dev, st], iso);
+  }
+});
+
+test("autoSlot: jarak sama → slot hari yang sama menang; pengaturan slot lain tetap jalan", () => {
+  process.env.TZ = "Asia/Jakarta";
+  // 04:15 tepat di tengah 23:30 kemarin dan 09:00: dua-duanya 285 menit → tetap Filter 1 hari ini (perilaku lama)
+  const mid = loadAutoSlot()(at("2026-10-11T04:15:00"));
+  assert.deepEqual([mid.id, mid.dayOffset, mid.deviationMin], ["FILTER-1", 0, -285]);
+  const early = loadAutoSlot({ slot1: "06:00", slot2: "14:00", slot3: "22:00", toleranceMin: 15 });
+  const r = early(at("2026-10-11T01:00:00"));
+  assert.deepEqual([r.id, r.dayOffset, r.slotDateKey, r.deviationMin, r.status], ["FILTER-3", -1, "2026-10-10", 180, "LATE"]);
 });
 
 test("build: overlay berisi file yang ditambal + salinan persis file pendukung", () => {
