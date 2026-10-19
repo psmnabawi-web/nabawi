@@ -6,8 +6,12 @@ import { RESPONSE_SCHEMA } from './google';
 import { buildUserText, imageLabel, SYSTEM_PROMPT, type AnalyzeInput, type RawAiOutput } from './prompt';
 import { generateJson } from './provider';
 import { normalizeCleanliness } from './shared';
+import { HttpError } from '../utils';
 
 export type { AnalyzeInput } from './prompt';
+
+/** Jawaban model yang menandakan gambar tidak sampai ke model (gateway memotong/menyaring, kuota habis, model teks). */
+const NO_IMAGE_PATTERNS = [/konten gambar tidak tersedia/i, /gambar tidak tersedia/i, /terfilter/i, /tidak ada gambar/i, /tidak menerima gambar/i, /tidak dapat melihat gambar/i, /no image/i, /image (was )?not provided/i, /cannot see (the )?image/i, /unable to view/i, /tidak dapat mengakses gambar/i];
 
 /** Temuan berat yang tidak boleh lolos apa pun skor modelnya: hama, dan kotoran yang secara eksplisit menumpuk/tebal/meluas. */
 const HEAVY_PATTERNS = [/tikus/i, /kecoa/i, /hama/i, /belatung/i, /lalat banyak/i, /(grease|lemak|kerak|jamur|sisa makanan|sampah|genangan|debu)[^.|]*(menumpuk|tebal|meluas|banyak|menggenang|tercecer)/i, /(menumpuk|tebal|meluas)[^.|]*(grease|lemak|kerak|jamur|sisa makanan|sampah|debu)/i];
@@ -56,6 +60,11 @@ export async function analyzeCleanliness(input: AnalyzeInput, override?: AiSetti
       s,
     );
     raw = { ...normalizeCleanliness(data, model), usage };
+    // Gateway/provider yang tidak meneruskan gambar ke model: jangan dicatat sebagai "foto tidak valid" (itu kesalahan provider, bukan crew).
+    if (!raw.photoValid && NO_IMAGE_PATTERNS.some((re) => re.test(raw.photoIssue ?? ''))) {
+      console.error('[ai] provider tidak menerima gambar', JSON.stringify({ provider: s.provider, model, served: raw.model, issue: raw.photoIssue, usage }));
+      throw new HttpError(502, `Layanan AI tidak menerima foto (model menjawab: "${(raw.photoIssue ?? '').slice(0, 120)}"). Ini masalah provider/kuota, bukan fotonya. Hubungi admin.`);
+    }
   }
   const strict = applyStrictness(raw);
   return { ...strict, photoCount: input.images.length, analyzedAt: Date.now() };
