@@ -25,6 +25,7 @@
 //   WA_HEADER         teks pembuka opsional (default: "Laporan otomatis · <waktu WIB>")
 //   OUT_DIR           folder salinan pesan (default wa-out)
 //   ACTION            send (default) | dry_run | list_groups
+//   WA_ONLY           opsional: kirim hanya ke tujuan bernama ini (pisahkan koma), mis. "Mami" atau "BOD, Mami" (uji / kirim ulang)
 //   PLAYWRIGHT_PATH / PLAYWRIGHT_CHROMIUM_PATH  lokasi modul & browser bila tidak di node_modules (uji lokal)
 //   WA_TEST_ROUTES    (uji lokal saja, diabaikan di GitHub Actions) modul ESM: export default async (page) => {...}
 //   WA_TEST_FONNTE_BASE / WA_TEST_FONNTE_WAIT_MS  (uji lokal saja) server Fonnte tiruan & jeda tunggu daftar grup
@@ -275,7 +276,13 @@ async function buildMessages(modes) {
   if (ACTION === "list_groups") { await listGroups(); return; }
   // Nama grup → ID, sebelum browser dibuka (gagal cepat bila salah tulis). Saat dry-run hanya bila token Fonnte tersedia.
   if (!dry || (GATEWAY === "fonnte" && TOKEN)) await resolveTargets();
-  const active = TARGETS.filter(t => t.id || dry);
+  const only = env("WA_ONLY").split(/[,;]+/).map(x => norm(x)).filter(Boolean);
+  if (only.length) {
+    const known = TARGETS.map(t => norm(t.name)); const unknown = only.filter(o => !known.includes(o));
+    if (unknown.length) fail(`WA_ONLY menyebut tujuan yang tidak ada: ${unknown.join(", ")}. Tujuan yang dikenal: ${TARGETS.map(t => t.name).join(", ")}`);
+    log(`hanya ke: ${TARGETS.filter(t => only.includes(norm(t.name))).map(t => t.name).join(", ")}`);
+  }
+  const active = TARGETS.filter(t => (t.id || dry) && (!only.length || only.includes(norm(t.name))));
   const modes = [...new Set(active.map(t => t.mode))];
   const { messages } = await buildMessages(modes);
   mkdirSync(OUT_DIR, { recursive: true });
