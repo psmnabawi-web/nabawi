@@ -77,13 +77,18 @@ nomor WhatsApp sendiri. Gunakan **nomor khusus** (bukan nomor pribadi) karena ad
    | `WA_GATEWAY` | Variable | `fonnte`, `wablas`, atau `webhook` |
    | `WA_TOKEN` | Secret | token device (Wablas: `token.secret_key`) |
    | `WA_API_URL` | Variable/Secret | Wablas: domain server, mis. `https://jogja.wablas.com` · webhook: URL tujuan (wajib https) |
-   | `WA_TARGET_BOD` | Secret | ID grup BOD, format `1203…@g.us` |
-   | `WA_TARGET_LEADER` | Secret | ID grup Grup Leader |
+   | `WA_TARGET_BOD` | Secret | **Nama grup BOD persis seperti di WhatsApp** (Fonnte: dipetakan ke ID saat jalan), atau ID grup `1203…@g.us` |
+   | `WA_TARGET_LEADER` | Secret | Nama grup Grup Leader persis seperti di WhatsApp, atau ID grup |
    | `WA_MODE_BOD` / `WA_MODE_LEADER` | Variable (opsional) | `detail` (default BOD) / `pct` (default Leader) / `compact` |
 
-4. **Cari ID grup.** Fonnte: tab Actions → *WA Blast Pencapaian* → Run workflow → action `list_groups` → unduh artifact `pesan-wa-<nomor>`
-   (berisi `daftar-grup.txt`), salin ID, lalu **hapus artifact** tersebut. Wablas: menu Group di panel Wablas.
-5. **Uji tanpa mengirim.** Run workflow dengan action `dry_run`, baca pesannya di artifact, lalu hapus artifact.
+4. **Nama grup.** Isi `WA_TARGET_BOD` dan `WA_TARGET_LEADER` dengan nama grup persis seperti tertulis di WhatsApp (huruf besar/kecil,
+   spasi ganda, dan tanda `*_~` diabaikan; emoji boleh ikut atau tidak). Saat jalan, script membaca daftar grup pada nomor gateway lewat
+   Fonnte dan memakai grup yang namanya cocok; bila tidak ada yang cocok persis, dipakai satu-satunya grup yang namanya **mengandung** teks
+   itu. Nol atau lebih dari satu grup yang cocok membuat job gagal merah dengan petunjuk, tanpa mengirim apa pun. Bila nama sulit ditebak:
+   tab Actions → *WA Blast Pencapaian* → Run workflow → action `list_groups` → unduh artifact `pesan-wa-<nomor>` (berisi `daftar-grup.txt`:
+   ID dan nama semua grup), lalu **hapus artifact** tersebut. Gateway selain Fonnte hanya menerima ID grup (Wablas: menu Group di panelnya).
+5. **Uji tanpa mengirim.** Run workflow dengan action `dry_run`: nama grup dicek ke Fonnte (log menulis "nama grup cocok persis/sebagian"
+   tanpa menyebut nama atau ID), pesan tersusun ke artifact; baca lalu hapus artifact.
 6. **Uji kirim.** Run workflow dengan action `send`. Setelah itu jadwal berjalan sendiri.
 
 Perilaku penting:
