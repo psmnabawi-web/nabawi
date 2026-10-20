@@ -43,11 +43,16 @@ prioritas outlet dengan kekurangan Rp terbesar, dan tautan dashboard. Pesan bisa
 atau **Buka WhatsApp** (pilih grup tujuan). Tidak memakai bot atau gateway, jadi tidak ada biaya dan tidak ada risiko blokir.
 
 ## Blast otomatis ke grup WhatsApp (09.00 & 14.00 WIB)
-Workflow GitHub Actions `.github/workflows/wa-blast.yml` menjalankan `scripts/wa-blast.mjs` setiap hari pukul 09.03 dan 14.03 WIB
-(cron UTC `3 2,7 * * *`; menit :03 dipilih karena menit :00 adalah slot paling tertunda di GitHub). Script membuka dashboard secara
-headless (Playwright), menunggu data Google Sheet termuat, mengambil pesan yang **persis sama** dengan tombol Kirim WA
-(`window.SSSG.wa(mode)`), lalu mengirimkannya lewat gateway WhatsApp: grup **BOD** menerima versi rinci (dengan rupiah),
+Workflow GitHub Actions `.github/workflows/wa-blast.yml` menjalankan `scripts/wa-blast.mjs` setiap hari sekitar pukul 09.00 dan 14.00 WIB.
+Script membuka dashboard secara headless (Playwright), menunggu data Google Sheet termuat, mengambil pesan yang **persis sama** dengan
+tombol Kirim WA (`window.SSSG.wa(mode)`), lalu mengirimkannya lewat gateway WhatsApp: grup **BOD** menerima versi rinci (dengan rupiah),
 grup **Grup Leader** menerima versi persentase (tanpa rupiah; mode lain ditolak kecuali variabel `WA_LEADER_ALLOW_RUPIAH=1`).
+
+Jadwal GitHub **tidak presisi**: slot cron bisa tertunda 10 menit sampai 2 jam dan kadang dilewati sama sekali (pada repo ini slot pagi
+02.03 UTC = 09.03 WIB tercatat tidak pernah terpicu, slot siang terpicu dengan tunda sampai 2 jam). Karena itu workflow memasang dua slot
+per sesi (`3 2,7 * * *` dan `33 2,7 * * *`) dan pengaman anti-kirim-ganda `scripts/wa-dedupe.mjs`: run terjadwal dilewati bila run lain
+sudah **benar-benar mengirim** (ditandai artifact kecil `sent-<run_id>`, umur 2 hari) dalam 150 menit terakhir. Untuk jam yang tepat,
+pakai pemicu dari luar (bagian "Jam presisi" di bawah); slot GitHub lalu otomatis menjadi cadangan.
 
 WhatsApp resmi (Cloud API) tidak mengizinkan pengiriman ke grup, sehingga dibutuhkan gateway pihak ketiga yang memakai
 nomor WhatsApp sendiri. Gunakan **nomor khusus** (bukan nomor pribadi) karena ada risiko pembatasan oleh WhatsApp.
@@ -88,8 +93,25 @@ Perilaku penting:
 - Gateway yang tidak merespons 45 detik dianggap tidak pasti dan **tidak diulang** (menghindari kiriman ganda); koneksi yang gagal
   sebelum terkirim diulang sekali.
 - Setiap perubahan pada script/workflow memicu dry-run otomatis di Actions sebagai uji.
+- Pengaman anti-ganda hanya berlaku untuk run terjadwal. Bila pengecekannya gagal (API GitHub tidak terjangkau), run tetap mengirim:
+  risiko laporan dobel dinilai lebih kecil daripada risiko laporan tidak terkirim.
 
-Mengubah jam: edit baris `cron` (UTC = WIB − 7). Menonaktifkan: Actions → WA Blast Pencapaian → Disable workflow.
+### Jam presisi (opsional, disarankan): pemicu dari luar
+GitHub menerima pemicu `workflow_dispatch` lewat API, dan penjadwal eksternal gratis seperti cron-job.org menjalankannya tepat waktu.
+1. Buat token: GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate. Repository access:
+   hanya repo ini. Permissions → Repository → **Actions: Read and write**. Masa berlaku maksimal 1 tahun (catat tanggalnya, perbarui sebelum habis).
+2. Di cron-job.org buat dua job (09.00 dan 14.00, zona waktu Asia/Jakarta) dengan isian sama:
+   - URL: `https://api.github.com/repos/psmnabawi-web/nabawi/actions/workflows/wa-blast.yml/dispatches`
+   - Method: `POST`
+   - Headers: `Authorization: Bearer <token>` · `Accept: application/vnd.github+json` · `Content-Type: application/json`
+   - Body: `{"ref":"<nama branch default>","inputs":{"action":"send"}}`
+3. Jalankan job sekali secara manual: GitHub membalas **204** dan run baru muncul di tab Actions dengan event `workflow_dispatch`.
+
+Run dari pemicu luar tidak pernah dilewati (perintah eksplisit); slot cron GitHub yang datang sesudahnya dilewati oleh pengaman anti-ganda.
+Token hanya disimpan di cron-job.org, tidak di repo.
+
+Mengubah jam: edit baris `cron` (UTC = WIB − 7) dan jadwal di cron-job.org. Menonaktifkan: Actions → WA Blast Pencapaian → Disable workflow
+(dan matikan job di cron-job.org).
 Pesan memakai periode bulan berjalan dan data sampai tanggal terakhir yang terisi; bila sheet belum diperbarui, isinya sama dengan blast sebelumnya.
 
 Uji lokal: `cd apps/sssg-dashboard && npm install && npx playwright install chromium && npm run wa:dry-run`.
