@@ -43,7 +43,8 @@ prioritas outlet dengan kekurangan Rp terbesar, dan tautan dashboard. Pesan bisa
 atau **Buka WhatsApp** (pilih grup tujuan). Tidak memakai bot atau gateway, jadi tidak ada biaya dan tidak ada risiko blokir.
 
 ## Blast otomatis ke grup WhatsApp (09.00 & 14.00 WIB)
-Workflow GitHub Actions `.github/workflows/wa-blast.yml` menjalankan `scripts/wa-blast.mjs` setiap hari sekitar pukul 09.00 dan 14.00 WIB.
+Workflow GitHub Actions `.github/workflows/wa-blast.yml` menjalankan `scripts/wa-blast.mjs` setiap hari pukul 09.00 dan 14.00 WIB
+(dipicu tepat waktu oleh scheduled task Claude, lihat "Jam presisi" di bawah; cron GitHub sebagai cadangan).
 Script membuka dashboard secara headless (Playwright), menunggu data Google Sheet termuat, mengambil pesan yang **persis sama** dengan
 tombol Kirim WA (`window.SSSG.wa(mode)`), lalu mengirimkannya lewat gateway WhatsApp: grup **BOD** menerima versi rinci (dengan rupiah),
 grup **Grup Leader** menerima versi persentase (tanpa rupiah; mode lain ditolak kecuali variabel `WA_LEADER_ALLOW_RUPIAH=1`).
@@ -105,7 +106,17 @@ Perilaku penting:
   12.00 WIB, "siang" = sesudahnya; tab Actions akan menampilkan banyak run singkat berstatus sukses (atau dibatalkan karena antrean),
   itu normal.
 
-### Jam presisi (opsional, disarankan): pemicu dari luar
+### Jam presisi: pemicu dari scheduled task Claude (terpasang)
+Dua **scheduled task** di akun Claude pemilik repo memicu workflow ini lewat `workflow_dispatch` setiap hari: **"Kirim WA Pagi Toko"**
+(08.59 WIB) dan **"Kirim WA Siang Toko"** (13.58 WIB). Keduanya mengirim perintah ke satu sesi Claude Code bernama
+*"Pemicu WA Blast Inti Warna (jangan diarsipkan)"* yang terhubung ke repo ini; sesi itu menjalankan `gh api … /dispatches` dengan
+`action=send`, lalu memantau run-nya. Laporan biasanya masuk ke grup 2-4 menit setelah jam pemicu. Cron GitHub di atas tetap aktif
+sebagai cadangan; pengaman satu-kiriman-per-sesi mencegah laporan dobel.
+- Mematikan/menyalakan: claude.ai → Scheduled tasks → matikan task-nya (atau arsipkan sesi pemicunya).
+- Jangan mengarsipkan sesi pemicu; bila terarsip, buat sesi baru yang terhubung ke repo ini dan arahkan task ke sesi itu.
+- Uji tanpa mengirim: jalankan task secara manual dengan pesan tambahan "ACTION=dry_run".
+
+### Alternatif jam presisi: pemicu dari luar (cron-job.org)
 GitHub menerima pemicu `workflow_dispatch` lewat API, dan penjadwal eksternal gratis seperti cron-job.org menjalankannya tepat waktu.
 1. Buat token: GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate. Repository access:
    hanya repo ini. Permissions → Repository → **Actions: Read and write**. Masa berlaku maksimal 1 tahun (catat tanggalnya, perbarui sebelum habis).
