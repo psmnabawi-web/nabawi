@@ -37,7 +37,7 @@
     if (typeof v === "string") {
       let m = v.match(/^Date\((\d+),(\d+),(\d+)/); if (m) return new Date(+m[1], +m[2], +m[3]);
       m = v.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
-      m = v.match(/^(\d{1,2})[\/\-,.](\d{1,2})[\/\-,.](\d{4})/); if (m) return new Date(+m[3], +m[2] - 1, +m[1]); // dukung "30,03,2026"
+      m = v.match(/^(\d{1,2})[\/\-,.](\d{1,2})[\/\-,.](\d{4})/); if (m) return (+m[2] >= 1 && +m[2] <= 12 && +m[1] >= 1 && +m[1] <= 31) ? new Date(+m[3], +m[2] - 1, +m[1]) : null; // dukung "30,03,2026"; "10/22/2026" (bulan 22) bukan tanggal
     }
     return null;
   }
@@ -126,9 +126,13 @@
       let d = parseDate(row[0]);
       // Tanggal yang diketik gaya AS (BB/HH/TTTT, mis. "10/01/2026" untuk 1 Oktober) terbaca sebagai bulan lain (10 Januari).
       // Tukar hari↔bulan bila hasilnya jatuh di bulan tab ini DAN cocok dengan kolom HARI (atau kolom HARI kosong).
-      if (d && d.getMonth() !== idx && d.getDate() <= 12) {
-        const sw = new Date(d.getFullYear(), d.getDate() - 1, d.getMonth() + 1), hn = dayName(row[1]);
-        if (sw.getMonth() === idx && (!hn || hn === DAYS[sw.getDay()])) { d = sw; fixedDates++; }
+      const us = typeof row[0] === "string" && row[0].match(/^(\d{1,2})[\/\-,.](\d{1,2})[\/\-,.](\d{4})/);
+      if (!d || d.getMonth() !== idx) {
+        let sw = null;
+        if (us) { if (+us[1] <= 12 && +us[2] <= 31) sw = new Date(+us[3], +us[1] - 1, +us[2]); } // teks "10/13/2026" → 13 Okt
+        else if (d && d.getDate() <= 12) sw = new Date(d.getFullYear(), d.getDate() - 1, d.getMonth() + 1); // sel tanggal sungguhan yang tersimpan salah bulan
+        const hn = dayName(row[1]);
+        if (sw && sw.getMonth() === idx && (!hn || hn === DAYS[sw.getDay()])) { d = sw; fixedDates++; }
       }
       // Sel tanggal bisa hilang (gviz membuang teks yang tak bertipe date, mis. "30,03,2026" di kolom date).
       // Baris harian berurutan → tebak = hari sebelumnya + 1, diterima HANYA bila kolom HARI cocok dengan tebakan.
