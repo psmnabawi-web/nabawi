@@ -189,6 +189,6 @@ async function buildMessages(modes) {
     catch (e) { failed++; console.error(IN_CI ? `::error::${t.name}: GAGAL kirim: ${e.message}` : `  GAGAL kirim ${t.name}: ${e.message}`); }
   }
   if (dry) console.log(`\nDRY RUN selesai. Pesan tersimpan di folder ${OUT_DIR}/.`);
-  else console.log(`\nSelesai: ${sent} terkirim, ${failed} gagal.`);
+  else { console.log(`\nSelesai: ${sent} terkirim, ${failed} gagal.`); if (sent > 0) writeFileSync(join(OUT_DIR, "sent-marker.txt"), `${sent} pesan terkirim ${nowWib()}\n`, "utf8"); }
   if (failed) process.exit(1);
 })().catch(e => fail(e.message));
