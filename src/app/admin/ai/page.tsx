@@ -28,6 +28,8 @@ export default function AiSettingsPage() {
   const [data, setData] = useState<Resp | null>(null);
   const [form, setForm] = useState<Omit<AiSettings, 'updatedAt' | 'updatedByName' | 'extraBody'>>({ provider: 'google', model: '', apiKey: '', baseUrl: '', useVertex: false, thinkingLevel: '', mediaResolution: '', maxConcurrent: 2, jsonMode: 'auto' });
   const [extraBody, setExtraBody] = useState('{}');
+  const [fbModel, setFbModel] = useState('');
+  const [fbExtra, setFbExtra] = useState('{}');
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<{ kind: 'error' | 'success' | 'info'; text: string } | null>(null);
   const [n, setN] = useState(6);
@@ -36,6 +38,17 @@ export default function AiSettingsPage() {
     setData(r);
     setForm({ provider: r.settings.provider, model: r.settings.model, apiKey: '', baseUrl: r.settings.baseUrl, useVertex: r.settings.useVertex, thinkingLevel: r.settings.thinkingLevel ?? '', mediaResolution: r.settings.mediaResolution ?? '', maxConcurrent: r.settings.maxConcurrent ?? 2, jsonMode: r.settings.jsonMode ?? 'auto' });
     setExtraBody(JSON.stringify(r.settings.extraBody ?? {}));
+    setFbModel(r.settings.fallback?.model ?? '');
+    setFbExtra(JSON.stringify(r.settings.fallback?.extraBody ?? {}));
+  }
+  function parsedFallback(): { model: string; extraBody?: Record<string, unknown> } | null {
+    if (!fbModel.trim()) return null;
+    try {
+      const v = JSON.parse(fbExtra || '{}') as unknown;
+      return { model: fbModel.trim(), extraBody: v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {} };
+    } catch {
+      throw new Error('Field tambahan cadangan harus JSON objek.');
+    }
   }
   function parsedExtra(): Record<string, unknown> {
     try {
@@ -63,7 +76,7 @@ export default function AiSettingsPage() {
     setBusy('save');
     setMsg(null);
     try {
-      await apiFetch('/api/admin/ai', { method: 'PUT', body: JSON.stringify({ ...form, apiKey: form.apiKey || undefined, extraBody: parsedExtra() }) });
+      await apiFetch('/api/admin/ai', { method: 'PUT', body: JSON.stringify({ ...form, apiKey: form.apiKey || undefined, extraBody: parsedExtra(), fallback: parsedFallback() }) });
       await load();
       setMsg({ kind: 'success', text: 'Pengaturan AI tersimpan. Berlaku untuk analisa berikutnya (maks 20 detik).' });
     } catch (e) {
@@ -77,7 +90,7 @@ export default function AiSettingsPage() {
     setBusy('test');
     setMsg({ kind: 'info', text: `Menguji ${n} foto audit terbaru. Biasanya 1 sampai 3 menit, jangan tutup halaman.` });
     try {
-      const body = useForm ? { n, settings: { ...form, apiKey: form.apiKey || undefined, extraBody: parsedExtra() }, label: 'uji konfigurasi form' } : { n, label: 'uji konfigurasi tersimpan' };
+      const body = useForm ? { n, settings: { ...form, apiKey: form.apiKey || undefined, extraBody: parsedExtra(), fallback: parsedFallback() }, label: 'uji konfigurasi form' } : { n, label: 'uji konfigurasi tersimpan' };
       const r = await apiFetch<{ report: AiTestReport }>('/api/cron/ai-selftest', { method: 'POST', body: JSON.stringify(body) });
       await load();
       setMsg({ kind: r.report.failed === 0 ? 'success' : 'error', text: `Selesai: ${r.report.ok}/${r.report.n} berhasil, lolos/gagal sama ${r.report.passAgree}/${r.report.ok}, rata-rata ${(r.report.avgMs / 1000).toFixed(1)} detik.` });
@@ -170,6 +183,18 @@ export default function AiSettingsPage() {
                 <div className="col-span-2">
                   <Label htmlFor="extra">Field tambahan request (JSON, opsional)</Label>
                   <Input id="extra" value={extraBody} onChange={(e) => setExtraBody(e.target.value)} placeholder='{"thinking":{"type":"disabled"}}' />
+                </div>
+              )}
+              {form.provider === 'openai' && (
+                <div>
+                  <Label htmlFor="fbm">Model cadangan (otomatis bila utama gagal/menolak foto)</Label>
+                  <Input id="fbm" value={fbModel} onChange={(e) => setFbModel(e.target.value)} placeholder="deepseek-v4.1-flash" />
+                </div>
+              )}
+              {form.provider === 'openai' && (
+                <div>
+                  <Label htmlFor="fbx">Field tambahan cadangan (JSON)</Label>
+                  <Input id="fbx" value={fbExtra} onChange={(e) => setFbExtra(e.target.value)} placeholder="{}" />
                 </div>
               )}
               {form.provider === 'openai' && (

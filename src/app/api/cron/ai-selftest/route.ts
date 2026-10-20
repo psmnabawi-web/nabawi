@@ -26,6 +26,7 @@ const BodySchema = z.object({
       mediaResolution: z.enum(['', 'low', 'medium', 'high']).optional(),
       jsonMode: z.enum(['auto', 'prompt']).optional(),
       extraBody: z.record(z.string(), z.unknown()).optional(),
+      fallback: z.object({ model: z.string().trim().max(120), baseUrl: z.string().trim().max(300).optional(), extraBody: z.record(z.string(), z.unknown()).optional() }).nullable().optional(),
     })
     .optional(),
   /** Label laporan. */

@@ -70,6 +70,8 @@ export interface AiResult {
   analyzedAt: number;
   /** Konsumsi token analisa ini (pemantauan biaya). */
   usage?: { promptTokens: number; outputTokens: number; thoughtTokens: number; totalTokens: number };
+  /** true jika hasil berasal dari konfigurasi cadangan. */
+  fallbackUsed?: boolean;
 }
 
 export interface AttemptRecord {
@@ -327,6 +329,8 @@ export interface AiSettings {
   jsonMode: 'auto' | 'prompt';
   /** openai: field tambahan yang digabung ke body request (mis. {"thinking":{"type":"disabled"}} untuk GLM, {"reasoning_effort":"low"}). */
   extraBody?: Record<string, unknown>;
+  /** Konfigurasi cadangan (provider & key sama kecuali diisi) yang dipakai otomatis bila model utama gagal/menolak foto. */
+  fallback?: { model: string; baseUrl?: string; extraBody?: Record<string, unknown>; provider?: AiProvider; apiKey?: string } | null;
   updatedAt: number;
   updatedByName: string | null;
 }

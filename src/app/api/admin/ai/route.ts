@@ -35,6 +35,10 @@ const Schema = z.object({
   maxConcurrent: z.number().int().min(1).max(8).default(2),
   jsonMode: z.enum(['auto', 'prompt']).default('auto'),
   extraBody: z.record(z.string(), z.unknown()).default({}),
+  fallback: z
+    .object({ model: z.string().trim().max(120), baseUrl: z.string().trim().max(300).optional(), extraBody: z.record(z.string(), z.unknown()).optional(), provider: z.enum(['google', 'openai', 'anthropic']).optional(), apiKey: z.string().trim().max(400).optional() })
+    .nullable()
+    .default(null),
 });
 
 /** PUT /api/admin/ai -> simpan pengaturan provider AI. Super admin. */

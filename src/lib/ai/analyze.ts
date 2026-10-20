@@ -43,29 +43,46 @@ export function applyStrictness(raw: RawAiOutput): RawAiOutput & { adjustments: 
   return { ...raw, score, adjustments };
 }
 
-/** Analisa kebersihan satu area dengan provider aktif (settings/ai, fallback env). `override` dipakai oleh uji mandiri. */
+function isProviderFault(e: unknown): boolean {
+  if (!(e instanceof HttpError)) return true; // error jaringan/parsing tak terduga
+  return e.status === 502 || e.status === 503 || e.status === 504 || e.status === 429 || (e.status === 400 && /provider ai menolak/i.test(e.message));
+}
+
+async function runOnce(input: AnalyzeInput, s: AiSettings): Promise<RawAiOutput> {
+  if (s.provider === 'anthropic') return analyzeWithAnthropic(input, s.model || 'claude-opus-5');
+  const { data, model, usage } = await generateJson(
+    {
+      systemInstruction: SYSTEM_PROMPT,
+      images: input.images.map((img, i) => ({ base64: img.base64, mediaType: img.mediaType, label: imageLabel(i, input.images.length) })),
+      text: buildUserText(input),
+      schema: RESPONSE_SCHEMA as unknown as Record<string, unknown>,
+    },
+    s,
+  );
+  const raw: RawAiOutput = { ...normalizeCleanliness(data, model), usage };
+  // Gateway/provider yang tidak meneruskan gambar ke model: jangan dicatat sebagai "foto tidak valid" (itu kesalahan provider, bukan crew).
+  if (!raw.photoValid && NO_IMAGE_PATTERNS.some((re) => re.test(raw.photoIssue ?? ''))) {
+    console.error('[ai] provider tidak menerima gambar', JSON.stringify({ provider: s.provider, model: s.model, served: raw.model, issue: raw.photoIssue, usage }));
+    throw new HttpError(502, `Layanan AI tidak menerima foto (model menjawab: "${(raw.photoIssue ?? '').slice(0, 120)}"). Ini masalah provider/kuota, bukan fotonya. Hubungi admin.`);
+  }
+  return raw;
+}
+
+/** Analisa kebersihan satu area dengan provider aktif (settings/ai, fallback env). `override` dipakai oleh uji mandiri. Bila model utama gagal/menolak foto dan ada konfigurasi cadangan, otomatis dicoba dengan cadangan. */
 export async function analyzeCleanliness(input: AnalyzeInput, override?: AiSettings): Promise<AiResult> {
   const s = override ?? (await loadAiSettings());
   let raw: RawAiOutput;
-  if (s.provider === 'anthropic') {
-    raw = await analyzeWithAnthropic(input, s.model || 'claude-opus-5');
-  } else {
-    const { data, model, usage } = await generateJson(
-      {
-        systemInstruction: SYSTEM_PROMPT,
-        images: input.images.map((img, i) => ({ base64: img.base64, mediaType: img.mediaType, label: imageLabel(i, input.images.length) })),
-        text: buildUserText(input),
-        schema: RESPONSE_SCHEMA as unknown as Record<string, unknown>,
-      },
-      s,
-    );
-    raw = { ...normalizeCleanliness(data, model), usage };
-    // Gateway/provider yang tidak meneruskan gambar ke model: jangan dicatat sebagai "foto tidak valid" (itu kesalahan provider, bukan crew).
-    if (!raw.photoValid && NO_IMAGE_PATTERNS.some((re) => re.test(raw.photoIssue ?? ''))) {
-      console.error('[ai] provider tidak menerima gambar', JSON.stringify({ provider: s.provider, model, served: raw.model, issue: raw.photoIssue, usage }));
-      throw new HttpError(502, `Layanan AI tidak menerima foto (model menjawab: "${(raw.photoIssue ?? '').slice(0, 120)}"). Ini masalah provider/kuota, bukan fotonya. Hubungi admin.`);
-    }
+  let fallbackUsed = false;
+  try {
+    raw = await runOnce(input, s);
+  } catch (e) {
+    const fb = s.fallback;
+    if (!fb || !fb.model || !isProviderFault(e)) throw e;
+    console.warn('[ai] model utama gagal, coba cadangan', JSON.stringify({ primary: s.model, fallback: fb.model, reason: e instanceof Error ? e.message.slice(0, 160) : String(e) }));
+    const fs: AiSettings = { ...s, provider: fb.provider ?? s.provider, model: fb.model, baseUrl: fb.baseUrl || s.baseUrl, apiKey: fb.apiKey || s.apiKey, extraBody: fb.extraBody ?? {}, fallback: null };
+    raw = await runOnce(input, fs);
+    fallbackUsed = true;
   }
   const strict = applyStrictness(raw);
-  return { ...strict, photoCount: input.images.length, analyzedAt: Date.now() };
+  return { ...strict, photoCount: input.images.length, analyzedAt: Date.now(), fallbackUsed };
 }
