@@ -18,6 +18,8 @@
 //   WA_TARGET_BOD     grup WhatsApp untuk BOD/manajemen (pesan rinci, dengan rupiah): NAMA grup persis seperti di WhatsApp
 //                     (Fonnte saja; dipetakan ke ID saat jalan) atau ID grup 1203…@g.us
 //   WA_TARGET_LEADER  grup WhatsApp untuk Grup Leader (pesan persentase, tanpa rupiah): nama grup atau ID
+//   WA_TARGET_PRIBADI chat pribadi, satu per baris/koma: "Nama=nomor" (+ ":pct" / ":compact" bila bukan versi rinci),
+//                     mis. "Mami=0812-3456-7890". Nomor dinormalisasi ke 62…; nama hanya label log/file, nomor tidak pernah dicetak.
 //   WA_MODE_BOD       detail | compact | pct (default detail)
 //   WA_MODE_LEADER    pct (default). Mode lain (yang memuat rupiah) hanya bila WA_LEADER_ALLOW_RUPIAH=1
 //   WA_HEADER         teks pembuka opsional (default: "Laporan otomatis · <waktu WIB>")
@@ -43,9 +45,26 @@ const ACTION = env("ACTION", "send").toLowerCase();
 const OUT_DIR = env("OUT_DIR", "wa-out");
 const MODES = ["detail", "compact", "pct"];
 const TARGETS = [
-  { name: "BOD", id: env("WA_TARGET_BOD"), mode: env("WA_MODE_BOD", "detail") || "detail" },
-  { name: "Grup Leader", id: env("WA_TARGET_LEADER"), mode: env("WA_MODE_LEADER", "pct") || "pct" },
+  { name: "BOD", kind: "grup", id: env("WA_TARGET_BOD"), mode: env("WA_MODE_BOD", "detail") || "detail" },
+  { name: "Grup Leader", kind: "grup", id: env("WA_TARGET_LEADER"), mode: env("WA_MODE_LEADER", "pct") || "pct" },
+  ...parsePrivateTargets(env("WA_TARGET_PRIBADI")),
 ];
+/** "Mami=0812-3456-7890, Papi=+62 813 1111 2222:pct" → tujuan chat pribadi. Nomor → 62…; entri tanpa nomor valid diberi .error (dicek di validate). */
+function parsePrivateTargets(raw) {
+  const out = [];
+  for (const part of String(raw || "").split(/[\n,;]+/)) {
+    const p = part.trim(); if (!p) continue;
+    let body = p, mode = "detail"; const mm = body.match(/:(detail|compact|pct)$/i); if (mm) { mode = mm[1].toLowerCase(); body = body.slice(0, -mm[0].length); }
+    const eq = body.indexOf("="), numeric = /^[\d\s+().-]+$/.test(body);
+    let name = eq >= 0 ? body.slice(0, eq) : numeric ? "" : body, num = eq >= 0 ? body.slice(eq + 1) : numeric ? body : "";
+    name = name.replace(/[*_~`"'\r]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 40) || `Pribadi ${out.length + 1}`;
+    let d = num.replace(/[\s().-]/g, "").replace(/^\+/, "");
+    if (/^0\d+$/.test(d)) d = "62" + d.slice(1); else if (/^8\d+$/.test(d)) d = "62" + d;
+    const ok = /^62\d{8,13}$/.test(d);
+    out.push({ name, kind: "pribadi", id: ok ? d : "", mode, error: ok ? "" : `${name}: nomor WhatsApp tidak valid di WA_TARGET_PRIBADI (tulis "Nama=0812…" atau "Nama=62812…"; nama kontak saja tidak bisa dicari)` });
+  }
+  return out;
+}
 const nowWib = () => new Intl.DateTimeFormat("id-ID", { timeZone: "Asia/Jakarta", weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date()).replace(/\./g, ":") + " WIB";
 const HEADER = env("WA_HEADER") || `_Laporan otomatis · ${nowWib()}_`;
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
@@ -66,6 +85,7 @@ const FONNTE_WAIT_MS = Number(testEnv("WA_TEST_FONNTE_WAIT_MS") || 5000);
 function validate() {
   if (ACTION !== "send" && ACTION !== "dry_run" && ACTION !== "list_groups") fail(`ACTION "${ACTION}" tidak dikenal (send | dry_run | list_groups)`);
   for (const t of TARGETS) if (!MODES.includes(t.mode)) fail(`Mode "${t.mode}" untuk ${t.name} tidak dikenal (detail | compact | pct)`);
+  for (const t of TARGETS) if (t.error) fail(t.error);
   const leader = TARGETS[1];
   if (leader.mode !== "pct" && env("WA_LEADER_ALLOW_RUPIAH") !== "1") fail(`WA_MODE_LEADER="${leader.mode}" memuat angka rupiah. Grup Leader seharusnya "pct". Bila memang disengaja, set variabel WA_LEADER_ALLOW_RUPIAH=1.`);
   const configured = !!(GATEWAY || TOKEN || TARGETS.some(t => t.id));
@@ -82,7 +102,7 @@ function validate() {
     if (!/^https:\/\//i.test(API_URL) && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/i.test(API_URL)) fail("WA_API_URL harus memakai https:// (http hanya diizinkan untuk uji di 127.0.0.1/localhost)");
   }
   if (GATEWAY !== "fonnte" && TARGETS.some(t => t.id && !looksLikeId(t.id))) fail(`WA_TARGET berisi nama grup; pencarian nama grup hanya untuk Fonnte. Untuk gateway ${GATEWAY} isi dengan ID grup (…@g.us).`);
-  if (ACTION === "send" && !TARGETS.some(t => t.id)) fail("WA_TARGET_BOD dan WA_TARGET_LEADER kosong: tidak ada tujuan pengiriman.");
+  if (ACTION === "send" && !TARGETS.some(t => t.id)) fail("WA_TARGET_BOD, WA_TARGET_LEADER, dan WA_TARGET_PRIBADI kosong: tidak ada tujuan pengiriman.");
   if (ACTION === "dry_run") return { dry: true, reason: "ACTION=dry_run" };
   return { dry: false, reason: "" };
 }
@@ -250,7 +270,7 @@ async function buildMessages(modes) {
 // ---------- main ----------
 (async () => {
   const { dry, reason } = validate();
-  log(`action=${ACTION} gateway=${GATEWAY || "(belum diisi)"} token=${TOKEN ? "terisi" : "kosong"} dry_run=${dry}${reason ? ` (${reason})` : ""}`);
+  log(`action=${ACTION} gateway=${GATEWAY || "(belum diisi)"} token=${TOKEN ? "terisi" : "kosong"} dry_run=${dry}${reason ? ` (${reason})` : ""} · tujuan: ${TARGETS.filter(t => t.id).map(t => `${t.name} (${t.kind}, ${t.mode})`).join(", ") || "(belum ada)"}`);
   if (ACTION === "list_groups") { await listGroups(); return; }
   // Nama grup → ID, sebelum browser dibuka (gagal cepat bila salah tulis). Saat dry-run hanya bila token Fonnte tersedia.
   if (!dry || (GATEWAY === "fonnte" && TOKEN)) await resolveTargets();
@@ -261,7 +281,7 @@ async function buildMessages(modes) {
   let sent = 0, failed = 0;
   for (const t of active) {
     const text = `${HEADER}\n\n${messages[t.mode]}`;
-    const file = join(OUT_DIR, `${t.name.replace(/\s+/g, "-").toLowerCase()}-${t.mode}.txt`);
+    const file = join(OUT_DIR, `${t.name.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").toLowerCase() || "tujuan"}-${t.mode}.txt`);
     writeFileSync(file, text, "utf8");
     log(`${t.name}: mode ${t.mode}, ${text.length} karakter → ${file}`);
     if (dry) { log(`  dry-run: tidak dikirim${t.id ? ` (tujuan ${describeTarget(t.id)})` : " (tujuan belum diisi)"}`); continue; }

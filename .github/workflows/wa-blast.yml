@@ -66,6 +66,7 @@ jobs:
           WA_TOKEN: ${{ secrets.WA_TOKEN }}
           WA_TARGET_BOD: ${{ secrets.WA_TARGET_BOD }}
           WA_TARGET_LEADER: ${{ secrets.WA_TARGET_LEADER }}
+          WA_TARGET_PRIBADI: ${{ secrets.WA_TARGET_PRIBADI }}
           WA_MODE_BOD: ${{ vars.WA_MODE_BOD || 'detail' }}
           WA_MODE_LEADER: ${{ vars.WA_MODE_LEADER || 'pct' }}
           WA_LEADER_ALLOW_RUPIAH: ${{ vars.WA_LEADER_ALLOW_RUPIAH || '' }}
