@@ -73,8 +73,10 @@ jobs:
         run: node scripts/wa-blast.mjs
       # Salinan pesan/daftar grup hanya disimpan untuk uji (dry_run, push, list_groups), bukan untuk kiriman terjadwal:
       # repo ini publik, artifact bisa diunduh siapa pun yang login GitHub. Hapus artifact setelah dibaca.
+      # always(): bila satu grup terkirim dan grup lain gagal, step di atas merah tetapi penanda tetap diunggah (script hanya menulis
+      # sent-marker.txt bila ada yang terkirim), supaya run cadangan tidak mengirim ulang ke grup yang sudah menerima.
       - name: Tandai sesi ini sudah terkirim (penanda untuk run cadangan)
-        if: ${{ env.ACTION == 'send' && steps.send.outcome == 'success' }}
+        if: ${{ always() && env.ACTION == 'send' && steps.dedupe.outputs.skip != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: sent-${{ steps.dedupe.outputs.slot }}
