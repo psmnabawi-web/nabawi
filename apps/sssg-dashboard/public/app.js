@@ -119,11 +119,17 @@
     header.forEach((h, c) => { const s = findStoreVisit(h); if (!s || vmap[s.key]) return; const cols = { DATANG: c }; for (let k = 1; k < VC.length && c + k < header.length; k++) { const hk = norm(header[c + k]); if (hk === VC[k]) cols[VC[k]] = c + k; else if (hk) break; } vmap[s.key] = cols; });
     const DAYS = ["MINGGU", "SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU"];
     const dayName = (v) => norm(v).replace(/[^A-Z]/g, ""); // "JUM'AT" → "JUMAT"
-    const days = []; let prev = null;
+    const days = []; let prev = null, fixedDates = 0;
     for (let r = hr + 1; r < rows.length; r++) {
       const row = rows[r]; if (!row) break;
       if (norm(row[1]) === "TOTAL" || norm(row[0]) === "TOTAL") break;
       let d = parseDate(row[0]);
+      // Tanggal yang diketik gaya AS (BB/HH/TTTT, mis. "10/01/2026" untuk 1 Oktober) terbaca sebagai bulan lain (10 Januari).
+      // Tukar hari↔bulan bila hasilnya jatuh di bulan tab ini DAN cocok dengan kolom HARI (atau kolom HARI kosong).
+      if (d && d.getMonth() !== idx && d.getDate() <= 12) {
+        const sw = new Date(d.getFullYear(), d.getDate() - 1, d.getMonth() + 1), hn = dayName(row[1]);
+        if (sw.getMonth() === idx && (!hn || hn === DAYS[sw.getDay()])) { d = sw; fixedDates++; }
+      }
       // Sel tanggal bisa hilang (gviz membuang teks yang tak bertipe date, mis. "30,03,2026" di kolom date).
       // Baris harian berurutan → tebak = hari sebelumnya + 1, diterima HANYA bila kolom HARI cocok dengan tebakan.
       if (!d && prev) { const g = new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 1); if (dayName(row[1]) === DAYS[g.getDay()]) d = g; }
@@ -136,7 +142,7 @@
       days.push({ d: d.getDate(), total: totalCol >= 0 ? num(row[totalCol]) : null, act, tgt, visit });
     }
     const headerRaw = header.filter(v => v != null && String(v).trim() !== "").slice(0, 40).map(v => String(v).trim());
-    return { idx, storesFound: Object.keys(map), visitStores: Object.keys(vmap), days, headerRaw, headerRow: hr };
+    return { idx, storesFound: Object.keys(map), visitStores: Object.keys(vmap), days, headerRaw, headerRow: hr, fixedDates };
   }
 
   // Baseline 2025 per toko: header TOKO | JANUARI ... DESEMBER
@@ -1640,7 +1646,7 @@
   }
   function renderDiag() {
     const box = $("diagBox"); if (!box) return; const y = Y(); const ms = state.years[y] || [];
-    const rows = MONTH_NAMES.map((n, i) => { const m = ms[i]; if (!m) return `<tr><td>${n}</td><td colspan="5" class="muted">tidak terbaca / tab tidak ada</td></tr>`; const tot = monthTotal(m), tgt = m.days.reduce((x, d) => x + dayTarget(d, null), 0); const everFound = new Set(ms.filter(Boolean).flatMap(x => x.storesFound)); const miss = activeStores().filter(s => everFound.has(s.key) && !m.storesFound.includes(s.key)).map(s => s.short); return `<tr><td>${n}</td><td>${m.days.length}</td><td>${m.storesFound.length}${miss.length ? ` <span class="bad" title="kolom toko tidak ditemukan">(tanpa: ${miss.join(", ")})</span>` : ""}</td><td>${fmtRpS(tot)}</td><td>${tgt ? fmtRpS(tgt) : "—"}</td><td class="muted" style="text-align:left;font-size:11px">${(m.headerRaw || []).join(" | ").slice(0, 160)}</td></tr>`; });
+    const rows = MONTH_NAMES.map((n, i) => { const m = ms[i]; if (!m) return `<tr><td>${n}</td><td colspan="5" class="muted">tidak terbaca / tab tidak ada</td></tr>`; const tot = monthTotal(m), tgt = m.days.reduce((x, d) => x + dayTarget(d, null), 0); const everFound = new Set(ms.filter(Boolean).flatMap(x => x.storesFound)); const miss = activeStores().filter(s => everFound.has(s.key) && !m.storesFound.includes(s.key)).map(s => s.short); return `<tr><td>${n}</td><td>${m.days.length}${m.fixedDates ? ` <span class="muted" title="tanggal diketik gaya AS (bulan/hari/tahun) di tab ini, sudah dibaca ulang memakai kolom HARI">(${m.fixedDates} tgl gaya AS)</span>` : ""}</td><td>${m.storesFound.length}${miss.length ? ` <span class="bad" title="kolom toko tidak ditemukan">(tanpa: ${miss.join(", ")})</span>` : ""}</td><td>${fmtRpS(tot)}</td><td>${tgt ? fmtRpS(tgt) : "—"}</td><td class="muted" style="text-align:left;font-size:11px">${(m.headerRaw || []).join(" | ").slice(0, 160)}</td></tr>`; });
     box.innerHTML = `<table class="tbl diag"><tr><th style="text-align:left">Bulan</th><th>Hari</th><th>Toko dikenali</th><th>Omset</th><th>Target</th><th style="text-align:left">Header yang terbaca</th></tr>${rows.join("")}</table><div class="muted" style="margin-top:6px">Bila "Toko dikenali" kurang dari ${activeStores().length}, nama kolom toko di tab itu belum ada di daftar alias <code>STORES</code> pada config.js. Kirim tangkapan layar tabel ini untuk diperbaiki.</div>`;
   }
   function updateStatus() {
@@ -1686,7 +1692,7 @@
   // API kecil untuk otomasi (blast WhatsApp terjadwal lewat scripts/wa-blast.mjs). Tidak mengubah tampilan.
   window.SSSG = {
     ready: () => state.months.length > 0,
-    status: () => ({ text: $("status").textContent, error: $("status").classList.contains("err"), fetchedAt: state.fetchedAt ? state.fetchedAt.toISOString() : null, months: state.months.filter(Boolean).length, sales: state.sales ? state.sales.rows.length : 0, salesErr: state.salesErr || null, year: state.year, month: state.month }),
+    status: () => ({ text: $("status").textContent, error: $("status").classList.contains("err"), fetchedAt: state.fetchedAt ? state.fetchedAt.toISOString() : null, months: state.months.filter(Boolean).length, monthDays: state.months.map(m => m ? m.days.length : 0), fixedDates: state.months.map(m => m ? (m.fixedDates || 0) : 0), sales: state.sales ? state.sales.rows.length : 0, salesErr: state.salesErr || null, year: state.year, month: state.month }),
     wa: (mode) => mode === "pct" ? buildWaPercent() : buildWaMessage(mode === "compact"),
   };
   loadAll();
