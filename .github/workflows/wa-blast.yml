@@ -21,6 +21,10 @@ on:
         type: choice
         default: dry_run
         options: [dry_run, send, list_groups]
+      only:
+        description: "Opsional: kirim hanya ke tujuan ini, pisahkan koma (BOD, Grup Leader, atau nama di WA_TARGET_PRIBADI mis. Mami)"
+        type: string
+        default: ""
 
 concurrency:
   group: wa-blast
@@ -67,6 +71,7 @@ jobs:
           WA_TARGET_BOD: ${{ secrets.WA_TARGET_BOD }}
           WA_TARGET_LEADER: ${{ secrets.WA_TARGET_LEADER }}
           WA_TARGET_PRIBADI: ${{ secrets.WA_TARGET_PRIBADI }}
+          WA_ONLY: ${{ inputs.only || '' }}
           WA_MODE_BOD: ${{ vars.WA_MODE_BOD || 'detail' }}
           WA_MODE_LEADER: ${{ vars.WA_MODE_LEADER || 'pct' }}
           WA_LEADER_ALLOW_RUPIAH: ${{ vars.WA_LEADER_ALLOW_RUPIAH || '' }}
