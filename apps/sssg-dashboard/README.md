@@ -49,10 +49,12 @@ tombol Kirim WA (`window.SSSG.wa(mode)`), lalu mengirimkannya lewat gateway What
 grup **Grup Leader** menerima versi persentase (tanpa rupiah; mode lain ditolak kecuali variabel `WA_LEADER_ALLOW_RUPIAH=1`).
 
 Jadwal GitHub **tidak presisi**: slot cron bisa tertunda 10 menit sampai 2 jam dan kadang dilewati sama sekali (pada repo ini slot pagi
-02.03 UTC = 09.03 WIB tercatat tidak pernah terpicu, slot siang terpicu dengan tunda sampai 2 jam). Karena itu workflow memasang dua slot
-per sesi (`3 2,7 * * *` dan `33 2,7 * * *`) dan pengaman anti-kirim-ganda `scripts/wa-dedupe.mjs`: run terjadwal dilewati bila run lain
-sudah **benar-benar mengirim** (ditandai artifact kecil `sent-<run_id>`, umur 2 hari) dalam 150 menit terakhir. Untuk jam yang tepat,
-pakai pemicu dari luar (bagian "Jam presisi" di bawah); slot GitHub lalu otomatis menjadi cadangan.
+02.03 UTC = 09.03 WIB tercatat tidak pernah terpicu, slot siang terpicu dengan tunda sampai 2 jam). Karena itu workflow dipicu **tiap
+10 menit selama 2 jam** setelah tiap jam kirim (cron `*/10 2,3,7,8 * * *` = 09.00-10.50 dan 14.00-15.50 WIB). Run pertama yang
+benar-benar jalan yang mengirim; run berikutnya pada sesi yang sama (`scripts/wa-dedupe.mjs`) selesai dalam hitungan detik tanpa
+mengirim karena menemukan artifact penanda `sent-<tanggal>-<pagi|siang>` (umur 2 hari) yang hanya dibuat setelah kiriman nyata
+berhasil. Hasilnya: **satu kiriman per sesi per hari**, biasanya tiba 0-20 menit setelah jam kirim. Untuk jam yang tepat, pakai pemicu
+dari luar (bagian "Jam presisi" di bawah); cron GitHub lalu otomatis menjadi cadangan.
 
 WhatsApp resmi (Cloud API) tidak mengizinkan pengiriman ke grup, sehingga dibutuhkan gateway pihak ketiga yang memakai
 nomor WhatsApp sendiri. Gunakan **nomor khusus** (bukan nomor pribadi) karena ada risiko pembatasan oleh WhatsApp.
@@ -93,8 +95,10 @@ Perilaku penting:
 - Gateway yang tidak merespons 45 detik dianggap tidak pasti dan **tidak diulang** (menghindari kiriman ganda); koneksi yang gagal
   sebelum terkirim diulang sekali.
 - Setiap perubahan pada script/workflow memicu dry-run otomatis di Actions sebagai uji.
-- Pengaman anti-ganda hanya berlaku untuk run terjadwal. Bila pengecekannya gagal (API GitHub tidak terjangkau), run tetap mengirim:
-  risiko laporan dobel dinilai lebih kecil daripada risiko laporan tidak terkirim.
+- Pengaman satu-kiriman-per-sesi hanya melewati run terjadwal. Bila pengecekannya gagal (API GitHub tidak terjangkau), run tetap
+  mengirim: risiko laporan dobel dinilai lebih kecil daripada risiko laporan tidak terkirim. Sesi "pagi" = run yang berjalan sebelum
+  12.00 WIB, "siang" = sesudahnya; tab Actions akan menampilkan banyak run singkat berstatus sukses (atau dibatalkan karena antrean),
+  itu normal.
 
 ### Jam presisi (opsional, disarankan): pemicu dari luar
 GitHub menerima pemicu `workflow_dispatch` lewat API, dan penjadwal eksternal gratis seperti cron-job.org menjalankannya tepat waktu.
@@ -107,7 +111,8 @@ GitHub menerima pemicu `workflow_dispatch` lewat API, dan penjadwal eksternal gr
    - Body: `{"ref":"<nama branch default>","inputs":{"action":"send"}}`
 3. Jalankan job sekali secara manual: GitHub membalas **204** dan run baru muncul di tab Actions dengan event `workflow_dispatch`.
 
-Run dari pemicu luar tidak pernah dilewati (perintah eksplisit); slot cron GitHub yang datang sesudahnya dilewati oleh pengaman anti-ganda.
+Run dari pemicu luar tidak pernah dilewati (perintah eksplisit) dan ikut membuat penanda sesi, sehingga cron GitHub yang datang
+sesudahnya pada sesi yang sama tidak mengirim lagi.
 Token hanya disimpan di cron-job.org, tidak di repo.
 
 Mengubah jam: edit baris `cron` (UTC = WIB − 7) dan jadwal di cron-job.org. Menonaktifkan: Actions → WA Blast Pencapaian → Disable workflow

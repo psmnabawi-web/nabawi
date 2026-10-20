@@ -1,15 +1,15 @@
 name: WA Blast Pencapaian
 
-# Jadwal dalam UTC (WIB = UTC+7, tanpa DST): 02:03 UTC = 09:03 WIB, 07:03 UTC = 14:03 WIB.
-# GitHub sering menunda atau melewatkan slot jadwal (terutama 02:xx UTC), karena itu ada slot cadangan :33 dan
-# pengaman anti-kirim-ganda (scripts/wa-dedupe.mjs): slot berikutnya dilewati bila sudah ada kiriman dalam 150 menit.
-# Untuk jam yang presisi, picu dari luar lewat workflow_dispatch (lihat README: cron-job.org).
+# Jadwal kirim: 09.00 dan 14.00 WIB (UTC+7, tanpa DST). Cron GitHub di repo ini terbukti telat 10 menit sampai 2 jam dan slot pagi
+# (02:03 UTC) sering dilewati, jadi workflow dipicu tiap 10 menit selama 2 jam setelah tiap jam kirim
+# (UTC 02-03 = 09.00-10.50 WIB, UTC 07-08 = 14.00-15.50 WIB). Run pertama yang benar-benar jalan yang mengirim; run berikutnya
+# pada sesi yang sama selesai dalam hitungan detik tanpa mengirim (scripts/wa-dedupe.mjs, penanda artifact sent-<tanggal>-<sesi>).
+# Untuk jam yang presisi, picu dari luar lewat workflow_dispatch (README: cron-job.org); cron GitHub lalu menjadi cadangan.
 # PENTING: GitHub hanya menjalankan "schedule" dari file workflow di BRANCH DEFAULT repo, dan menonaktifkan
 # jadwal otomatis bila repo publik tidak menerima commit selama 60 hari (aktifkan lagi di tab Actions).
 on:
   schedule:
-    - cron: "3 2,7 * * *"
-    - cron: "33 2,7 * * *"
+    - cron: "*/10 2,3,7,8 * * *"
   # Setiap perubahan pada script/workflow ini diuji otomatis dalam mode dry_run (tidak mengirim apa pun).
   push:
     branches: ["claude/adoring-dijkstra-78ese7", "main"]
@@ -42,19 +42,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Pasang Playwright (Chromium)
-        if: ${{ env.ACTION != 'list_groups' }}
-        working-directory: apps/sssg-dashboard
-        run: |
-          npm ci --no-audit --no-fund
-          npx playwright install --with-deps chromium
-      - name: Cek kiriman ganda (hanya jadwal)
+      - name: Cek sesi hari ini sudah terkirim? (run terjadwal saja yang bisa dilewati)
         id: dedupe
-        if: ${{ github.event_name == 'schedule' }}
         working-directory: apps/sssg-dashboard
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/wa-dedupe.mjs
+      - name: Pasang Playwright (Chromium)
+        if: ${{ steps.dedupe.outputs.skip != 'true' && env.ACTION != 'list_groups' }}
+        working-directory: apps/sssg-dashboard
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
       - name: Susun & kirim pesan
         id: send
         if: ${{ steps.dedupe.outputs.skip != 'true' }}
@@ -74,11 +73,11 @@ jobs:
         run: node scripts/wa-blast.mjs
       # Salinan pesan/daftar grup hanya disimpan untuk uji (dry_run, push, list_groups), bukan untuk kiriman terjadwal:
       # repo ini publik, artifact bisa diunduh siapa pun yang login GitHub. Hapus artifact setelah dibaca.
-      - name: Tandai run ini sudah mengirim (untuk pengaman anti-ganda)
+      - name: Tandai sesi ini sudah terkirim (penanda untuk run cadangan)
         if: ${{ env.ACTION == 'send' && steps.send.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
-          name: sent-${{ github.run_id }}
+          name: sent-${{ steps.dedupe.outputs.slot }}
           path: apps/sssg-dashboard/wa-out/sent-marker.txt
           if-no-files-found: ignore
           retention-days: 2
