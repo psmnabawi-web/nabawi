@@ -34,6 +34,7 @@ import { pathToFileURL } from "node:url";
 
 const env = (k, d = "") => (process.env[k] ?? d).toString().trim();
 const IN_CI = !!process.env.GITHUB_ACTIONS;
+const EVENT = env("GITHUB_EVENT_NAME"); // schedule | workflow_dispatch | push | "" (lokal)
 const URL_DASH = env("SSSG_URL", "https://dashboard-inti-warna.web.app/#exec");
 const GATEWAY = env("WA_GATEWAY").toLowerCase();
 const TOKEN = env("WA_TOKEN");
@@ -67,20 +68,22 @@ function validate() {
   for (const t of TARGETS) if (!MODES.includes(t.mode)) fail(`Mode "${t.mode}" untuk ${t.name} tidak dikenal (detail | compact | pct)`);
   const leader = TARGETS[1];
   if (leader.mode !== "pct" && env("WA_LEADER_ALLOW_RUPIAH") !== "1") fail(`WA_MODE_LEADER="${leader.mode}" memuat angka rupiah. Grup Leader seharusnya "pct". Bila memang disengaja, set variabel WA_LEADER_ALLOW_RUPIAH=1.`);
-  if (ACTION === "dry_run") return { dry: true, reason: "ACTION=dry_run" };
-  // send / list_groups: konfigurasi gateway harus lengkap
-  if (!GATEWAY && !TOKEN && !TARGETS.some(t => t.id)) {
+  const configured = !!(GATEWAY || TOKEN || TARGETS.some(t => t.id));
+  if (!configured) {
+    if (ACTION === "dry_run") return { dry: true, reason: "ACTION=dry_run" };
     if (ACTION === "send") { warn("Gateway WhatsApp belum dikonfigurasi (WA_GATEWAY, WA_TOKEN, WA_TARGET_*). Berjalan sebagai dry-run; isi secret untuk mulai mengirim."); return { dry: true, reason: "gateway belum dikonfigurasi" }; }
     fail("Gateway WhatsApp belum dikonfigurasi (WA_GATEWAY, WA_TOKEN).");
   }
+  // Gateway sudah (sebagian) dikonfigurasi: periksa lengkap, juga pada dry_run, supaya salah konfigurasi ketahuan sebelum jadwal kirim.
   if (!["fonnte", "wablas", "webhook"].includes(GATEWAY)) fail(`WA_GATEWAY "${GATEWAY || "(kosong)"}" tidak dikenal (fonnte | wablas | webhook)`);
   if (GATEWAY !== "webhook" && !TOKEN) fail("WA_TOKEN kosong padahal WA_GATEWAY sudah diisi.");
   if (GATEWAY !== "fonnte") {
     if (!API_URL) fail(`WA_API_URL wajib untuk gateway ${GATEWAY}`);
     if (!/^https:\/\//i.test(API_URL) && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/i.test(API_URL)) fail("WA_API_URL harus memakai https:// (http hanya diizinkan untuk uji di 127.0.0.1/localhost)");
   }
-  if (ACTION === "send" && !TARGETS.some(t => t.id)) fail("WA_TARGET_BOD dan WA_TARGET_LEADER kosong: tidak ada tujuan pengiriman.");
   if (GATEWAY !== "fonnte" && TARGETS.some(t => t.id && !looksLikeId(t.id))) fail(`WA_TARGET berisi nama grup; pencarian nama grup hanya untuk Fonnte. Untuk gateway ${GATEWAY} isi dengan ID grup (…@g.us).`);
+  if (ACTION === "send" && !TARGETS.some(t => t.id)) fail("WA_TARGET_BOD dan WA_TARGET_LEADER kosong: tidak ada tujuan pengiriman.");
+  if (ACTION === "dry_run") return { dry: true, reason: "ACTION=dry_run" };
   return { dry: false, reason: "" };
 }
 
@@ -100,10 +103,18 @@ async function request(url, init) {
 }
 const form = (fields) => ({ method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(fields) });
 const reasonOf = (r) => { const j = r.json || {}; const s = [j.reason, j.message, j.detail, j.error].find(v => typeof v === "string" && v); return `HTTP ${r.status}${s ? " · " + s.slice(0, 120) : ""}`; };
+let groupRefreshUsedForSend = false;
 async function sendOnce(target, message) {
   if (GATEWAY === "fonnte") {
-    const r = await request(`${FONNTE_BASE}/send`, { ...form({ target, message, countryCode: "62" }), headers: { Authorization: TOKEN, "Content-Type": "application/x-www-form-urlencoded" } });
+    const r = await request(`${FONNTE_BASE}/send`, { ...form({ target, message, countryCode: "62" }), headers: fonnteAuth() });
     if (r.ok && r.json && r.json.status === true) return "diterima gateway";
+    // Fonnte memeriksa ID grup terhadap daftar grup device; bila daftar belum diperbarui ia membalas "id group invalid" dan pesan TIDAK masuk.
+    if (isGroup(target) && /group/i.test(reasonOf(r)) && /invalid/i.test(reasonOf(r)) && !groupRefreshUsedForSend) {
+      groupRefreshUsedForSend = true;
+      log(`  gateway: ID grup belum dikenal device (${reasonOf(r)}); minta Fonnte menyegarkan daftar grup lalu coba sekali lagi…`);
+      await fonnteFetchGroup(); await new Promise(res => setTimeout(res, FONNTE_WAIT_MS));
+      return sendOnce(target, message);
+    }
     throw new GatewayError(`gateway menolak: ${reasonOf(r)}`, r.status >= 500);
   }
   if (GATEWAY === "wablas") {
@@ -130,22 +141,35 @@ async function send(target, message) {
   }
 }
 const fonnteAuth = () => ({ Authorization: TOKEN, "Content-Type": "application/x-www-form-urlencoded" });
+/** Balasan Fonnte yang tidak ada gunanya diulang: token salah atau device terputus → hentikan dengan petunjuk. */
+function fonnteFatal(reason) {
+  if (/token/i.test(reason) && /invalid|salah|expired/i.test(reason)) fail(`WA_TOKEN ditolak Fonnte (${reason}). Periksa token device di dashboard Fonnte lalu perbarui secret WA_TOKEN.`);
+  if (/disconnect|not connected|belum terhubung/i.test(reason)) fail(`Device Fonnte terputus (${reason}). Scan ulang QR di dashboard Fonnte.`);
+}
+async function fonnteFetchGroup() {
+  // Docs Fonnte: /fetch-group cukup dipanggil saat nomor baru masuk grup; terlalu sering bisa berujung blokir nomor.
+  const f = await request(`${FONNTE_BASE}/fetch-group`, { ...form({}), headers: fonnteAuth() });
+  const ok = !!(f.json && f.json.status === true);
+  if (!ok) { fonnteFatal(reasonOf(f)); warn(`fetch-group: ${reasonOf(f)} (lanjut membaca daftar yang tersimpan)`); }
+  return ok;
+}
 async function fonnteGroupsOnce() {
   const r = await request(`${FONNTE_BASE}/get-whatsapp-group`, { ...form({}), headers: fonnteAuth() });
   const ok = !!(r.json && r.json.status === true);
+  if (!ok) fonnteFatal(reasonOf(r));
   const data = ok && Array.isArray(r.json.data) ? r.json.data : [];
   return { ok, reason: ok ? "" : reasonOf(r), groups: data.map(g => ({ id: String(g.id || g.jid || ""), name: String(g.name || g.subject || "") })).filter(g => g.id) };
 }
-/** Daftar grup pada nomor Fonnte. refresh=true: minta Fonnte memperbarui daftar (proses asinkron) lalu baca ulang beberapa kali. */
+/** Daftar grup pada nomor Fonnte. refresh=false: daftar tersimpan (bisa kosong pada device baru). refresh=true: minta Fonnte memperbarui (asinkron) lalu baca ulang. */
 async function fonnteGroups(refresh, wanted = []) {
-  if (!refresh) { const r = await fonnteGroupsOnce(); if (!r.ok) fail(`Daftar grup Fonnte gagal dibaca: ${r.reason}. Pastikan token benar dan device Fonnte berstatus connected.`); return r.groups; }
-  const f = await request(`${FONNTE_BASE}/fetch-group`, { ...form({}), headers: fonnteAuth() });
-  if (!(f.json && f.json.status === true)) warn(`fetch-group: ${reasonOf(f)} (lanjut membaca daftar yang tersimpan)`);
+  if (!refresh) { const r = await fonnteGroupsOnce(); if (!r.ok) log(`daftar grup tersimpan belum ada (${r.reason})`); return r.groups; }
+  await fonnteFetchGroup();
   let last = { ok: false, reason: "", groups: [] };
   for (let i = 0; i < 4; i++) {
     if (i) await new Promise(res => setTimeout(res, FONNTE_WAIT_MS));
     last = await fonnteGroupsOnce();
-    if (last.ok && last.groups.length && wanted.every(n => matchGroup(last.groups, n).hits.length)) break;
+    if (!last.ok || !last.groups.length) continue;
+    if (wanted.length ? wanted.every(n => matchGroup(last.groups, n).hits.length) : i >= 1) break; // tanpa 'wanted': baca minimal 2x agar hasil refresh ikut terbaca
   }
   if (!last.ok) fail(`Daftar grup Fonnte gagal dibaca: ${last.reason}. Pastikan nomor WhatsApp di device Fonnte sudah masuk grup tujuan dan device berstatus connected.`);
   return last.groups;
@@ -166,7 +190,11 @@ async function resolveTargets() {
   if (!byName.length) return;
   const names = byName.map(t => t.id);
   let groups = await fonnteGroups(false);
-  if (names.some(n => !matchGroup(groups, n).hits.length)) { log(`nama grup belum ketemu di ${groups.length} grup tersimpan, minta Fonnte menyegarkan daftar…`); groups = await fonnteGroups(true, names); }
+  if (names.some(n => !matchGroup(groups, n).hits.length)) {
+    // Segarkan daftar hanya bila daftar kosong (device baru) atau run manual; run terjadwal tiap 10 menit tidak boleh memukul /fetch-group terus-menerus.
+    if (!groups.length || EVENT !== "schedule") { log(`nama grup belum ketemu di ${groups.length} grup tersimpan, minta Fonnte menyegarkan daftar…`); groups = await fonnteGroups(true, names); }
+    else log(`nama grup belum ketemu di ${groups.length} grup tersimpan; daftar tidak disegarkan pada run terjadwal (batas Fonnte). Bila nomor gateway baru masuk grup, jalankan Run workflow → dry_run sekali.`);
+  }
   const errors = [];
   for (const t of byName) {
     const { hits, how } = matchGroup(groups, t.id);
