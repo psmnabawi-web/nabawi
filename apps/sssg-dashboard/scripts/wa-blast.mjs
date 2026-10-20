@@ -18,7 +18,7 @@
 //   WA_TARGET_BOD     grup WhatsApp untuk BOD/manajemen (pesan rinci, dengan rupiah): NAMA grup persis seperti di WhatsApp
 //                     (Fonnte saja; dipetakan ke ID saat jalan) atau ID grup 1203…@g.us
 //   WA_TARGET_LEADER  grup WhatsApp untuk Grup Leader (pesan persentase, tanpa rupiah): nama grup atau ID
-//   WA_TARGET_PRIBADI chat pribadi, satu per baris/koma: "Nama=nomor" (+ ":pct" / ":compact" bila bukan versi rinci),
+//   WA_TARGET_PRIBADI chat pribadi, satu per baris/koma: "Nama=nomor" (+ ":pct" / ":compact" bila bukan versi BOD),
 //                     mis. "Mami=0812-3456-7890". Nomor dinormalisasi ke 62…; nama hanya label log/file, nomor tidak pernah dicetak.
 //   WA_MODE_BOD       detail | compact | pct (default detail)
 //   WA_MODE_LEADER    pct (default). Mode lain (yang memuat rupiah) hanya bila WA_LEADER_ALLOW_RUPIAH=1
@@ -49,12 +49,13 @@ const TARGETS = [
   { name: "Grup Leader", kind: "grup", id: env("WA_TARGET_LEADER"), mode: env("WA_MODE_LEADER", "pct") || "pct" },
   ...parsePrivateTargets(env("WA_TARGET_PRIBADI")),
 ];
-/** "Mami=0812-3456-7890, Papi=+62 813 1111 2222:pct" → tujuan chat pribadi. Nomor → 62…; entri tanpa nomor valid diberi .error (dicek di validate). */
+/** "Mami=0812-3456-7890, Papi=+62 813 1111 2222:pct" → tujuan chat pribadi. Tanpa akhiran mode, penerima pribadi menerima
+ *  versi yang SAMA dengan BOD (WA_MODE_BOD). Nomor → 62…; entri tanpa nomor valid diberi .error (dicek di validate). */
 function parsePrivateTargets(raw) {
-  const out = [];
+  const out = []; const bodMode = env("WA_MODE_BOD", "detail") || "detail";
   for (const part of String(raw || "").split(/[\n,;]+/)) {
     const p = part.trim(); if (!p) continue;
-    let body = p, mode = "detail"; const mm = body.match(/:(detail|compact|pct)$/i); if (mm) { mode = mm[1].toLowerCase(); body = body.slice(0, -mm[0].length); }
+    let body = p, mode = bodMode; const mm = body.match(/:(detail|compact|pct)$/i); if (mm) { mode = mm[1].toLowerCase(); body = body.slice(0, -mm[0].length); }
     const eq = body.indexOf("="), numeric = /^[\d\s+().-]+$/.test(body);
     let name = eq >= 0 ? body.slice(0, eq) : numeric ? "" : body, num = eq >= 0 ? body.slice(eq + 1) : numeric ? body : "";
     name = name.replace(/[*_~`"'\r]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 40) || `Pribadi ${out.length + 1}`;

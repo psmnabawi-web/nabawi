@@ -80,7 +80,7 @@ nomor WhatsApp sendiri. Gunakan **nomor khusus** (bukan nomor pribadi) karena ad
    | `WA_API_URL` | Variable/Secret | Wablas: domain server, mis. `https://jogja.wablas.com` · webhook: URL tujuan (wajib https) |
    | `WA_TARGET_BOD` | Secret | **Nama grup BOD persis seperti di WhatsApp** (Fonnte: dipetakan ke ID saat jalan), atau ID grup `1203…@g.us` |
    | `WA_TARGET_LEADER` | Secret | Nama grup Grup Leader persis seperti di WhatsApp, atau ID grup |
-   | `WA_TARGET_PRIBADI` | Secret (opsional) | Chat pribadi, satu per baris atau dipisah koma: `Nama=nomor`, mis. `Mami=0812-3456-7890`. Default versi rinci (rupiah); tambahkan `:pct` untuk persentase atau `:compact` untuk ringkas, mis. `Mami=0812…:pct` |
+   | `WA_TARGET_PRIBADI` | Secret (opsional) | Chat pribadi, satu per baris atau dipisah koma: `Nama=nomor`, mis. `Mami=0812-3456-7890`. Tanpa akhiran, penerima pribadi mendapat **versi yang sama dengan BOD** (rinci, rupiah); tambahkan `:pct` untuk persentase atau `:compact` untuk ringkas, mis. `Mami=0812…:pct` |
    | `WA_MODE_BOD` / `WA_MODE_LEADER` | Variable (opsional) | `detail` (default BOD) / `pct` (default Leader) / `compact` |
 
 4. **Nama grup.** Isi `WA_TARGET_BOD` dan `WA_TARGET_LEADER` dengan nama grup persis seperti tertulis di WhatsApp (huruf besar/kecil,
