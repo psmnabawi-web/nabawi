@@ -8,15 +8,16 @@
 // Dipakai oleh .github/workflows/wa-blast.yml (jadwal 09.00 & 14.00 WIB) dan bisa dijalankan manual:
 //   node scripts/wa-blast.mjs                      # ACTION=send: kirim (gagal bila konfigurasi tidak lengkap)
 //   ACTION=dry_run node scripts/wa-blast.mjs       # susun pesan saja, simpan ke wa-out/, tidak mengirim
-//   ACTION=list_groups node scripts/wa-blast.mjs   # (Fonnte) tulis daftar grup + ID ke wa-out/daftar-grup.txt
+//   ACTION=list_groups node scripts/wa-blast.mjs   # (Fonnte) tulis daftar grup (nama + ID) ke wa-out/daftar-grup.txt
 //
 // Env (isi lewat GitHub Secrets/Variables, jangan ditulis di kode):
 //   SSSG_URL          URL dashboard (default https://dashboard-inti-warna.web.app/#exec)
 //   WA_GATEWAY        fonnte | wablas | webhook
 //   WA_TOKEN          Fonnte: token device · Wablas: "token.secret_key" (gabung dengan titik) · webhook: bearer token (opsional)
 //   WA_API_URL        Wablas: domain server (mis. https://jogja.wablas.com) · webhook: URL tujuan POST (wajib https)
-//   WA_TARGET_BOD     ID grup WhatsApp untuk BOD/manajemen (pesan rinci, dengan rupiah), format 1203…@g.us
-//   WA_TARGET_LEADER  ID grup WhatsApp untuk Grup Leader (pesan persentase, tanpa rupiah)
+//   WA_TARGET_BOD     grup WhatsApp untuk BOD/manajemen (pesan rinci, dengan rupiah): NAMA grup persis seperti di WhatsApp
+//                     (Fonnte saja; dipetakan ke ID saat jalan) atau ID grup 1203…@g.us
+//   WA_TARGET_LEADER  grup WhatsApp untuk Grup Leader (pesan persentase, tanpa rupiah): nama grup atau ID
 //   WA_MODE_BOD       detail | compact | pct (default detail)
 //   WA_MODE_LEADER    pct (default). Mode lain (yang memuat rupiah) hanya bila WA_LEADER_ALLOW_RUPIAH=1
 //   WA_HEADER         teks pembuka opsional (default: "Laporan otomatis · <waktu WIB>")
@@ -24,6 +25,7 @@
 //   ACTION            send (default) | dry_run | list_groups
 //   PLAYWRIGHT_PATH / PLAYWRIGHT_CHROMIUM_PATH  lokasi modul & browser bila tidak di node_modules (uji lokal)
 //   WA_TEST_ROUTES    (uji lokal saja, diabaikan di GitHub Actions) modul ESM: export default async (page) => {...}
+//   WA_TEST_FONNTE_BASE / WA_TEST_FONNTE_WAIT_MS  (uji lokal saja) server Fonnte tiruan & jeda tunggu daftar grup
 
 import { createRequire } from "node:module";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -50,7 +52,14 @@ const warn = (m) => console.log(IN_CI ? `::warning::${m}` : `PERINGATAN: ${m}`);
 const fail = (m) => { console.error(IN_CI ? `::error::${m}` : `ERROR: ${m}`); process.exit(1); };
 // Jangan pernah menulis token, ID grup, atau isi balasan gateway ke log (log Actions di repo publik bisa dibaca siapa saja).
 const isGroup = (t) => /@g\.us$/i.test(t);
-const describeTarget = (t) => (isGroup(t) ? "grup" : "nomor") + " (" + t.length + " karakter)";
+// Tujuan yang sudah berupa ID: grup (…@g.us), nomor telepon, atau ID numerik negatif. Selain itu dianggap NAMA grup.
+const looksLikeId = (t) => isGroup(t) || /^\+?\d[\d-]{6,}$/.test(t) || /^-\d+$/.test(t);
+const describeTarget = (t) => (isGroup(t) ? "grup" : looksLikeId(t) ? "nomor" : "nama grup") + " (" + t.length + " karakter)";
+// Normalisasi nama grup: huruf kecil, tanpa tanda baca/emoji, spasi tunggal → "Leader TJ / IW - Kepala Toko" ≡ "leader tj iw kepala toko"
+const norm = (s) => String(s ?? "").normalize("NFKD").toLowerCase().replace(/[^\p{L}\p{N}\s]+/gu, " ").replace(/\s+/g, " ").trim();
+const testEnv = (k) => (IN_CI ? "" : env(k));
+const FONNTE_BASE = testEnv("WA_TEST_FONNTE_BASE") || "https://api.fonnte.com";
+const FONNTE_WAIT_MS = Number(testEnv("WA_TEST_FONNTE_WAIT_MS") || 5000);
 
 // ---------- validasi konfigurasi ----------
 function validate() {
@@ -71,6 +80,7 @@ function validate() {
     if (!/^https:\/\//i.test(API_URL) && !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?(\/|$)/i.test(API_URL)) fail("WA_API_URL harus memakai https:// (http hanya diizinkan untuk uji di 127.0.0.1/localhost)");
   }
   if (ACTION === "send" && !TARGETS.some(t => t.id)) fail("WA_TARGET_BOD dan WA_TARGET_LEADER kosong: tidak ada tujuan pengiriman.");
+  if (GATEWAY !== "fonnte" && TARGETS.some(t => t.id && !looksLikeId(t.id))) fail(`WA_TARGET berisi nama grup; pencarian nama grup hanya untuk Fonnte. Untuk gateway ${GATEWAY} isi dengan ID grup (…@g.us).`);
   return { dry: false, reason: "" };
 }
 
@@ -92,7 +102,7 @@ const form = (fields) => ({ method: "POST", headers: { "Content-Type": "applicat
 const reasonOf = (r) => { const j = r.json || {}; const s = [j.reason, j.message, j.detail, j.error].find(v => typeof v === "string" && v); return `HTTP ${r.status}${s ? " · " + s.slice(0, 120) : ""}`; };
 async function sendOnce(target, message) {
   if (GATEWAY === "fonnte") {
-    const r = await request("https://api.fonnte.com/send", { ...form({ target, message, countryCode: "62" }), headers: { Authorization: TOKEN, "Content-Type": "application/x-www-form-urlencoded" } });
+    const r = await request(`${FONNTE_BASE}/send`, { ...form({ target, message, countryCode: "62" }), headers: { Authorization: TOKEN, "Content-Type": "application/x-www-form-urlencoded" } });
     if (r.ok && r.json && r.json.status === true) return "diterima gateway";
     throw new GatewayError(`gateway menolak: ${reasonOf(r)}`, r.status >= 500);
   }
@@ -119,18 +129,59 @@ async function send(target, message) {
     return sendOnce(target, message);
   }
 }
+const fonnteAuth = () => ({ Authorization: TOKEN, "Content-Type": "application/x-www-form-urlencoded" });
+async function fonnteGroupsOnce() {
+  const r = await request(`${FONNTE_BASE}/get-whatsapp-group`, { ...form({}), headers: fonnteAuth() });
+  const ok = !!(r.json && r.json.status === true);
+  const data = ok && Array.isArray(r.json.data) ? r.json.data : [];
+  return { ok, reason: ok ? "" : reasonOf(r), groups: data.map(g => ({ id: String(g.id || g.jid || ""), name: String(g.name || g.subject || "") })).filter(g => g.id) };
+}
+/** Daftar grup pada nomor Fonnte. refresh=true: minta Fonnte memperbarui daftar (proses asinkron) lalu baca ulang beberapa kali. */
+async function fonnteGroups(refresh, wanted = []) {
+  if (!refresh) { const r = await fonnteGroupsOnce(); if (!r.ok) fail(`Daftar grup Fonnte gagal dibaca: ${r.reason}. Pastikan token benar dan device Fonnte berstatus connected.`); return r.groups; }
+  const f = await request(`${FONNTE_BASE}/fetch-group`, { ...form({}), headers: fonnteAuth() });
+  if (!(f.json && f.json.status === true)) warn(`fetch-group: ${reasonOf(f)} (lanjut membaca daftar yang tersimpan)`);
+  let last = { ok: false, reason: "", groups: [] };
+  for (let i = 0; i < 4; i++) {
+    if (i) await new Promise(res => setTimeout(res, FONNTE_WAIT_MS));
+    last = await fonnteGroupsOnce();
+    if (last.ok && last.groups.length && wanted.every(n => matchGroup(last.groups, n).hits.length)) break;
+  }
+  if (!last.ok) fail(`Daftar grup Fonnte gagal dibaca: ${last.reason}. Pastikan nomor WhatsApp di device Fonnte sudah masuk grup tujuan dan device berstatus connected.`);
+  return last.groups;
+}
+/** Cocokkan NAMA grup bertingkat: persis (setelah normalisasi) → nama grup MENGANDUNG teks → semua KATA teks ada di nama grup. */
+function matchGroup(groups, name) {
+  const n = norm(name); if (!n) return { hits: [], how: "kosong" };
+  const exact = groups.filter(g => norm(g.name) === n);
+  if (exact.length) return { hits: exact, how: "persis" };
+  const contains = groups.filter(g => norm(g.name).includes(n));
+  if (contains.length) return { hits: contains, how: "sebagian" };
+  const words = n.split(" ");
+  return { hits: groups.filter(g => { const w = new Set(norm(g.name).split(" ")); return words.every(x => w.has(x)); }), how: "per kata" };
+}
+/** Ubah NAMA grup di WA_TARGET_* menjadi ID grup (Fonnte). Tujuan yang sudah berupa ID dibiarkan. Gagal keras bila tidak ketemu / ganda. */
+async function resolveTargets() {
+  const byName = TARGETS.filter(t => t.id && !looksLikeId(t.id));
+  if (!byName.length) return;
+  const names = byName.map(t => t.id);
+  let groups = await fonnteGroups(false);
+  if (names.some(n => !matchGroup(groups, n).hits.length)) { log(`nama grup belum ketemu di ${groups.length} grup tersimpan, minta Fonnte menyegarkan daftar…`); groups = await fonnteGroups(true, names); }
+  const errors = [];
+  for (const t of byName) {
+    const { hits, how } = matchGroup(groups, t.id);
+    if (hits.length === 1) { t.id = hits[0].id; log(`${t.name}: nama grup cocok ${how} → ${describeTarget(t.id)} (dari ${groups.length} grup)`); continue; }
+    errors.push(hits.length ? `${t.name}: ada ${hits.length} grup yang cocok dengan nama itu (${how}); tulis nama lengkap persis seperti di WhatsApp, atau pakai ID grup dari list_groups.`
+      : `${t.name}: nama grup tidak ditemukan di ${groups.length} grup pada nomor gateway. Pastikan nomor gateway sudah jadi anggota grup dan nama ditulis persis seperti di WhatsApp (atau pakai ID grup dari list_groups).`);
+  }
+  if (errors.length) { for (const e of errors) console.error(IN_CI ? `::error::${e}` : `ERROR: ${e}`); process.exit(1); }
+}
 async function listGroups() {
   if (GATEWAY !== "fonnte") fail("ACTION=list_groups hanya untuk gateway fonnte. Untuk Wablas, ID grup ada di menu Group pada panel Wablas.");
-  const auth = { Authorization: TOKEN, "Content-Type": "application/x-www-form-urlencoded" };
-  // Fonnte: /fetch-group menyegarkan daftar grup di server, /get-whatsapp-group membacanya.
-  const f = await request("https://api.fonnte.com/fetch-group", { ...form({}), headers: auth });
-  if (!(f.json && f.json.status === true)) warn(`fetch-group: ${reasonOf(f)} (lanjut membaca daftar yang tersimpan)`);
-  const r = await request("https://api.fonnte.com/get-whatsapp-group", { ...form({}), headers: auth });
-  if (!(r.json && r.json.status === true)) fail(`get-whatsapp-group gagal: ${reasonOf(r)}`);
-  const data = Array.isArray(r.json.data) ? r.json.data : [];
+  const data = await fonnteGroups(true);
   mkdirSync(OUT_DIR, { recursive: true });
   const file = join(OUT_DIR, "daftar-grup.txt");
-  writeFileSync(file, [`Daftar grup pada nomor gateway (${data.length}) · ${nowWib()}`, "", ...data.map(g => `${g.id || g.jid || "?"}\t${g.name || g.subject || ""}`), "", "Salin ID (format 1203…@g.us) ke secret WA_TARGET_BOD / WA_TARGET_LEADER, lalu HAPUS artifact ini dari halaman run."].join("\n"), "utf8");
+  writeFileSync(file, [`Daftar grup pada nomor gateway (${data.length}) · ${nowWib()}`, "", ...data.map(g => `${g.id}\t${g.name}`), "", "Salin NAMA grup (persis) atau ID (1203…@g.us) ke secret WA_TARGET_BOD / WA_TARGET_LEADER, lalu HAPUS artifact ini dari halaman run."].join("\n"), "utf8");
   log(`${data.length} grup ditulis ke ${file} (tidak dicetak ke log karena log repo publik bisa dibaca siapa saja).`);
 }
 
@@ -173,6 +224,8 @@ async function buildMessages(modes) {
   const { dry, reason } = validate();
   log(`action=${ACTION} gateway=${GATEWAY || "(belum diisi)"} token=${TOKEN ? "terisi" : "kosong"} dry_run=${dry}${reason ? ` (${reason})` : ""}`);
   if (ACTION === "list_groups") { await listGroups(); return; }
+  // Nama grup → ID, sebelum browser dibuka (gagal cepat bila salah tulis). Saat dry-run hanya bila token Fonnte tersedia.
+  if (!dry || (GATEWAY === "fonnte" && TOKEN)) await resolveTargets();
   const active = TARGETS.filter(t => t.id || dry);
   const modes = [...new Set(active.map(t => t.mode))];
   const { messages } = await buildMessages(modes);
