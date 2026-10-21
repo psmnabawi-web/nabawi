@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh api -X POST repos/psmnabawi-web/nabawi/actions/workflows/wa-blast.yml/dispatches:*)",
+      "Bash(gh api repos/psmnabawi-web/nabawi/actions/:*)",
+      "Bash(gh api 'repos/psmnabawi-web/nabawi/actions/:*)",
+      "Bash(gh api \"repos/psmnabawi-web/nabawi/actions/:*)",
+      "Bash(sleep:*)"
+    ]
+  }
+}
