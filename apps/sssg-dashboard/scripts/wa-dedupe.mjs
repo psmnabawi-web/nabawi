@@ -16,10 +16,17 @@ const headers = { Accept: "application/vnd.github+json", "User-Agent": "wa-blast
 if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
 
 // Kunci sesi menurut jam WIB saat run berjalan: sebelum 12.00 = pagi (jadwal 09.00), selebihnya = siang (jadwal 14.00).
-export function slotKey(d = new Date()) {
-  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" })
+export function wib(d = new Date()) {
+  return Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
     .formatToParts(d).filter(x => x.type !== "literal").map(x => [x.type, x.value]));
-  return `${p.year}${p.month}${p.day}-${+p.hour < 12 ? "pagi" : "siang"}`;
+}
+export function slotKey(d = new Date()) { const p = wib(d); return `${p.year}${p.month}${p.day}-${+p.hour < 12 ? "pagi" : "siang"}`; }
+// Jendela cadangan: cron GitHub hanya boleh mengirim 08.55-10.59 (sesi pagi) dan 13.55-15.59 (sesi siang) WIB. Di luar itu run
+// terjadwal dilewati: slot pagi yang baru jalan pukul 12.30 jangan mengirim "laporan siang" lebih awal, dan slot yang telat berjam-jam
+// jangan mengirim malam hari. Pemicu tepat waktu (scheduled task Claude) tidak terkena aturan ini.
+export function inBackupWindow(d = new Date()) {
+  const p = wib(d), m = +p.hour * 60 + +p.minute;
+  return (m >= 8 * 60 + 55 && m < 11 * 60) || (m >= 13 * 60 + 55 && m < 16 * 60);
 }
 
 function out(k, v) { if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${k}=${v}\n`); }
@@ -30,6 +37,7 @@ if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).
   out("slot", slot);
   console.log(`Sesi: ${slot} · event: ${EVENT || "(lokal)"}`);
   if (EVENT !== "schedule") finish(false, "bukan run terjadwal, tidak pernah dilewati");
+  else if (!inBackupWindow()) { const p = wib(); finish(true, `run cadangan di luar jendela (sekarang ${p.hour}.${p.minute} WIB; jendela 08.55-10.59 dan 13.55-15.59)`); }
   else {
     try {
       const r = await fetch(`${API}/repos/${REPO}/actions/artifacts?name=sent-${slot}&per_page=5`, { headers, signal: AbortSignal.timeout(20_000) });
