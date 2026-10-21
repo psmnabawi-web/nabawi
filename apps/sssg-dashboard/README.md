@@ -115,6 +115,8 @@ Dua **scheduled task** di akun Claude pemilik repo memicu workflow ini lewat `wo
 *"Pemicu WA Blast Inti Warna (jangan diarsipkan)"* yang terhubung ke repo ini; sesi itu menjalankan `gh api … /dispatches` dengan
 `action=send`, lalu memantau run-nya. Laporan biasanya masuk ke grup 2-4 menit setelah jam pemicu. Cron GitHub di atas tetap aktif
 sebagai cadangan; pengaman satu-kiriman-per-sesi mencegah laporan dobel.
+- Sesi pemicu memakai aturan izin di `.claude/settings.json` (root repo) yang mengizinkan perintah `gh api … /dispatches` tanpa
+  persetujuan manusia; tanpa aturan itu, perintah kirim ditolak sistem izin saat tidak ada yang menyetujui (kejadian 21 Okt 2026 pagi).
 - Mematikan/menyalakan: claude.ai → Scheduled tasks → matikan task-nya (atau arsipkan sesi pemicunya).
 - Jangan mengarsipkan sesi pemicu; bila terarsip, buat sesi baru yang terhubung ke repo ini dan arahkan task ke sesi itu.
 - Uji tanpa mengirim: jalankan task secara manual dengan pesan tambahan "ACTION=dry_run".
