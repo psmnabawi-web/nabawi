@@ -111,15 +111,16 @@ Perilaku penting:
 
 ### Jam presisi: pemicu dari scheduled task Claude (terpasang)
 Dua **scheduled task** di akun Claude pemilik repo memicu workflow ini lewat `workflow_dispatch` setiap hari: **"Kirim WA Pagi Toko"**
-(08.59 WIB) dan **"Kirim WA Siang Toko"** (13.58 WIB). Keduanya mengirim perintah ke satu sesi Claude Code bernama
-*"Pemicu WA Blast Inti Warna (jangan diarsipkan)"* yang terhubung ke repo ini; sesi itu menjalankan `gh api … /dispatches` dengan
-`action=send`, lalu memantau run-nya. Laporan biasanya masuk ke grup 2-4 menit setelah jam pemicu. Cron GitHub di atas tetap aktif
-sebagai cadangan; pengaman satu-kiriman-per-sesi mencegah laporan dobel.
-- Sesi pemicu memakai aturan izin di `.claude/settings.json` (root repo) yang mengizinkan perintah `gh api … /dispatches` tanpa
-  persetujuan manusia; tanpa aturan itu, perintah kirim ditolak sistem izin saat tidak ada yang menyetujui (kejadian 21 Okt 2026 pagi).
-- Mematikan/menyalakan: claude.ai → Scheduled tasks → matikan task-nya (atau arsipkan sesi pemicunya).
-- Jangan mengarsipkan sesi pemicu; bila terarsip, buat sesi baru yang terhubung ke repo ini dan arahkan task ke sesi itu.
-- Uji tanpa mengirim: jalankan task secara manual dengan pesan tambahan "ACTION=dry_run".
+(08.59 WIB) dan **"Kirim WA Siang Toko"** (13.58 WIB). Keduanya mengirim perintah ke sesi Claude Code **"Dashboard Omset Inti Warna"**
+(sesi tempat dashboard ini dikembangkan, terhubung ke repo ini); sesi itu menjalankan `gh api … /dispatches` dengan `action=send`, memantau
+run-nya, dan melapor. Laporan biasanya masuk ke grup 2-4 menit setelah jam pemicu. Cron GitHub di atas tetap aktif sebagai cadangan;
+pengaman satu-kiriman-per-sesi mencegah laporan dobel.
+- Kenapa sesi itu, bukan sesi khusus: sesi Claude yang dibuat otomatis (tanpa percakapan dengan pemilik) menolak perintah kirim lewat
+  sistem izinnya meski ada aturan di `.claude/settings.json` (kejadian 21 Okt 2026 pagi, laporan dikirim manual 09.19). Sesi yang memuat
+  persetujuan pemilik meloloskannya.
+- Mematikan/menyalakan: claude.ai → Scheduled tasks → matikan task-nya. Jangan mengarsipkan sesi "Dashboard Omset Inti Warna".
+- Uji tanpa mengirim: jalankan task secara manual dengan pesan tambahan "pakai action=dry_run".
+- Setiap pemicu memakai kuota Claude pemilik (dua giliran per hari). Alternatif tanpa kuota Claude: cron-job.org di bawah.
 
 ### Alternatif jam presisi: pemicu dari luar (cron-job.org)
 GitHub menerima pemicu `workflow_dispatch` lewat API, dan penjadwal eksternal gratis seperti cron-job.org menjalankannya tepat waktu.
