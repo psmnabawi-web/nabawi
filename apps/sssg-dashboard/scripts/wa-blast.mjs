@@ -248,14 +248,27 @@ async function buildMessages(modes) {
     const page = await (await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: "id-ID", timezoneId: "Asia/Jakarta" })).newPage();
     const errors = []; page.on("pageerror", e => errors.push(e.message));
     if (env("WA_TEST_ROUTES")) { if (IN_CI) warn("WA_TEST_ROUTES diabaikan di GitHub Actions."); else { const m = await import(pathToFileURL(env("WA_TEST_ROUTES")).href); await m.default(page); } }
+    const waitLoaded = async (maxMs) => {
+      const t0 = Date.now(); let st = null;
+      while (Date.now() - t0 < maxMs) {
+        st = await page.evaluate(() => window.SSSG ? window.SSSG.status() : null).catch(() => null);
+        if (st && (st.months > 0 || (st.error && !/^Memuat/.test(st.text)))) break;
+        if (!st && errors.length && Date.now() - t0 > 20_000) break; // app.js gagal sebelum window.SSSG dibuat
+        await page.waitForTimeout(1500);
+      }
+      return st;
+    };
+    // Google Sheets kadang gagal sesaat untuk sebagian tab (mis. pembanding 2025 hanya 6 dari 12 bulan). Bila tidak lengkap, muat ulang sekali.
+    const baseMonths = (st) => { const m = /pembanding \d{4} harian: (\d+) bulan/.exec(st && st.text || ""); return m ? +m[1] : null; };
+    const expectMonths = +new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Jakarta", month: "numeric" }).format(new Date());
     log(`membuka ${URL_DASH}`);
     await page.goto(URL_DASH, { waitUntil: "domcontentloaded", timeout: 90_000 });
-    const t0 = Date.now(); let st = null;
-    while (Date.now() - t0 < 180_000) {
-      st = await page.evaluate(() => window.SSSG ? window.SSSG.status() : null).catch(() => null);
-      if (st && (st.months > 0 || (st.error && !/^Memuat/.test(st.text)))) break;
-      if (!st && errors.length && Date.now() - t0 > 20_000) break; // app.js gagal sebelum window.SSSG dibuat
-      await page.waitForTimeout(1500);
+    let st = await waitLoaded(180_000);
+    if (st && st.months > 0 && (st.months < expectMonths || (baseMonths(st) != null && baseMonths(st) < 12))) {
+      log(`data terbaca belum lengkap (${st.text}); memuat ulang halaman sekali…`);
+      await page.reload({ waitUntil: "domcontentloaded", timeout: 90_000 });
+      const st2 = await waitLoaded(120_000);
+      if (st2 && st2.months >= st.months && (baseMonths(st2) ?? 0) >= (baseMonths(st) ?? 0)) st = st2; else log("hasil muat ulang tidak lebih baik, memakai hasil pertama");
     }
     if (!st) throw new Error("window.SSSG tidak tersedia: dashboard gagal dimuat" + (errors.length ? ` (${errors[0].slice(0, 160)})` : " atau versi dashboard belum mendukung otomasi"));
     if (!(st.months > 0)) throw new Error(st.error ? `dashboard gagal memuat data: ${st.text}` : `data belum termuat setelah 3 menit: ${st.text}`);
