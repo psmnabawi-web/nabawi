@@ -110,7 +110,10 @@ function validate() {
 }
 
 // ---------- gateway ----------
-class GatewayError extends Error { constructor(msg, retryable) { super(msg); this.retryable = retryable; } }
+class GatewayError extends Error { constructor(msg, retryable, fatal = false) { super(msg); this.retryable = retryable; this.fatal = fatal; } }
+/** Balasan Fonnte yang berlaku untuk SEMUA tujuan (device terputus, token salah): tidak ada gunanya mencoba tujuan berikutnya. */
+const fonnteFatalReason = (reason) => /disconnect|not connected|belum terhubung/i.test(reason) ? `device Fonnte TERPUTUS (${reason}). Pastikan HP nomor gateway menyala dan online, lalu cek status device di fonnte.com; bila masih terputus, scan ulang QR.`
+  : /token/i.test(reason) && /invalid|salah|expired/i.test(reason) ? `WA_TOKEN ditolak Fonnte (${reason}). Periksa token device di fonnte.com lalu perbarui secret WA_TOKEN.` : "";
 async function request(url, init) {
   const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 45_000);
   try {
@@ -137,6 +140,7 @@ async function sendOnce(target, message) {
       await fonnteFetchGroup(); await new Promise(res => setTimeout(res, FONNTE_WAIT_MS));
       return sendOnce(target, message);
     }
+    const fatal = fonnteFatalReason(reasonOf(r)); if (fatal) throw new GatewayError(fatal, false, true);
     throw new GatewayError(`gateway menolak: ${reasonOf(r)}`, r.status >= 500);
   }
   if (GATEWAY === "wablas") {
@@ -308,7 +312,10 @@ async function buildMessages(modes) {
     if (dry) { log(`  dry-run: tidak dikirim${t.id ? ` (tujuan ${describeTarget(t.id)})` : " (tujuan belum diisi)"}`); continue; }
     if (!t.id) { warn(`${t.name}: WA_TARGET belum diisi, dilewati`); continue; }
     try { const r = await send(t.id, text); sent++; log(`  terkirim ke ${describeTarget(t.id)} · ${r}`); }
-    catch (e) { failed++; console.error(IN_CI ? `::error::${t.name}: GAGAL kirim: ${e.message}` : `  GAGAL kirim ${t.name}: ${e.message}`); }
+    catch (e) {
+      failed++; console.error(IN_CI ? `::error::${t.name}: GAGAL kirim: ${e.message}` : `  GAGAL kirim ${t.name}: ${e.message}`);
+      if (e instanceof GatewayError && e.fatal) { const rest = active.slice(active.indexOf(t) + 1).filter(x => x.id); if (rest.length) { failed += rest.length; console.error(IN_CI ? `::error::${rest.map(x => x.name).join(", ")}: tidak dicoba, sebab yang sama` : `  ${rest.map(x => x.name).join(", ")}: tidak dicoba, sebab yang sama`); } break; }
+    }
   }
   if (dry) console.log(`\nDRY RUN selesai. Pesan tersimpan di folder ${OUT_DIR}/.`);
   else { console.log(`\nSelesai: ${sent} terkirim, ${failed} gagal.`); if (sent > 0) writeFileSync(join(OUT_DIR, "sent-marker.txt"), `${sent} pesan terkirim ${nowWib()}\n`, "utf8"); }
