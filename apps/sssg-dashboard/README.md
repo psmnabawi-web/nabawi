@@ -54,8 +54,9 @@ Jadwal GitHub **tidak presisi**: slot cron bisa tertunda 10 menit sampai 2 jam d
 10 menit selama 2 jam** setelah tiap jam kirim (cron `*/10 2,3,7,8 * * *` = 09.00-10.50 dan 14.00-15.50 WIB). Run pertama yang
 benar-benar jalan yang mengirim; run berikutnya pada sesi yang sama (`scripts/wa-dedupe.mjs`) selesai dalam hitungan detik tanpa
 mengirim karena menemukan artifact penanda `sent-<tanggal>-<pagi|siang>` (umur 2 hari) yang hanya dibuat setelah kiriman nyata
-berhasil. Hasilnya: **satu kiriman per sesi per hari**. Run cadangan hanya boleh mengirim di jendela 08.55-10.59 dan 13.55-15.59 WIB; slot yang
-terlalu telat (mis. slot pagi yang baru jalan 12.30 atau 19.47) dilewati, bukan mengirim laporan sesi berikutnya lebih awal. Untuk jam yang tepat, pakai pemicu
+berhasil. Hasilnya: **satu kiriman per sesi per hari**. Mode `auto` (cron GitHub dan pemicu terjadwal) hanya mengirim di jendela 08.50-11.59
+dan 13.30-16.59 WIB; slot yang terlalu telat (mis. slot pagi yang baru jalan 12.30 atau 19.47) dilewati, bukan mengirim laporan sesi
+berikutnya lebih awal. Action `send` adalah perintah manual eksplisit: selalu mengirim, tanpa cek penanda maupun jendela. Untuk jam yang tepat, pakai pemicu
 dari luar (bagian "Jam presisi" di bawah); cron GitHub lalu otomatis menjadi cadangan.
 
 WhatsApp resmi (Cloud API) tidak mengizinkan pengiriman ke grup, sehingga dibutuhkan gateway pihak ketiga yang memakai

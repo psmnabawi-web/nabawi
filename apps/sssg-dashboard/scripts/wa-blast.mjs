@@ -24,7 +24,7 @@
 //   WA_MODE_LEADER    pct (default). Mode lain (yang memuat rupiah) hanya bila WA_LEADER_ALLOW_RUPIAH=1
 //   WA_HEADER         teks pembuka opsional (default: "Laporan otomatis · <waktu WIB>")
 //   OUT_DIR           folder salinan pesan (default wa-out)
-//   ACTION            send (default) | dry_run | list_groups
+//   ACTION            send (default) | auto (= send; pengaman satu-kiriman-per-sesi dijalankan workflow) | dry_run | list_groups
 //   WA_ONLY           opsional: kirim hanya ke tujuan bernama ini (pisahkan koma), mis. "Mami" atau "BOD, Mami" (uji / kirim ulang)
 //   PLAYWRIGHT_PATH / PLAYWRIGHT_CHROMIUM_PATH  lokasi modul & browser bila tidak di node_modules (uji lokal)
 //   WA_TEST_ROUTES    (uji lokal saja, diabaikan di GitHub Actions) modul ESM: export default async (page) => {...}
@@ -42,7 +42,7 @@ const URL_DASH = env("SSSG_URL", "https://dashboard-inti-warna.web.app/#exec");
 const GATEWAY = env("WA_GATEWAY").toLowerCase();
 const TOKEN = env("WA_TOKEN");
 const API_URL = env("WA_API_URL").replace(/\/+$/, "");
-const ACTION = env("ACTION", "send").toLowerCase();
+const ACTION = env("ACTION", "send").toLowerCase().replace(/^auto$/, "send"); // auto = send yang sudah lolos pengaman satu-kiriman-per-sesi (workflow)
 const OUT_DIR = env("OUT_DIR", "wa-out");
 const MODES = ["detail", "compact", "pct"];
 const TARGETS = [

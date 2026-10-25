@@ -17,10 +17,10 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "send = kirim ke grup · dry_run = susun pesan saja (lihat artifact) · list_groups = tulis ID grup ke artifact (Fonnte)"
+        description: "auto = kirim bila sesi (pagi/siang) hari ini belum terkirim dan masih dalam jendela · send = kirim sekarang (tanpa cek) · dry_run = susun pesan saja (lihat artifact) · list_groups = tulis ID grup ke artifact (Fonnte)"
         type: choice
         default: dry_run
-        options: [dry_run, send, list_groups]
+        options: [dry_run, auto, send, list_groups]
       only:
         description: "Opsional: kirim hanya ke tujuan ini, pisahkan koma (BOD, Grup Leader, atau nama di WA_TARGET_PRIBADI mis. Mami)"
         type: string
@@ -39,18 +39,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      # push → selalu dry_run; dispatch → sesuai pilihan; schedule → send
-      ACTION: ${{ github.event_name == 'push' && 'dry_run' || inputs.action || 'send' }}
+      # push → selalu dry_run; dispatch → sesuai pilihan; schedule → auto (kirim bila sesi belum terkirim & dalam jendela)
+      ACTION: ${{ github.event_name == 'push' && 'dry_run' || inputs.action || 'auto' }}
+      # auto = run terjadwal ATAU dispatch dengan action=auto: boleh dilewati oleh pengaman satu-kiriman-per-sesi
+      WA_AUTO: ${{ (github.event_name == 'schedule' || inputs.action == 'auto') && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Cek sesi hari ini sudah terkirim? (run terjadwal saja yang bisa dilewati)
+      - name: Cek sesi hari ini sudah terkirim? (hanya mode auto/jadwal yang bisa dilewati)
         id: dedupe
         working-directory: apps/sssg-dashboard
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          WA_AUTO: ${{ env.WA_AUTO }}
         run: node scripts/wa-dedupe.mjs
       - name: Pasang Playwright (Chromium)
         if: ${{ steps.dedupe.outputs.skip != 'true' && env.ACTION != 'list_groups' }}
@@ -82,7 +85,7 @@ jobs:
       # always(): bila satu grup terkirim dan grup lain gagal, step di atas merah tetapi penanda tetap diunggah (script hanya menulis
       # sent-marker.txt bila ada yang terkirim), supaya run cadangan tidak mengirim ulang ke grup yang sudah menerima.
       - name: Tandai sesi ini sudah terkirim (penanda untuk run cadangan)
-        if: ${{ always() && env.ACTION == 'send' && steps.dedupe.outputs.skip != 'true' }}
+        if: ${{ always() && (env.ACTION == 'send' || env.ACTION == 'auto') && steps.dedupe.outputs.skip != 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: sent-${{ steps.dedupe.outputs.slot }}
@@ -90,7 +93,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 2
       - name: Simpan salinan (hanya mode uji)
-        if: ${{ always() && env.ACTION != 'send' }}
+        if: ${{ always() && env.ACTION != 'send' && env.ACTION != 'auto' }}
         uses: actions/upload-artifact@v4
         with:
           name: pesan-wa-${{ github.run_number }}
