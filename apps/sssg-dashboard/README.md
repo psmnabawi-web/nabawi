@@ -49,15 +49,13 @@ Script membuka dashboard secara headless (Playwright), menunggu data Google Shee
 tombol Kirim WA (`window.SSSG.wa(mode)`), lalu mengirimkannya lewat gateway WhatsApp: grup **BOD** menerima versi rinci (dengan rupiah),
 grup **Grup Leader** menerima versi persentase (tanpa rupiah; mode lain ditolak kecuali variabel `WA_LEADER_ALLOW_RUPIAH=1`).
 
-Jadwal GitHub **tidak presisi**: slot cron bisa tertunda 10 menit sampai 2 jam dan kadang dilewati sama sekali (pada repo ini slot pagi
-02.03 UTC = 09.03 WIB tercatat tidak pernah terpicu, slot siang terpicu dengan tunda sampai 2 jam). Karena itu workflow dipicu **tiap
-10 menit selama 2 jam** setelah tiap jam kirim (cron `*/10 2,3,7,8 * * *` = 09.00-10.50 dan 14.00-15.50 WIB). Run pertama yang
-benar-benar jalan yang mengirim; run berikutnya pada sesi yang sama (`scripts/wa-dedupe.mjs`) selesai dalam hitungan detik tanpa
-mengirim karena menemukan artifact penanda `sent-<tanggal>-<pagi|siang>` (umur 2 hari) yang hanya dibuat setelah kiriman nyata
-berhasil. Hasilnya: **satu kiriman per sesi per hari**. Mode `auto` (cron GitHub dan pemicu terjadwal) hanya mengirim di jendela 08.50-11.59
-dan 13.30-16.59 WIB; slot yang terlalu telat (mis. slot pagi yang baru jalan 12.30 atau 19.47) dilewati, bukan mengirim laporan sesi
-berikutnya lebih awal. Action `send` adalah perintah manual eksplisit: selalu mengirim, tanpa cek penanda maupun jendela. Untuk jam yang tepat, pakai pemicu
-dari luar (bagian "Jam presisi" di bawah); cron GitHub lalu otomatis menjadi cadangan.
+Jadwal GitHub **tidak presisi**: cron bisa tertunda 10 menit sampai beberapa jam dan sering dilewati. Karena itu tiap sesi diberi
+banyak slot di dalam jendela kirim (cron `53 1`, `7,23,41 2,3,4`, `53 6`, `7,23,41 7,8,9` UTC = 08.53-11.41 dan 13.53-16.41 WIB).
+Semua run terjadwal memakai **mode auto**: run pertama yang benar-benar jalan yang mengirim; run berikutnya pada sesi yang sama
+(`scripts/wa-dedupe.mjs`) selesai dalam hitungan detik tanpa mengirim karena menemukan artifact penanda `sent-<tanggal>-<pagi|siang>`
+(umur 2 hari) yang hanya dibuat setelah kiriman nyata berhasil. Mode auto juga menolak mengirim di luar jendela 08.50-11.59 dan
+13.30-16.59 WIB. Hasilnya: **satu kiriman per sesi per hari**, tetapi jamnya mengikuti kapan GitHub sempat menjalankan slot.
+Untuk jam yang tepat, pakai pemicu dari luar (bagian "Jam presisi" di bawah) dengan `action=auto`: aman dari dobel.
 
 WhatsApp resmi (Cloud API) tidak mengizinkan pengiriman ke grup, sehingga dibutuhkan gateway pihak ketiga yang memakai
 nomor WhatsApp sendiri. Gunakan **nomor khusus** (bukan nomor pribadi) karena ada risiko pembatasan oleh WhatsApp.
@@ -111,20 +109,14 @@ Perilaku penting:
   12.00 WIB, "siang" = sesudahnya; tab Actions akan menampilkan banyak run singkat berstatus sukses (atau dibatalkan karena antrean),
   itu normal.
 
-### Jam presisi: pemicu dari scheduled task Claude (terpasang)
-Dua **scheduled task** di akun Claude pemilik repo memicu workflow ini lewat `workflow_dispatch` setiap hari: **"Kirim WA Pagi Toko"**
-(08.59 WIB) dan **"Kirim WA Siang Toko"** (13.58 WIB). Keduanya mengirim perintah ke sesi Claude Code **"Dashboard Omset Inti Warna"**
-(sesi tempat dashboard ini dikembangkan, terhubung ke repo ini); sesi itu menjalankan `gh api … /dispatches` dengan `action=send`, memantau
-run-nya, dan melapor. Laporan biasanya masuk ke grup 2-4 menit setelah jam pemicu. Cron GitHub di atas tetap aktif sebagai cadangan;
-pengaman satu-kiriman-per-sesi mencegah laporan dobel.
-- Kenapa sesi itu, bukan sesi khusus: sesi Claude yang dibuat otomatis (tanpa percakapan dengan pemilik) menolak perintah kirim lewat
-  sistem izinnya meski ada aturan di `.claude/settings.json` (kejadian 21 Okt 2026 pagi, laporan dikirim manual 09.19). Sesi yang memuat
-  persetujuan pemilik meloloskannya.
-- Mematikan/menyalakan: claude.ai → Scheduled tasks → matikan task-nya. Jangan mengarsipkan sesi "Dashboard Omset Inti Warna".
-- Uji tanpa mengirim: jalankan task secara manual dengan pesan tambahan "pakai action=dry_run".
-- Setiap pemicu memakai kuota Claude pemilik (dua giliran per hari). Alternatif tanpa kuota Claude: cron-job.org di bawah.
+### Jam presisi: pelajaran 20-25 Okt 2026
+Scheduled task Claude (sesi khusus maupun sesi pengembangan) terbukti **tidak dapat diandalkan** di lingkungan ini: sesi khusus yang
+dibuat otomatis menolak perintah kirim lewat sistem izinnya, dan sesi yang menampung persetujuan pemilik tidak selalu terbangun saat
+dipicu (23-24 Okt tiga sesi laporan tidak terkirim). Dua scheduled task cadangan ("Kirim WA Pagi/Siang Toko (cadangan sesi ini)",
+09.06 dan 14.05 WIB, mode auto) masih ada di akun pemilik, tetapi jangan dianggap pemicu utama. Pemicu tepat waktu yang andal adalah
+penjadwal luar di bawah ini.
 
-### Alternatif jam presisi: pemicu dari luar (cron-job.org)
+### Jam presisi yang andal: pemicu dari luar (cron-job.org) · DISARANKAN
 GitHub menerima pemicu `workflow_dispatch` lewat API, dan penjadwal eksternal gratis seperti cron-job.org menjalankannya tepat waktu.
 1. Buat token: GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens** → Generate. Repository access:
    hanya repo ini. Permissions → Repository → **Actions: Read and write**. Masa berlaku maksimal 1 tahun (catat tanggalnya, perbarui sebelum habis).
@@ -132,11 +124,11 @@ GitHub menerima pemicu `workflow_dispatch` lewat API, dan penjadwal eksternal gr
    - URL: `https://api.github.com/repos/psmnabawi-web/nabawi/actions/workflows/wa-blast.yml/dispatches`
    - Method: `POST`
    - Headers: `Authorization: Bearer <token>` · `Accept: application/vnd.github+json` · `Content-Type: application/json`
-   - Body: `{"ref":"<nama branch default>","inputs":{"action":"send"}}`
+   - Body: `{"ref":"claude/adoring-dijkstra-78ese7","inputs":{"action":"auto"}}` (`auto` = kirim hanya bila sesi belum terkirim; aman diulang)
 3. Jalankan job sekali secara manual: GitHub membalas **204** dan run baru muncul di tab Actions dengan event `workflow_dispatch`.
 
-Run dari pemicu luar tidak pernah dilewati (perintah eksplisit) dan ikut membuat penanda sesi, sehingga cron GitHub yang datang
-sesudahnya pada sesi yang sama tidak mengirim lagi.
+Run dari pemicu luar dengan `action=auto` memakai pengaman yang sama: mengirim bila sesi hari ini belum terkirim, lalu membuat penanda
+sehingga cron GitHub yang datang sesudahnya diam. Boleh dipasang lebih dari satu job (mis. 09.00 dan 09.10) sebagai pengulang.
 Token hanya disimpan di cron-job.org, tidak di repo.
 
 Mengubah jam: edit baris `cron` (UTC = WIB − 7) dan jadwal di cron-job.org. Menonaktifkan: Actions → WA Blast Pencapaian → Disable workflow

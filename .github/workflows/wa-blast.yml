@@ -1,15 +1,18 @@
 name: WA Blast Pencapaian
 
-# Jadwal kirim: 09.00 dan 14.00 WIB (UTC+7, tanpa DST). Cron GitHub di repo ini terbukti telat 10 menit sampai 2 jam dan slot pagi
-# (02:03 UTC) sering dilewati, jadi workflow dipicu tiap 10 menit selama 2 jam setelah tiap jam kirim
-# (UTC 02-03 = 09.00-10.50 WIB, UTC 07-08 = 14.00-15.50 WIB). Run pertama yang benar-benar jalan yang mengirim; run berikutnya
-# pada sesi yang sama selesai dalam hitungan detik tanpa mengirim (scripts/wa-dedupe.mjs, penanda artifact sent-<tanggal>-<sesi>).
-# Untuk jam yang presisi, picu dari luar lewat workflow_dispatch (README: cron-job.org); cron GitHub lalu menjadi cadangan.
+# Jadwal kirim: 09.00 dan 14.00 WIB (UTC+7, tanpa DST). Cron GitHub di repo ini terbukti telat 10 menit sampai beberapa jam dan sering
+# dilewati, jadi tiap sesi diberi banyak slot di dalam jendela kirim (pagi 08.50-11.59, siang 13.50-16.59 WIB; menit ganjil agar tidak
+# bertabrakan dengan antrean :00). Semua run terjadwal memakai mode auto: hanya run pertama yang berhasil mengirim; run berikutnya pada
+# sesi yang sama selesai dalam hitungan detik tanpa mengirim (scripts/wa-dedupe.mjs, penanda artifact sent-<tanggal>-<sesi>).
+# Pemicu luar yang tepat waktu (cron-job.org → workflow_dispatch action=auto, lihat README) memakai pengaman yang sama.
 # PENTING: GitHub hanya menjalankan "schedule" dari file workflow di BRANCH DEFAULT repo, dan menonaktifkan
 # jadwal otomatis bila repo publik tidak menerima commit selama 60 hari (aktifkan lagi di tab Actions).
 on:
   schedule:
-    - cron: "*/10 2,3,7,8 * * *"
+    - cron: "53 1 * * *"          # 08.53 WIB
+    - cron: "7,23,41 2,3,4 * * *" # 09.07 … 11.41 WIB
+    - cron: "53 6 * * *"          # 13.53 WIB
+    - cron: "7,23,41 7,8,9 * * *" # 14.07 … 16.41 WIB
   # Setiap perubahan pada script/workflow ini diuji otomatis dalam mode dry_run (tidak mengirim apa pun).
   push:
     branches: ["claude/adoring-dijkstra-78ese7", "main"]
