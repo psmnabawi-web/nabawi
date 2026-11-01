@@ -551,7 +551,9 @@
     if (state.mode !== "yoy" && state.month === "ytd") state.month = null;
     state.months.forEach((m, i) => { if (!m) return; const o = document.createElement("option"); o.value = i; o.textContent = MONTH_NAMES[i].charAt(0) + MONTH_NAMES[i].slice(1).toLowerCase() + " " + Y() + (isPartial(i) ? " · s/d tgl " + lastDataDay(i) : ""); sel.appendChild(o); });
     if (["exec", "visit"].includes(state.view)) { const o = document.createElement("option"); o.value = "range"; o.textContent = "Rentang tanggal…"; sel.appendChild(o); }
-    if (state.month !== "ytd" && (state.month == null || !state.months[state.month])) state.month = avail[avail.length - 1];
+    // Bulan default = bulan terakhir yang SUDAH ADA omsetnya. Tab bulan baru yang baru berisi target (mis. tanggal 1 pagi) jangan
+    // dipilih dulu: dashboard dan laporan WA akan menampilkan 0% semua; tampilkan rekap bulan sebelumnya sampai data hari pertama masuk.
+    if (state.month !== "ytd" && (state.month == null || !state.months[state.month])) { const withData = avail.filter(i => lastDataDay(i) > 0); state.month = (withData.length ? withData : avail)[(withData.length ? withData : avail).length - 1]; }
     sel.value = state.range && ["exec", "visit"].includes(state.view) ? "range" : state.month;
     $("rangePill").classList.toggle("hidden", !(state.range || sel.value === "range") || !["exec", "visit"].includes(state.view));
   }
