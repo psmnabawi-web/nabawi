@@ -277,7 +277,8 @@ async function buildMessages(modes) {
     if (!st) throw new Error("window.SSSG tidak tersedia: dashboard gagal dimuat" + (errors.length ? ` (${errors[0].slice(0, 160)})` : " atau versi dashboard belum mendukung otomasi"));
     if (!(st.months > 0)) throw new Error(st.error ? `dashboard gagal memuat data: ${st.text}` : `data belum termuat setelah 3 menit: ${st.text}`);
     if (st.error) warn(`halaman menampilkan error setelah data termuat (pesan tetap disusun dari data): ${st.text.slice(0, 160)}`);
-    log(`data termuat: ${st.text}`);
+    const BULAN = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+    log(`data termuat: ${st.text} · bulan laporan: ${typeof st.month === "number" ? `${BULAN[st.month]} ${st.year}` : st.month}`);
     // tunggu sheet sales ikut selesai (maksimal 20 detik)
     const t1 = Date.now(); while (Date.now() - t1 < 20_000) { const s2 = await page.evaluate(() => window.SSSG.status()); if (s2.sales > 0 || s2.salesErr) { if (s2.salesErr) warn(`sheet sales tidak terbaca, bagian sales dilewati: ${String(s2.salesErr).slice(0, 160)}`); break; } await page.waitForTimeout(1000); }
     const out = {};
