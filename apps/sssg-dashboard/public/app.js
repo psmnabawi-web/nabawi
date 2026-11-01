@@ -119,7 +119,7 @@
     header.forEach((h, c) => { const s = findStoreVisit(h); if (!s || vmap[s.key]) return; const cols = { DATANG: c }; for (let k = 1; k < VC.length && c + k < header.length; k++) { const hk = norm(header[c + k]); if (hk === VC[k]) cols[VC[k]] = c + k; else if (hk) break; } vmap[s.key] = cols; });
     const DAYS = ["MINGGU", "SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU"];
     const dayName = (v) => norm(v).replace(/[^A-Z]/g, ""); // "JUM'AT" → "JUMAT"
-    const days = []; let prev = null, fixedDates = 0;
+    const days = []; let prev = null, fixedDates = 0, otherMonth = 0;
     for (let r = hr + 1; r < rows.length; r++) {
       const row = rows[r]; if (!row) break;
       if (norm(row[1]) === "TOTAL" || norm(row[0]) === "TOTAL") break;
@@ -139,12 +139,15 @@
       if (!d && prev) { const g = new Date(prev.getFullYear(), prev.getMonth(), prev.getDate() + 1); if (dayName(row[1]) === DAYS[g.getDay()]) d = g; }
       if (!d) { if (days.length) break; else continue; }
       prev = d;
-      if (d.getMonth() !== idx) continue;
+      if (d.getMonth() !== idx) { otherMonth++; continue; }
       const act = {}, tgt = {};
       for (const k in map) { act[k] = num(row[map[k].act]); tgt[k] = map[k].tgt != null ? num(row[map[k].tgt]) : null; }
       const visit = {}; for (const k in vmap) { const o = {}; let any = false; for (const c of VC) { const col = vmap[k][c]; const v = col == null ? null : num(row[col]); o[c] = v; if (v != null) any = true; } if (any) visit[k] = o; }
       days.push({ d: d.getDate(), total: totalCol >= 0 ? num(row[totalCol]) : null, act, tgt, visit });
     }
+    // Bila tab yang diminta tidak ada, gviz diam-diam mengembalikan tab PERTAMA spreadsheet (bulan lain). Tanggal bulan lain yang kebetulan
+    // "cocok" (mis. "10/11/2026" gaya AS = 11 Okt, terbaca 10 Nov) akan menyusup sebagai 1-2 hari palsu. Tolak bila baris bulan lain mendominasi.
+    if (otherMonth > days.length) return null;
     const headerRaw = header.filter(v => v != null && String(v).trim() !== "").slice(0, 40).map(v => String(v).trim());
     return { idx, storesFound: Object.keys(map), visitStores: Object.keys(vmap), days, headerRaw, headerRow: hr, fixedDates };
   }
