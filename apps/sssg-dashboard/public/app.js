@@ -1698,7 +1698,7 @@
   // API kecil untuk otomasi (blast WhatsApp terjadwal lewat scripts/wa-blast.mjs). Tidak mengubah tampilan.
   window.SSSG = {
     ready: () => state.months.length > 0,
-    status: () => ({ text: $("status").textContent, error: $("status").classList.contains("err"), fetchedAt: state.fetchedAt ? state.fetchedAt.toISOString() : null, months: state.months.filter(Boolean).length, monthDays: state.months.map(m => m ? m.days.length : 0), fixedDates: state.months.map(m => m ? (m.fixedDates || 0) : 0), sales: state.sales ? state.sales.rows.length : 0, salesErr: state.salesErr || null, year: state.year, month: state.month }),
+    status: () => ({ text: $("status").textContent, error: $("status").classList.contains("err"), fetchedAt: state.fetchedAt ? state.fetchedAt.toISOString() : null, months: state.months.filter(Boolean).length, monthDays: state.months.map(m => m ? m.days.length : 0), dataDays: state.months.map((m, i) => m ? lastDataDay(i) : 0), fixedDates: state.months.map(m => m ? (m.fixedDates || 0) : 0), sales: state.sales ? state.sales.rows.length : 0, salesErr: state.salesErr || null, year: state.year, month: state.month }),
     wa: (mode) => mode === "pct" ? buildWaPercent() : buildWaMessage(mode === "compact"),
   };
   loadAll();
