@@ -19,6 +19,9 @@ Hasil: https://dashboard-inti-warna.web.app (alamat utama) dan https://sssg-dash
    Kolom: `TOKO | JANUARI | … | DESEMBER`, satu baris per toko, isi omset 2025 (angka penuh, tanpa titik).
    Template: `BASELINE_2025_template.csv`. Nama toko boleh memakai singkatan yang ada di `config.js` (mis. TJ, AF, BW, IWP, IWU, IW PYK, IW HR).
    Tanpa sheet ini, dashboard tetap jalan: SSSG YoY hanya di level perusahaan (dari sheet REKAP) dan mode **Growth MoM** tersedia per toko.
+3. Nama tab bulan harus **persis** nama bulan dalam huruf besar: `JANUARI` … `DESEMBER` (spasi di belakang masih ditoleransi).
+   Bila tab tidak ditemukan (mis. salah ketik `NOVEMBERE`), Google diam-diam mengirim tab **pertama** spreadsheet sebagai gantinya; dashboard
+   menolak tabel palsu itu dan menganggap bulan tersebut belum ada datanya. Bulan laporan otomatis = bulan terakhir yang sudah ada omset.
 
 ## Pencapaian target per outlet (halaman Ringkasan)
 Kartu **Pencapaian target per outlet** tampil di halaman Ringkasan tanpa perlu memilih outlet.
