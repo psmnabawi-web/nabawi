@@ -42,6 +42,7 @@ async function mock() {
     // origin publik (tanpa auth): sajikan file dari versi yang sedang live
     if (p.startsWith("/origin/")) {
       const path = p.slice("/origin".length);
+      if (releases[0].type === "SITE_DISABLE") { res.writeHead(404); return res.end("Site Not Found"); }
       const curr = versions[releases[0].version.name];
       const hh = curr.files[path === "/" ? "/index.html" : path];
       if (!hh) { res.writeHead(404); return res.end("nf"); }
@@ -60,6 +61,7 @@ async function mock() {
     if (req.method === "PATCH" && (m = p.match(/^\/(sites\/[^/]+\/versions\/[^/]+)$/))) { versions[m[1]].status = JSON.parse(body).status; return json(200, {}); }
     if (req.method === "POST" && p === `/sites/${SITE}/releases`) {
       const vn = url.searchParams.get("versionName");
+      if (!vn && JSON.parse(body).type === "SITE_DISABLE") { releases.unshift({ type: "SITE_DISABLE", releaseTime: "now", message: JSON.parse(body).message }); calls.disabled = (calls.disabled || 0) + 1; return json(200, {}); }
       if (!versions[vn] || versions[vn].status !== "FINALIZED") return json(400, { error: { message: "version not finalized" } });
       releases.unshift({ type: "DEPLOY", version: { name: vn, config: versions[vn].config }, releaseTime: "now", message: JSON.parse(body).message });
       calls.released.push(vn); return json(200, {});
@@ -110,6 +112,25 @@ test("snapshot → deploy overlay (file lama dipakai ulang via hash) → deploy 
     const r = await run(dir, m, "rollback");
     assert.equal(r.code, 0, r.stderr + r.stdout);
     assert.equal(m.releases[0].version.name, `sites/${SITE}/versions/v0`);
+  } finally { await m.close(); }
+});
+
+test("disable: situs dimatikan (Site Not Found), versi untuk menghidupkan dicatat; rollback menghidupkan lagi", async () => {
+  const m = await mock(); const dir = makeWorkdir();
+  try {
+    const d = await run(dir, m, "disable");
+    assert.equal(d.code, 0, d.stderr + d.stdout);
+    assert.equal(m.releases[0].type, "SITE_DISABLE");
+    assert.match(d.stdout, /version sites\/trecking-filter-oil-store\/versions\/v0/);
+    assert.match(d.stdout, /cek OK: situs tidak lagi melayani halaman/);
+    const again = await run(dir, m, "disable");
+    assert.equal(again.code, 0, again.stderr + again.stdout);
+    assert.match(again.stdout, /sudah dalam keadaan mati/);
+    assert.equal(m.calls.disabled, 1, "tidak mematikan dua kali");
+    const r = await run(dir, m, "rollback", { ROLLBACK_VERSION: "v0" });
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+    assert.equal(m.releases[0].version.name, `sites/${SITE}/versions/v0`);
+    assert.equal((await fetch(`${m.base}/origin/`)).status, 200);
   } finally { await m.close(); }
 });
 

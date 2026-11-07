@@ -4,15 +4,16 @@ name: App Filter Oil (situs utama)
 #   snapshot → salin versi live (semua file + konfigurasi hosting) ke apps/filter-oil-app/live dan commit ke branch ini
 #   deploy   → terbitkan versi live yang sama persis + tambahan dari apps/filter-oil-app/overlay (menu Kepatuhan & Export)
 #   rollback → kembalikan versi sebelumnya (isi "version", atau kosongkan untuk versi terakhir sebelum deploy kepatuhan)
+#   disable  → matikan situs ("Site Not Found"); hidupkan lagi dengan rollback + version yang dicatat saat dimatikan
 # Hanya dijalankan manual (Run workflow). Login tanpa key lewat Workload Identity (kepatuhan-deployer, Firebase Hosting Admin).
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: "snapshot | deploy | rollback"
+        description: "snapshot | deploy | rollback | disable"
         type: choice
         default: snapshot
-        options: [snapshot, deploy, rollback]
+        options: [snapshot, deploy, rollback, disable]
       version:
         description: "Khusus rollback: nama versi (sites/.../versions/xxx atau xxx). Kosong = versi sebelum deploy kepatuhan"
         required: false

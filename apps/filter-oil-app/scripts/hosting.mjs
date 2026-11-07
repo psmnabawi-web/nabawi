@@ -5,6 +5,8 @@
 //   node scripts/hosting.mjs deploy     → terbitkan versi baru = semua file live yang sama persis + file dari overlay/
 //                                          (mis. index.html yang ditambah menu Kepatuhan, folder /kepatuhan/)
 //   node scripts/hosting.mjs rollback   → terbitkan ulang versi ROLLBACK_VERSION (atau versi sebelum deploy terakhir)
+//   node scripts/hosting.mjs disable    → matikan situs (Firebase "hosting:disable": link menampilkan "Site Not Found").
+//                                          Hidupkan lagi dengan rollback + ROLLBACK_VERSION = versi yang dicatat saat dimatikan.
 //
 // Pengaman:
 //   - deploy hanya jalan bila versi live sama dengan versi di live/hosting.json (snapshot). Kalau app sudah
@@ -189,6 +191,31 @@ async function rollback() {
   summary(`### Rollback ${SITE}\nVersi \`${target}\` kembali live.`);
 }
 
+// ---------- disable (matikan situs) ----------
+async function disable() {
+  const r0 = await call("GET", `${API}/sites/${SITE}/channels/live/releases?pageSize=10`);
+  if (!r0.ok) fail(`Riwayat rilis situs ${SITE} tidak bisa dibaca: ${why(r0)}`);
+  const releases = r0.json.releases || [];
+  const last = releases.find((x) => x.version && x.version.name);
+  const back = last ? last.version.name : "";
+  if (releases[0] && releases[0].type === "SITE_DISABLE") {
+    log(`situs ${SITE} sudah dalam keadaan mati; tidak ada yang diubah. Versi terakhir: ${back || "-"}`);
+    return;
+  }
+  const r = await call("POST", `${API}/sites/${SITE}/releases`, { type: "SITE_DISABLE", message: "dimatikan atas permintaan pemilik app" });
+  if (!r.ok) fail(`Gagal mematikan situs: ${why(r)}`);
+  log(`situs ${SITE} dimatikan. Untuk menghidupkan lagi: action rollback, version ${back || "(versi terakhir)"}`);
+  summary(`### Situs ${SITE} dimatikan\nLink menampilkan "Site Not Found". Data Firestore tidak disentuh.\n\nHidupkan lagi: jalankan workflow ini dengan action **rollback** dan version \`${back}\`.`);
+  // cek: situs sudah tidak melayani halaman (CDN butuh beberapa detik)
+  let code = 0;
+  for (let i = 0; i < 8 && code !== 404; i++) {
+    if (i) await new Promise((res) => setTimeout(res, 5000));
+    try { code = (await fetch(`${ORIGIN}/?check=${Date.now()}`)).status; } catch { code = 0; }
+  }
+  if (code !== 404) fail(`Situs masih menjawab HTTP ${code} setelah dimatikan. Cek lagi beberapa menit kemudian.`);
+  log("cek OK: situs tidak lagi melayani halaman (HTTP 404)");
+}
+
 const cmd = process.argv[2];
 if (!TOKEN) fail("FO_ACCESS_TOKEN kosong.");
-({ snapshot, deploy, rollback }[cmd] || (() => fail(`Perintah tidak dikenal: ${cmd} (snapshot | deploy | rollback)`)))().catch((e) => fail(e && e.stack ? e.stack : String(e)));
+({ snapshot, deploy, rollback, disable }[cmd] || (() => fail(`Perintah tidak dikenal: ${cmd} (snapshot | deploy | rollback | disable)`)))().catch((e) => fail(e && e.stack ? e.stack : String(e)));
