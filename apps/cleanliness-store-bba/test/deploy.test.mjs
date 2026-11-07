@@ -24,7 +24,7 @@ async function mock({ liveVersion = SNAP.version, liveMessage = "", releaseUser 
     const p = decodeURIComponent(url.pathname);
     let m;
     // Situs publik tiruan (tanpa Authorization) untuk cek pasca-rilis: layani file yang sudah di-upload.
-    if (req.method === "GET" && (m = p.match(/^\/site\/(.+)$/))) {
+    if (req.method === "GET" && (m = p.match(/^\/site(?:\/(.*))?$/))) {
       const h = calls.manifest && calls.manifest["/" + m[1]];
       if (!h || !calls.uploads[h]) { res.writeHead(404); return res.end("nf"); }
       res.writeHead(200, { "Content-Type": "text/plain" }); return res.end(calls.uploads[h]);
