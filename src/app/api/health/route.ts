@@ -1,14 +1,17 @@
 import { NextResponse } from 'next/server';
 import { loadAiSettings } from '@/lib/server/aiSettings';
+import { loadAppStatus } from '@/lib/server/appStatus';
 
 export const runtime = 'nodejs';
 
 /** GET /api/health -> status konfigurasi (tanpa membocorkan secret). Dipakai untuk cek deploy. */
 export async function GET() {
   const s = await loadAiSettings();
+  const status = await loadAppStatus(true);
   const aiReady = s.provider === 'google' ? (s.useVertex ? !!(process.env.GOOGLE_CLOUD_PROJECT || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID) : !!s.apiKey) : !!s.apiKey && (s.provider !== 'openai' || !!s.baseUrl);
   return NextResponse.json({
     ok: true,
+    maintenance: status.maintenance,
     ai: { provider: s.provider, mode: s.provider === 'google' ? (s.useVertex ? 'vertex-ai' : 'gemini-api') : s.provider, model: s.model, baseUrl: s.provider === 'openai' ? s.baseUrl : null, configured: aiReady },
     firebase: {
       projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? null,

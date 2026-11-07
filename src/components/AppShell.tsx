@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useAuth } from './AuthProvider';
 import { LogoMark } from './brand/Logo';
-import { IconBell, IconChevron, IconClipboard, IconDashboard, IconHistory, IconList, IconLogout, IconPlus, IconQuality, IconSparkle, IconStore, IconUser, IconUsers } from './icons';
+import { IconAlert, IconBell, IconChevron, IconClipboard, IconDashboard, IconHistory, IconList, IconLogout, IconPlus, IconQuality, IconSparkle, IconStore, IconUser, IconUsers } from './icons';
 import { Alert, Spinner } from './ui';
 import { useAudits, useStores } from '@/lib/hooks';
 import { isSuperAdmin } from '@/lib/types';
@@ -18,6 +18,7 @@ const NAV = [
   { href: '/product-audit', label: 'Audit Produk', icon: IconQuality, roles: ['admin'], superOnly: true },
   { href: '/admin/notify', label: 'Notifikasi WA', icon: IconBell, roles: ['admin'], superOnly: true },
   { href: '/admin/ai', label: 'Pengaturan AI', icon: IconSparkle, roles: ['admin'], superOnly: true },
+  { href: '/admin/app', label: 'Status Aplikasi', icon: IconAlert, roles: ['admin'], superOnly: true },
   { href: '/admin/stores', label: 'Store', icon: IconStore, roles: ['admin'] },
   { href: '/admin/users', label: 'User & Role', icon: IconUsers, roles: ['admin'] },
   { href: '/admin/indicators', label: 'Indikator', icon: IconList, roles: ['admin'] },
@@ -58,6 +59,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex min-h-screen items-center justify-center text-brand">
         <Spinner className="h-8 w-8" />
+      </div>
+    );
+  }
+  if (error && !profile && error.startsWith('MAINTENANCE:')) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-surface p-6">
+        <div className="w-full max-w-md rounded-2xl border border-line bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto mb-4 flex justify-center">
+            <LogoMark size={56} />
+          </div>
+          <h1 className="text-xl font-black text-ink">Aplikasi Dinonaktifkan Sementara</h1>
+          <p className="mt-2 text-sm text-muted">{error.replace(/^MAINTENANCE:\s*/, '')}</p>
+          <button onClick={logout} className="mt-6 text-sm font-semibold text-brand underline">
+            Keluar
+          </button>
+        </div>
       </div>
     );
   }

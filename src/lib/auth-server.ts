@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { adminAuth, adminDb } from './firebase/admin';
 import { isSuperAdmin, type AuditLog, type Role, type UserProfile } from './types';
 import { HttpError } from './utils';
+import { loadAppStatus } from './server/appStatus';
 
 export interface AuthContext {
   uid: string;
@@ -67,6 +68,9 @@ export async function requireProfile(req: Request): Promise<AuthContext> {
     await ref.set(profile);
   }
   if (!profile.active) throw new HttpError(403, 'Akun dinonaktifkan. Hubungi admin.');
+  // Mode nonaktif sementara: hanya super admin yang masih bisa masuk (untuk menyalakan kembali).
+  const status = await loadAppStatus();
+  if (status.maintenance && !isSuperAdmin(profile)) throw new HttpError(503, `MAINTENANCE: ${status.message}`);
   return { uid, email, profile };
 }
 

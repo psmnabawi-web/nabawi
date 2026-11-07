@@ -4,6 +4,7 @@ import { requireProfile, jsonError } from '@/lib/auth-server';
 import { adminDb } from '@/lib/firebase/admin';
 import { isConfigured, loadNotifySettings, recordSendResult, sendNotification } from '@/lib/server/notify';
 import { buildScoringReport } from '@/lib/server/scoringReport';
+import { loadAppStatus } from '@/lib/server/appStatus';
 import { isSuperAdmin } from '@/lib/types';
 import { HttpError } from '@/lib/utils';
 
@@ -40,6 +41,11 @@ async function handle(req: Request) {
       actor = { uid: ctx.uid, name: ctx.profile.name };
     }
 
+    const status = await loadAppStatus(true);
+    if (status.maintenance && actor.uid === 'system') {
+      await log(actor, 'SKIP_SCORING_REPORT', { reason: 'aplikasi dinonaktifkan sementara' });
+      return NextResponse.json({ sent: false, reason: 'Aplikasi dinonaktifkan sementara.' });
+    }
     const settings = await loadNotifySettings();
     const report = await buildScoringReport(Date.now(), date);
     if (dry) return NextResponse.json({ report, configured: isConfigured(settings), enabled: settings.enabled, provider: settings.provider });
