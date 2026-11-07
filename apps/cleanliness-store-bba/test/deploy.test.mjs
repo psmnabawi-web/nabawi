@@ -44,14 +44,15 @@ async function mock({ liveVersion = SNAP.version, liveMessage = "", releaseUser 
       calls.uploads[h] = gunzipSync(body); return json(200, {});
     }
     if (req.method === "PATCH" && p.endsWith("/versions/v1")) { if (JSON.parse(body).status === "FINALIZED") calls.finalized++; return json(200, {}); }
-    if (req.method === "POST" && (m = p.match(/^\/sites\/([^/]+)\/releases$/))) { calls.released.push({ site: m[1], version: url.searchParams.get("versionName"), message: JSON.parse(body).message }); return json(200, {}); }
+    if (req.method === "POST" && (m = p.match(/^\/sites\/([^/]+)\/releases$/))) { const b = JSON.parse(body); calls.released.push({ site: m[1], version: url.searchParams.get("versionName"), message: b.message, type: b.type }); if (b.type === "SITE_DISABLE") calls.disabled = true; return json(200, {}); }
+    if (calls.disabled && req.method === "GET" && p.startsWith("/site/")) { res.writeHead(404); return res.end("disabled"); }
     return json(404, { error: { message: `no route ${req.method} ${p}` } });
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const base = `http://127.0.0.1:${server.address().port}`;
   return { base, calls, close: () => new Promise((r) => server.close(r)) };
 }
-const run = (m, extra = {}) => new Promise((resolve) => execFile(process.execPath, [SCRIPT], {
+const run = (m, extra = {}, args = []) => new Promise((resolve) => execFile(process.execPath, [SCRIPT, ...args], {
   env: { PATH: process.env.PATH, ACCESS_TOKEN: "tok", TEST_HOSTING_BASE: m.base, TEST_UPLOAD_BASE: m.base, TEST_ORIGIN: `${m.base}/site`, TEST_SMOKE_DELAY_MS: "10", ...extra },
 }, (err, stdout, stderr) => resolve({ code: err ? err.code : 0, stdout, stderr })));
 
@@ -125,5 +126,16 @@ test("cek situs gagal bila situs melayani isi berbeda", async () => {
     assert.equal(r.code, 1);
     assert.match(r.stderr, /belum melayani versi baru/);
     assert.equal(m.calls.released.length, 1, "rilis sudah terjadi; yang gagal hanya verifikasi");
+  } finally { await m.close(); }
+});
+
+test("disable: rilis SITE_DISABLE tanpa membuat versi/upload, lalu cek situs menjawab 404", async () => {
+  const m = await mock({ liveVersion: `sites/${SITE}/versions/kita456`, liveMessage: "bba-app: commit abc1234" });
+  try {
+    const r = await run(m, { DEPLOY_LABEL: "uji" }, ["disable"]);
+    assert.equal(r.code, 0, r.stderr + r.stdout);
+    assert.equal(m.calls.versions, 0); assert.equal(Object.keys(m.calls.uploads).length, 0);
+    assert.deepEqual(m.calls.released, [{ site: SITE, version: null, message: "bba-app: situs dimatikan (uji); versi terakhir kita456", type: "SITE_DISABLE" }]);
+    assert.match(r.stdout, /cek OK: .* 404/); assert.match(r.stdout, /SELESAI: situs cleanliness-store-bba dimatikan/);
   } finally { await m.close(); }
 });

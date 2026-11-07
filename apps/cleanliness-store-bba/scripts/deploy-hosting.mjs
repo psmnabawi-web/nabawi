@@ -66,8 +66,32 @@ async function liveRelease() {
   return (r.json.releases || []).find((x) => x.version && x.version.name) || null;
 }
 
+// Matikan situs (Firebase "hosting:disable"): URL menjawab 404 sampai ada deploy berikutnya. Data Firestore/Storage dan
+// Cloud Functions tidak disentuh. Menghidupkan lagi = jalankan deploy biasa.
+async function disable() {
+  const live = await liveRelease();
+  const label = env("DEPLOY_LABEL") || (env("GITHUB_SHA") ? `commit ${env("GITHUB_SHA").slice(0, 7)}` : "manual");
+  const msg = `${MSG_PREFIX} situs dimatikan (${label}); versi terakhir ${shortVer(live?.version?.name || "-")}`.slice(0, 100);
+  const rel = await call("POST", `${API}/sites/${SITE}/releases`, { type: "SITE_DISABLE", message: msg });
+  if (!rel.ok) fail(`Gagal mematikan situs ${SITE}: ${why(rel)}`);
+  log(`situs ${SITE} dimatikan: "${msg}"`);
+  const base = ORIGIN_OVERRIDE || `https://${SITE}.web.app`;
+  if (!env("SKIP_SMOKE")) {
+    let code = 0;
+    for (let i = 0; i < 8 && code !== 404; i++) {
+      if (i) await new Promise((r) => setTimeout(r, SMOKE_DELAY_MS));
+      try { code = (await fetch(`${base}/?v=${Date.now()}`, { cache: "no-store" })).status; } catch { code = 0; }
+    }
+    if (code !== 404) fail(`${base} masih menjawab HTTP ${code} setelah dimatikan.`);
+    log(`cek OK: ${base} sudah tidak melayani halaman (HTTP 404)`);
+  }
+  console.log(`\nSELESAI: situs ${SITE} dimatikan. Hidupkan lagi dengan deploy biasa (workflow target hosting).`);
+  summary(`### Bangor Cleanliness Control\nSitus https://${SITE}.web.app **dimatikan** (${msg}). Hidupkan lagi: Run workflow → target hosting.`);
+}
+
 async function main() {
   if (!TOKEN) fail("ACCESS_TOKEN kosong. Cloud Shell: ACCESS_TOKEN=\"$(gcloud auth print-access-token)\" node scripts/deploy-hosting.mjs");
+  if (process.argv[2] === "disable") return disable();
 
   // 1. Pengaman: versi live harus versi snapshot atau hasil deploy kita sendiri.
   const live = await liveRelease();
