@@ -1,6 +1,6 @@
 /* ROP Gudang — export Excel (ExcelJS). Dipakai di browser (window.ROPExport) dan Node (tes).
  * Semua angka hasil hitung ditulis sebagai RUMUS supaya bisa diaudit dan diubah di Excel:
- * ubah Pemakaian/hari, Buffer, Lead time, PO outstanding, MOQ, harga → Saran PR, Final PR, status, nilai ikut berubah.
+ * ubah Pemakaian/hari, Buffer, Lead time, Target DSI, MOQ, harga → Saran PR, Final PR, status, nilai ikut berubah.
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
@@ -75,106 +75,124 @@
     const wsL = wb.addWorksheet("Log Perubahan");
 
     // Sel parameter global di Ringkasan (dirujuk rumus Perhitungan)
-    const G = { target: "$C$16", over: "$C$17", dsiMin: "$C$18", dsiSafe: "$C$19" };
+    const GL = { target: "$C$16", over: "$C$17", dsiMin: "$C$18", dsiSafe: "$C$19" };
     const R = (a) => `Ringkasan!${a}`;
 
     // ---------------- Perhitungan ----------------
-    const HC = ["No", "Kode", "Nama", "Satuan", "Kategori", "Kategori Zahir", "Pemakaian / hari", "Buffer (hari)", "Lead time (hari)", "Target DSI (hari)",
-      "SOH Zahir", "PO outstanding", "Safety stock", "ROP", "Stok maksimum", "Posisi stok", "DSI (hari)", "Saran PR", "MOQ", "Kelipatan",
-      "Final PR", "DSI setelah PR", "Harga", "Nilai PR", "Nilai SOH", "Status", "Band DSI (sheet lama)", "Sumber harga", "Catatan", "Data issue", "Supplier", "Kelebihan di atas stok fisik maks", "Nilai kelebihan", "Stok fisik maks", "Rata-rata stok fisik (hari)", "Order tiap ± (hari)"];
+    // Kolom didefinisikan per kunci; huruf kolom dihitung otomatis (rumus tidak rusak bila kolom ditambah/dihapus).
+    const COLS = [
+      ["no", "No", 5], ["kode", "Kode", 12], ["nama", "Nama", 34], ["satuan", "Satuan", 8], ["brand", "Kategori", 13], ["kat", "Kategori Zahir", 22],
+      ["usage", "Pemakaian / hari", 11], ["buffer", "Buffer (hari)", 9], ["lead", "Lead time (hari)", 9], ["target", "Target DSI (hari)", 9],
+      ["soh", "SOH Zahir", 11], ["ss", "Safety stock", 11], ["rop", "ROP", 11], ["max", "Stok maksimum", 11], ["dsi", "DSI (hari)", 9],
+      ["saran", "Saran PR", 11], ["moq", "MOQ", 10], ["kel", "Kelipatan", 10], ["final", "Final PR", 11], ["dsiAfter", "DSI setelah PR", 10],
+      ["harga", "Harga", 12], ["nilaiPR", "Nilai PR", 14], ["nilaiSOH", "Nilai SOH", 14], ["status", "Status", 14], ["band", "Band DSI (sheet lama)", 15],
+      ["hargaSrc", "Sumber harga", 10], ["note", "Catatan", 24], ["issue", "Data issue", 34], ["supplier", "Supplier", 20],
+      ["excess", "Kelebihan di atas stok fisik maks", 14], ["excessVal", "Nilai kelebihan", 15], ["phys", "Stok fisik maks", 13],
+      ["avg", "Rata-rata stok fisik (hari)", 12], ["cyc", "Order tiap ± (hari)", 11],
+    ];
+    const CI = {}; COLS.forEach(([key], i) => (CI[key] = i + 1));
+    const L = (key) => col(CI[key]);
     title(wsC, `Perhitungan ROP — ${meta.gudangLabel || ""}`, "Kolom kuning = input (boleh diubah). Kolom putih = rumus. Oranye = Final PR diubah manual di aplikasi.");
-    wsC.getCell("A3").value = "Rumus: Safety stock = Pemakaian × Buffer · ROP = Pemakaian × (Buffer + Lead time) · Stok fisik maks = Pemakaian × MAX(Buffer + 1, 2 × Target DSI − Buffer) · Stok maks = Stok fisik maks + Pemakaian × Lead time (Target 0 = ROP) · Saran PR = Stok maks − Posisi stok bila Posisi ≤ ROP · Final PR = MAX(MOQ, CEILING(Saran, Kelipatan))";
+    wsC.getCell("A3").value = "Rumus: Safety stock = Pemakaian × Buffer · ROP = Pemakaian × (Buffer + Lead time) · Stok fisik maks = Pemakaian × MAX(Buffer + 1, 2 × Target DSI − Buffer) · Stok maks = Stok fisik maks + Pemakaian × Lead time (Target 0 = ROP) · Saran PR = Stok maks − SOH bila SOH ≤ ROP · Final PR = MAX(MOQ, CEILING(Saran, Kelipatan))";
     wsC.getCell("A3").font = { size: 9, color: { argb: MUTED } };
     const H0 = 5, D0 = 6;
-    const hr = wsC.getRow(H0); HC.forEach((h, i) => (hr.getCell(i + 1).value = h)); styleHeader(hr, 1, HC.length);
+    const hr = wsC.getRow(H0); COLS.forEach(([, h], i) => (hr.getCell(i + 1).value = h)); styleHeader(hr, 1, COLS.length);
     const last = D0 + Math.max(rows.length, 1) - 1;
+    const QTY = "#,##0.##;-#,##0.##;0";
     rows.forEach((r, i) => {
       const n = D0 + i;
       const row = wsC.getRow(n);
-      const v = (c, val) => (row.getCell(c).value = val);
-      v(1, i + 1); v(2, r.kode); v(3, r.nama); v(4, r.satuan || r.satuanMaster); v(5, r.brand); v(6, r.kategori);
+      const c = (key) => `${L(key)}${n}`;
+      const v = (key, val) => (row.getCell(CI[key]).value = val);
+      const G = c("usage"), H = c("buffer"), I = c("lead"), J = c("target"), K = c("soh"), SOH = `MAX(${K},0)`;
+      v("no", i + 1); v("kode", r.kode); v("nama", r.nama); v("satuan", r.satuan || r.satuanMaster); v("brand", r.brand); v("kat", r.kategori);
       if (r.hasParam) {
-        v(7, r.usage); v(8, r.buffer); v(9, r.lead);
-        v(10, r.targetFromMaster ? r.target : { formula: R(G.target), result: r.target });
+        v("usage", r.usage); v("buffer", r.buffer); v("lead", r.lead);
+        v("target", r.targetFromMaster ? r.target : { formula: R(GL.target), result: r.target });
       }
-      v(11, r.sohRaw); v(12, r.onOrder || 0);
-      v(13, { formula: `G${n}*H${n}`, result: r.ss || 0 });
-      v(14, { formula: `G${n}*(H${n}+I${n})`, result: r.rop || 0 });
-      v(15, { formula: `G${n}*IF(N(J${n})=0,H${n}+I${n},MAX(H${n}+1,2*J${n}-H${n})+I${n})`, result: r.max || 0 });
-      v(16, { formula: `MAX(K${n},0)+L${n}`, result: r.pos || 0 });
-      v(17, { formula: `IF(N(G${n})>0,MAX(K${n},0)/G${n},"")`, result: r.dsi == null ? "" : r.dsi });
-      v(18, { formula: `IF(AND(N(G${n})>0,P${n}<=N${n},P${n}<O${n}),O${n}-P${n},0)`, result: r.saran || 0 });
-      if (r.hasParam) { v(19, r.moq || 0); v(20, r.kelipatan || 1); }
-      const finalFormula = `IF(R${n}>0,MAX(S${n},CEILING(R${n},IF(N(T${n})>0,T${n},1))),0)`;
+      v("soh", r.sohRaw);
+      v("ss", { formula: `${G}*${H}`, result: r.ss || 0 });
+      v("rop", { formula: `${G}*(${H}+${I})`, result: r.rop || 0 });
+      v("max", { formula: `${G}*IF(N(${J})=0,${H}+${I},MAX(${H}+1,2*${J}-${H})+${I})`, result: r.max || 0 });
+      v("dsi", { formula: `IF(N(${G})>0,${SOH}/${G},"")`, result: r.dsi == null ? "" : r.dsi });
+      v("saran", { formula: `IF(AND(N(${G})>0,${SOH}<=${c("rop")},${SOH}<${c("max")}),${c("max")}-${SOH},0)`, result: r.saran || 0 });
+      if (r.hasParam) { v("moq", r.moq || 0); v("kel", r.kelipatan || 1); }
+      const finalFormula = `IF(${c("saran")}>0,MAX(${c("moq")},CEILING(${c("saran")},IF(N(${c("kel")})>0,${c("kel")},1))),0)`;
       if (r.finalEdited) {
-        v(21, r.final);
-        row.getCell(21).fill = { type: "pattern", pattern: "solid", fgColor: { argb: EDIT_FILL } };
-        row.getCell(21).note = `Diubah manual. Rekomendasi sistem: ${r.finalAuto}. Rumus asli: =${finalFormula}${r.note ? `\nCatatan: ${r.note}` : ""}`;
-      } else v(21, { formula: finalFormula, result: r.final || 0 });
-      v(22, { formula: `IF(N(G${n})>0,(P${n}+U${n})/G${n},"")`, result: r.dsiAfter == null ? "" : r.dsiAfter });
-      v(23, r.harga || 0);
-      v(24, { formula: `U${n}*W${n}`, result: r.nilaiPR || 0 });
-      v(25, { formula: `MAX(K${n},0)*W${n}`, result: r.nilaiSOH || 0 });
-      v(26, { formula: `IF(G${n}="","Tanpa parameter",IF(G${n}<=0,IF(K${n}>0,"Tidak bergerak","Tidak aktif"),IF(K${n}<=0,"OOS",IF(Q${n}<=I${n},"Kritis",IF(AND(P${n}<=N${n},P${n}<O${n}),"Order",IF(Q${n}>${R(G.over)},"Overstock",IF(AND(N(J${n})>0,MAX(K${n},0)>AH${n}),"Di atas target","Aman")))))))`, result: r.status });
-      v(27, { formula: `IF(Q${n}="","",IF(Q${n}<${R(G.dsiMin)},"Min ≤3 hari",IF(Q${n}<${R(G.dsiSafe)},"Safety 4–6 hari","Max ≥7 hari")))`, result: r.band || "" });
-      v(28, r.hargaSrc || ""); v(29, r.note || ""); v(30, (r.issues || []).join("; ")); v(31, r.supplier || "");
-      v(32, { formula: `IF(G${n}="","",IF(G${n}<=0,MAX(K${n},0),IF(N(J${n})=0,0,MAX(0,MAX(K${n},0)-AH${n}))))`, result: r.hasParam ? r.excess || 0 : "" });
-      v(33, { formula: `IF(AF${n}="","",AF${n}*W${n})`, result: r.hasParam ? r.excessValue || 0 : "" });
-      v(34, { formula: `IF(N(G${n})>0,G${n}*IF(N(J${n})=0,H${n}+1,MAX(H${n}+1,2*J${n}-H${n})),"")`, result: r.usage > 0 ? r.physMax : "" });
-      v(35, { formula: `IF(N(G${n})>0,(H${n}+AH${n}/G${n})/2,"")`, result: r.usage > 0 ? r.avgDays : "" });
-      v(36, { formula: `IF(N(G${n})>0,AH${n}/G${n}-H${n},"")`, result: r.usage > 0 ? r.cycleDays : "" });
-      row.getCell(32).numFmt = "#,##0.##;-#,##0.##;0"; row.getCell(33).numFmt = RP; row.getCell(34).numFmt = "#,##0.##"; row.getCell(35).numFmt = "#,##0.0"; row.getCell(36).numFmt = "#,##0.0";
-      [7, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21].forEach((c) => (row.getCell(c).numFmt = fmtQty(row.getCell(c).value && row.getCell(c).value.result != null ? row.getCell(c).value.result : row.getCell(c).value)));
-      [8, 9, 10].forEach((c) => (row.getCell(c).numFmt = "#,##0.##;-#,##0.##;0"));
-      [17, 22].forEach((c) => (row.getCell(c).numFmt = "#,##0.0"));
-      [23].forEach((c) => (row.getCell(c).numFmt = '"Rp" #,##0.00'));
-      [24, 25].forEach((c) => (row.getCell(c).numFmt = RP));
-      [7, 8, 9, 10, 11, 12, 19, 20, 23, 29].forEach((c) => { if (!(c === 21)) inputCell(row.getCell(c)); });
-      for (let c = 1; c <= HC.length; c++) if (!row.getCell(c).border) border(row.getCell(c));
+        v("final", r.final);
+        row.getCell(CI.final).fill = { type: "pattern", pattern: "solid", fgColor: { argb: EDIT_FILL } };
+        row.getCell(CI.final).note = `Diubah manual. Rekomendasi sistem: ${r.finalAuto}. Rumus asli: =${finalFormula}${r.note ? `\nCatatan: ${r.note}` : ""}`;
+      } else v("final", { formula: finalFormula, result: r.final || 0 });
+      v("dsiAfter", { formula: `IF(N(${G})>0,(${SOH}+${c("final")})/${G},"")`, result: r.dsiAfter == null ? "" : r.dsiAfter });
+      v("harga", r.harga || 0);
+      v("nilaiPR", { formula: `${c("final")}*${c("harga")}`, result: r.nilaiPR || 0 });
+      v("nilaiSOH", { formula: `${SOH}*${c("harga")}`, result: r.nilaiSOH || 0 });
+      v("status", { formula: `IF(${G}="","Tanpa parameter",IF(${G}<=0,IF(${K}>0,"Tidak bergerak","Tidak aktif"),IF(${K}<=0,"OOS",IF(${c("dsi")}<=${I},"Kritis",IF(AND(${SOH}<=${c("rop")},${SOH}<${c("max")}),"Order",IF(${c("dsi")}>${R(GL.over)},"Overstock",IF(AND(N(${J})>0,${SOH}>${c("phys")}),"Di atas target","Aman")))))))`, result: r.status });
+      v("band", { formula: `IF(${c("dsi")}="","",IF(${c("dsi")}<${R(GL.dsiMin)},"Min ≤3 hari",IF(${c("dsi")}<${R(GL.dsiSafe)},"Safety 4–6 hari","Max ≥7 hari")))`, result: r.band || "" });
+      v("hargaSrc", r.hargaSrc || ""); v("note", r.note || ""); v("issue", (r.issues || []).join("; ")); v("supplier", r.supplier || "");
+      v("excess", { formula: `IF(${G}="","",IF(${G}<=0,${SOH},IF(N(${J})=0,0,MAX(0,${SOH}-${c("phys")}))))`, result: r.hasParam ? r.excess || 0 : "" });
+      v("excessVal", { formula: `IF(${c("excess")}="","",${c("excess")}*${c("harga")})`, result: r.hasParam ? r.excessValue || 0 : "" });
+      v("phys", { formula: `IF(N(${G})>0,${G}*IF(N(${J})=0,${H}+1,MAX(${H}+1,2*${J}-${H})),"")`, result: r.usage > 0 ? r.physMax : "" });
+      v("avg", { formula: `IF(N(${G})>0,(${H}+${c("phys")}/${G})/2,"")`, result: r.usage > 0 ? r.avgDays : "" });
+      v("cyc", { formula: `IF(N(${G})>0,${c("phys")}/${G}-${H},"")`, result: r.usage > 0 ? r.cycleDays : "" });
+      const cell = (key) => row.getCell(CI[key]);
+      const valOf = (key) => { const x = cell(key).value; return x && typeof x === "object" && "result" in x ? x.result : x; };
+      ["usage", "soh", "ss", "rop", "max", "saran", "moq", "kel", "final", "excess"].forEach((key) => (cell(key).numFmt = fmtQty(valOf(key))));
+      ["buffer", "lead", "target"].forEach((key) => (cell(key).numFmt = QTY));
+      ["dsi", "dsiAfter", "avg", "cyc"].forEach((key) => (cell(key).numFmt = "#,##0.0"));
+      cell("phys").numFmt = "#,##0.##";
+      cell("harga").numFmt = '"Rp" #,##0.00';
+      ["nilaiPR", "nilaiSOH", "excessVal"].forEach((key) => (cell(key).numFmt = RP));
+      ["usage", "buffer", "lead", "target", "soh", "moq", "kel", "harga", "note"].forEach((key) => inputCell(cell(key)));
+      for (let k2 = 1; k2 <= COLS.length; k2++) if (!row.getCell(k2).border) border(row.getCell(k2));
     });
-    const widthsC = [5, 12, 34, 8, 13, 22, 11, 9, 9, 9, 11, 11, 11, 11, 11, 11, 9, 11, 10, 10, 11, 10, 12, 14, 14, 14, 15, 10, 24, 34, 20, 14, 15, 13, 12, 11];
-    widthsC.forEach((w, i) => (wsC.getColumn(i + 1).width = w));
+    COLS.forEach(([, , w], i) => (wsC.getColumn(i + 1).width = w));
     wsC.views = [{ state: "frozen", xSplit: 3, ySplit: H0 }];
-    wsC.autoFilter = { from: { row: H0, column: 1 }, to: { row: last, column: HC.length } };
-    for (const c of ["G", "H", "I", "J", "K", "L", "S", "T", "U", "W"]) {
-      wsC.dataValidations.add(`${c}${D0}:${c}${last}`, { type: "decimal", operator: c === "K" ? "between" : "greaterThanOrEqual", allowBlank: true, formulae: c === "K" ? [-1e12, 1e12] : [0], showErrorMessage: true, errorTitle: "Input tidak valid", error: c === "K" ? "Isi angka." : "Isi angka ≥ 0." });
+    wsC.autoFilter = { from: { row: H0, column: 1 }, to: { row: last, column: COLS.length } };
+    for (const key of ["usage", "buffer", "lead", "target", "soh", "moq", "kel", "final", "harga"]) {
+      const a = L(key), any = key === "soh";
+      wsC.dataValidations.add(`${a}${D0}:${a}${last}`, { type: "decimal", operator: any ? "between" : "greaterThanOrEqual", allowBlank: true, formulae: any ? [-1e12, 1e12] : [0], showErrorMessage: true, errorTitle: "Input tidak valid", error: any ? "Isi angka." : "Isi angka ≥ 0." });
     }
-    const stRules = Object.keys(STATUS_FILL).map((st, i) => ({ type: "expression", priority: i + 1, formulae: [`$Z${D0}="${st}"`], style: { fill: { type: "pattern", pattern: "solid", bgColor: { argb: STATUS_FILL[st] } } } }));
-    wsC.addConditionalFormatting({ ref: `Z${D0}:Z${last}`, rules: stRules });
-    wsC.addConditionalFormatting({ ref: `Q${D0}:Q${last}`, rules: [{ type: "expression", priority: 20, formulae: [`AND(ISNUMBER(Q${D0}),Q${D0}<=I${D0})`], style: { font: { color: { argb: "FFB91C1C" }, bold: true } } }] });
+    const SC = L("status"), DC = L("dsi"), LC = L("lead");
+    const stRules = Object.keys(STATUS_FILL).map((st, i) => ({ type: "expression", priority: i + 1, formulae: [`$${SC}${D0}="${st}"`], style: { fill: { type: "pattern", pattern: "solid", bgColor: { argb: STATUS_FILL[st] } } } }));
+    wsC.addConditionalFormatting({ ref: `${SC}${D0}:${SC}${last}`, rules: stRules });
+    wsC.addConditionalFormatting({ ref: `${DC}${D0}:${DC}${last}`, rules: [{ type: "expression", priority: 20, formulae: [`AND(ISNUMBER(${DC}${D0}),${DC}${D0}<=${LC}${D0})`], style: { font: { color: { argb: "FFB91C1C" }, bold: true } } }] });
 
-    const RC = (c) => `Perhitungan!$${c}$${D0}:$${c}$${last}`;
+    const RC = (key) => `Perhitungan!$${L(key)}$${D0}:$${L(key)}$${last}`;
 
     // ---------------- PR (daftar beli) ----------------
     const pr = result.rows.filter((r) => r.final > 0).sort(ctx.prioritySort || (() => 0));
     title(wsPR, `Daftar Purchase Request — ${meta.gudangLabel || ""}`, `Tanggal stok ${meta.stockDate || "-"} · disusun ${meta.preparedBy || "-"} · angka diambil dari sheet Perhitungan (INDEX/MATCH per kode, aman bila Perhitungan diurutkan)`);
-    const HP = ["No", "Status", "Kode", "Nama", "Satuan", "Kategori", "SOH", "Pemakaian / hari", "DSI (hari)", "PO outstanding", "Saran PR", "MOQ", "Final PR", "Harga", "Nilai PR", "DSI setelah PR", "Catatan", "Baris di Perhitungan"];
-    const hp = wsPR.getRow(4); HP.forEach((h, i) => (hp.getCell(i + 1).value = h)); styleHeader(hp, 1, HP.length);
-    const P0 = 5;
-    const pick = (c, n) => `IFERROR(INDEX(${RC(c)},$R${n}),"")`;
+    const PCOLS = [["no", "No", 5], ["status", "Status", 12], ["kode", "Kode", 11], ["nama", "Nama", 34], ["satuan", "Satuan", 8], ["brand", "Kategori", 13],
+      ["soh", "SOH", 11], ["usage", "Pemakaian / hari", 11], ["dsi", "DSI (hari)", 9], ["saran", "Saran PR", 11], ["moq", "MOQ", 10], ["final", "Final PR", 11],
+      ["harga", "Harga", 12], ["nilaiPR", "Nilai PR", 15], ["dsiAfter", "DSI setelah PR", 10], ["note", "Catatan", 26], ["ref", "Baris di Perhitungan", 10]];
+    const PI = {}; PCOLS.forEach(([key], i) => (PI[key] = i + 1));
+    const hp = wsPR.getRow(4); PCOLS.forEach(([, h], i) => (hp.getCell(i + 1).value = h)); styleHeader(hp, 1, PCOLS.length);
+    const P0 = 5, REF = col(PI.ref);
+    const pick = (key, n) => `IFERROR(INDEX(${RC(key)},$${REF}${n}),"")`;
     pr.forEach((r, i) => {
       const n = P0 + i, row = wsPR.getRow(n);
-      row.getCell(1).value = i + 1;
-      row.getCell(3).value = r.kode;
-      row.getCell(18).value = { formula: `MATCH($C${n},${RC("B")},0)`, result: rows.indexOf(r) + 1 };
-      const map = [[2, "Z", r.status], [4, "C", r.nama], [5, "D", r.satuan || r.satuanMaster], [6, "E", r.brand], [7, "K", r.sohRaw], [8, "G", r.usage], [9, "Q", r.dsi == null ? "" : r.dsi],
-        [10, "L", r.onOrder || 0], [11, "R", r.saran], [12, "S", r.moq || 0], [13, "U", r.final], [14, "W", r.harga || 0], [15, "X", r.nilaiPR], [16, "V", r.dsiAfter == null ? "" : r.dsiAfter], [17, "AC", r.note || ""]];
-      for (const [c, src, res] of map) row.getCell(c).value = { formula: pick(src, n), result: res };
-      [7, 8, 10, 11, 12, 13].forEach((c) => (row.getCell(c).numFmt = "#,##0.##;-#,##0.##;0"));
-      [9, 16].forEach((c) => (row.getCell(c).numFmt = "#,##0.0"));
-      row.getCell(14).numFmt = '"Rp" #,##0.00'; row.getCell(15).numFmt = RP;
-      for (let c = 1; c <= HP.length; c++) border(row.getCell(c));
+      row.getCell(PI.no).value = i + 1;
+      row.getCell(PI.kode).value = r.kode;
+      row.getCell(PI.ref).value = { formula: `MATCH($${col(PI.kode)}${n},${RC("kode")},0)`, result: rows.indexOf(r) + 1 };
+      const map = { status: r.status, nama: r.nama, satuan: r.satuan || r.satuanMaster, brand: r.brand, soh: r.sohRaw, usage: r.usage, dsi: r.dsi == null ? "" : r.dsi,
+        saran: r.saran, moq: r.moq || 0, final: r.final, harga: r.harga || 0, nilaiPR: r.nilaiPR, dsiAfter: r.dsiAfter == null ? "" : r.dsiAfter, note: r.note || "" };
+      for (const [key, res] of Object.entries(map)) row.getCell(PI[key]).value = { formula: pick(key, n), result: res };
+      ["soh", "usage", "saran", "moq", "final"].forEach((key) => (row.getCell(PI[key]).numFmt = QTY));
+      ["dsi", "dsiAfter"].forEach((key) => (row.getCell(PI[key]).numFmt = "#,##0.0"));
+      row.getCell(PI.harga).numFmt = '"Rp" #,##0.00'; row.getCell(PI.nilaiPR).numFmt = RP;
+      for (let k2 = 1; k2 <= PCOLS.length; k2++) border(row.getCell(k2));
     });
     const pLast = P0 + Math.max(pr.length, 1) - 1;
-    const tRow = wsPR.getRow(pLast + 1);
-    tRow.getCell(4).value = "TOTAL";
-    tRow.getCell(15).value = { formula: `SUM(O${P0}:O${pLast})`, result: Math.round(pr.reduce((a, r) => a + r.nilaiPR, 0)) };
-    tRow.getCell(15).numFmt = RP;
-    [4, 15].forEach((c) => (tRow.getCell(c).font = { bold: true }));
-    tRow.getCell(1).value = { formula: `COUNTA(C${P0}:C${pLast})&" item"`, result: `${pr.length} item` };
-    [5, 9, 5, 34, 8, 13, 11, 11, 9, 11, 11, 10, 11, 12, 15, 10, 26, 10].forEach((w, i) => (wsPR.getColumn(i + 1).width = w));
+    const tRow = wsPR.getRow(pLast + 1), NV = col(PI.nilaiPR);
+    tRow.getCell(PI.nama).value = "TOTAL";
+    tRow.getCell(PI.nilaiPR).value = { formula: `SUM(${NV}${P0}:${NV}${pLast})`, result: Math.round(pr.reduce((a, r) => a + r.nilaiPR, 0)) };
+    tRow.getCell(PI.nilaiPR).numFmt = RP;
+    [PI.nama, PI.nilaiPR].forEach((k2) => (tRow.getCell(k2).font = { bold: true }));
+    tRow.getCell(PI.no).value = { formula: `COUNTA(${col(PI.kode)}${P0}:${col(PI.kode)}${pLast})&" item"`, result: `${pr.length} item` };
+    PCOLS.forEach(([, , w], i) => (wsPR.getColumn(i + 1).width = w));
     wsPR.views = [{ state: "frozen", xSplit: 4, ySplit: 4 }];
-    if (pr.length) wsPR.autoFilter = { from: { row: 4, column: 1 }, to: { row: pLast, column: HP.length } };
+    if (pr.length) wsPR.autoFilter = { from: { row: 4, column: 1 }, to: { row: pLast, column: PCOLS.length } };
     wsPR.addConditionalFormatting({ ref: `B${P0}:B${pLast}`, rules: Object.keys(STATUS_FILL).map((st, i) => ({ type: "expression", priority: i + 1, formulae: [`$B${P0}="${st}"`], style: { fill: { type: "pattern", pattern: "solid", bgColor: { argb: STATUS_FILL[st] } } } })) });
     wsPR.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 };
 
@@ -218,26 +236,26 @@
 
     section(23, "Hasil");
     const k = result.kpi;
-    const sumG = `SUMPRODUCT(${RC("G")},${RC("W")})`;
+    const sumG = `SUMPRODUCT(${RC("usage")},${RC("harga")})`;
     const kpiRows = [
-      ["Target DSI (hari)", { formula: R(G.target), result: s.targetDsi }, "#,##0.0"],
-      ["DSI gudang aktual (hari) = nilai stok ÷ nilai pemakaian per hari", { formula: `IFERROR(SUMIF(${RC("G")},"<>",${RC("Y")})/${sumG},"")`, result: k.dsiActual == null ? "" : k.dsiActual }, "#,##0.0"],
-      ["DSI bila kelebihan & barang tidak bergerak dihabiskan (hari)", { formula: `IFERROR((SUMIF(${RC("G")},"<>",${RC("Y")})-SUMIF(${RC("G")},">0",${RC("AG")})-SUMIF(${RC("Z")},"Tidak bergerak",${RC("Y")}))/${sumG},"")`, result: k.dsiNoExcess == null ? "" : k.dsiNoExcess }, "#,##0.0"],
-      ["DSI desain parameter (hari) = rata-rata stok fisik bila order sesuai rumus", { formula: `IFERROR(SUMPRODUCT(${RC("G")},${RC("W")},${RC("AI")})/${sumG},"")`, result: k.dsiDesign == null ? "" : k.dsiDesign }, "#,##0.0"],
-      ["Di atas target, barang bergerak (item)", { formula: `COUNTIFS(${RC("G")},">0",${RC("AF")},">0")`, result: k.excessCount }, "#,##0"],
-      ["Kelebihan stok di atas target (nilai)", { formula: `SUMIF(${RC("G")},">0",${RC("AG")})`, result: k.excessValue }, RP],
-      ["Item perlu order (Final PR > 0)", { formula: `COUNTIF(${RC("U")},">0")`, result: k.prCount }, "#,##0"],
-      ["Nilai PR", { formula: `SUM(${RC("X")})`, result: k.prValue }, RP],
-      ["Stok habis (OOS)", { formula: `COUNTIF(${RC("Z")},"OOS")`, result: k.oos }, "#,##0"],
-      ["Kritis (DSI ≤ lead time)", { formula: `COUNTIF(${RC("Z")},"Kritis")`, result: k.kritis }, "#,##0"],
-      ["Order (posisi ≤ ROP)", { formula: `COUNTIF(${RC("Z")},"Order")`, result: k.order }, "#,##0"],
-      ["Overstock (item)", { formula: `COUNTIF(${RC("Z")},"Overstock")`, result: k.over }, "#,##0"],
-      ["Overstock (nilai stok)", { formula: `SUMIF(${RC("Z")},"Overstock",${RC("Y")})`, result: k.overValue }, RP],
-      ["Tidak bergerak (item)", { formula: `COUNTIF(${RC("Z")},"Tidak bergerak")`, result: k.dead }, "#,##0"],
-      ["Tidak bergerak (nilai stok)", { formula: `SUMIF(${RC("Z")},"Tidak bergerak",${RC("Y")})`, result: k.deadValue }, RP],
-      ["Tanpa parameter, ada stok (item)", { formula: `COUNTIFS(${RC("Z")},"Tanpa parameter",${RC("K")},">0")`, result: k.noParamStock }, "#,##0"],
-      ["Tanpa parameter, ada stok (nilai)", { formula: `SUMIFS(${RC("Y")},${RC("Z")},"Tanpa parameter")`, result: k.noParamValue }, RP],
-      ["Nilai stok gudang", { formula: `SUM(${RC("Y")})`, result: k.stockValue }, RP],
+      ["Target DSI (hari)", { formula: R(GL.target), result: s.targetDsi }, "#,##0.0"],
+      ["DSI gudang aktual (hari) = nilai stok ÷ nilai pemakaian per hari", { formula: `IFERROR(SUMIF(${RC("usage")},"<>",${RC("nilaiSOH")})/${sumG},"")`, result: k.dsiActual == null ? "" : k.dsiActual }, "#,##0.0"],
+      ["DSI bila kelebihan & barang tidak bergerak dihabiskan (hari)", { formula: `IFERROR((SUMIF(${RC("usage")},"<>",${RC("nilaiSOH")})-SUMIF(${RC("usage")},">0",${RC("excessVal")})-SUMIF(${RC("status")},"Tidak bergerak",${RC("nilaiSOH")}))/${sumG},"")`, result: k.dsiNoExcess == null ? "" : k.dsiNoExcess }, "#,##0.0"],
+      ["DSI desain parameter (hari) = rata-rata stok fisik bila order sesuai rumus", { formula: `IFERROR(SUMPRODUCT(${RC("usage")},${RC("harga")},${RC("avg")})/${sumG},"")`, result: k.dsiDesign == null ? "" : k.dsiDesign }, "#,##0.0"],
+      ["Di atas target, barang bergerak (item)", { formula: `COUNTIFS(${RC("usage")},">0",${RC("excess")},">0")`, result: k.excessCount }, "#,##0"],
+      ["Kelebihan stok di atas target (nilai)", { formula: `SUMIF(${RC("usage")},">0",${RC("excessVal")})`, result: k.excessValue }, RP],
+      ["Item perlu order (Final PR > 0)", { formula: `COUNTIF(${RC("final")},">0")`, result: k.prCount }, "#,##0"],
+      ["Nilai PR", { formula: `SUM(${RC("nilaiPR")})`, result: k.prValue }, RP],
+      ["Stok habis (OOS)", { formula: `COUNTIF(${RC("status")},"OOS")`, result: k.oos }, "#,##0"],
+      ["Kritis (DSI ≤ lead time)", { formula: `COUNTIF(${RC("status")},"Kritis")`, result: k.kritis }, "#,##0"],
+      ["Order (SOH ≤ ROP)", { formula: `COUNTIF(${RC("status")},"Order")`, result: k.order }, "#,##0"],
+      ["Overstock (item)", { formula: `COUNTIF(${RC("status")},"Overstock")`, result: k.over }, "#,##0"],
+      ["Overstock (nilai stok)", { formula: `SUMIF(${RC("status")},"Overstock",${RC("nilaiSOH")})`, result: k.overValue }, RP],
+      ["Tidak bergerak (item)", { formula: `COUNTIF(${RC("status")},"Tidak bergerak")`, result: k.dead }, "#,##0"],
+      ["Tidak bergerak (nilai stok)", { formula: `SUMIF(${RC("status")},"Tidak bergerak",${RC("nilaiSOH")})`, result: k.deadValue }, RP],
+      ["Tanpa parameter, ada stok (item)", { formula: `COUNTIFS(${RC("status")},"Tanpa parameter",${RC("soh")},">0")`, result: k.noParamStock }, "#,##0"],
+      ["Tanpa parameter, ada stok (nilai)", { formula: `SUMIFS(${RC("nilaiSOH")},${RC("status")},"Tanpa parameter")`, result: k.noParamValue }, RP],
+      ["Nilai stok gudang", { formula: `SUM(${RC("nilaiSOH")})`, result: k.stockValue }, RP],
       ["% nilai stok overstock + tidak bergerak", { formula: "", result: k.stockValue ? (k.overValue + k.deadValue) / k.stockValue : 0 }, "0.0%"],
     ];
     const kRow = (label) => 24 + kpiRows.findIndex((x) => x[0] === label);
@@ -250,8 +268,8 @@
     const brands = Array.from(new Set(result.rows.filter((r) => r.hasParam).map((r) => r.brand || ""))).sort();
     for (const b of brands) {
       wsR.getCell(`B${rr}`).value = b || "(kosong)";
-      wsR.getCell(`C${rr}`).value = { formula: `COUNTIFS(${RC("E")},"${esc(b)}",${RC("U")},">0")`, result: result.rows.filter((r) => (r.brand || "") === b && r.final > 0).length };
-      wsR.getCell(`D${rr}`).value = { formula: `SUMIFS(${RC("X")},${RC("E")},"${esc(b)}")`, result: Math.round(result.rows.filter((r) => (r.brand || "") === b).reduce((a, r) => a + r.nilaiPR, 0)) };
+      wsR.getCell(`C${rr}`).value = { formula: `COUNTIFS(${RC("brand")},"${esc(b)}",${RC("final")},">0")`, result: result.rows.filter((r) => (r.brand || "") === b && r.final > 0).length };
+      wsR.getCell(`D${rr}`).value = { formula: `SUMIFS(${RC("nilaiPR")},${RC("brand")},"${esc(b)}")`, result: Math.round(result.rows.filter((r) => (r.brand || "") === b).reduce((a, r) => a + r.nilaiPR, 0)) };
       wsR.getCell(`D${rr}`).numFmt = RP; rr++;
     }
 
@@ -302,7 +320,7 @@
     }
 
     // ---------------- Log Perubahan ----------------
-    title(wsL, "Log perubahan manual", "Setiap perubahan Final PR, PO outstanding, dan catatan di aplikasi.");
+    title(wsL, "Log perubahan manual", "Setiap perubahan Final PR dan catatan di aplikasi, serta setiap Cetak PO.");
     const HL = ["Waktu", "Kode", "Nama", "Kolom", "Nilai sebelum", "Nilai baru", "Rekomendasi sistem", "Oleh"];
     const hl = wsL.getRow(4); HL.forEach((h, i) => (hl.getCell(i + 1).value = h)); styleHeader(hl, 1, HL.length);
     (ctx.log || []).forEach((e, i) => {
@@ -319,19 +337,19 @@
   function buildMasterTemplate(ExcelJS, master) {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Master Parameter");
-    const H = ["Kode Barang", "Nama", "Satuan", "Kategori", "Penjualan 1 Hari", "Buffer Stock (Hari)", "Lead Time (Hari)", "Target DSI (Hari)", "Minimum Order", "Kelipatan Order", "Harga", "PO Outstanding", "Aktif", "Supplier"];
+    const H = ["Kode Barang", "Nama", "Satuan", "Kategori", "Penjualan 1 Hari", "Buffer Stock (Hari)", "Lead Time (Hari)", "Target DSI (Hari)", "Minimum Order", "Kelipatan Order", "Harga", "Aktif", "Supplier"];
     const hr = ws.getRow(1); H.forEach((h, i) => (hr.getCell(i + 1).value = h)); styleHeader(hr, 1, H.length);
     const items = (master && master.items) || [];
     items.forEach((m, i) => {
       const row = ws.getRow(2 + i);
-      [m.kode, m.nama, m.satuan, m.brand, m.usage, m.buffer, m.lead, m.target, m.moq, m.kelipatan, m.harga, m.onOrder, m.aktif === false ? "Tidak" : "Ya", m.supplier || ""].forEach((v, c) => (row.getCell(c + 1).value = v == null ? null : v));
+      [m.kode, m.nama, m.satuan, m.brand, m.usage, m.buffer, m.lead, m.target, m.moq, m.kelipatan, m.harga, m.aktif === false ? "Tidak" : "Ya", m.supplier || ""].forEach((v, c) => (row.getCell(c + 1).value = v == null ? null : v));
     });
     ws.getColumn(1).numFmt = "@";
-    [14, 34, 9, 16, 14, 14, 13, 14, 13, 13, 12, 13, 8, 24].forEach((w, i) => (ws.getColumn(i + 1).width = w));
+    [14, 34, 9, 16, 14, 14, 13, 14, 13, 13, 12, 8, 24].forEach((w, i) => (ws.getColumn(i + 1).width = w));
     ws.views = [{ state: "frozen", ySplit: 1, xSplit: 2 }];
     const n = Math.max(items.length + 1, 200);
-    for (const c of ["E", "F", "G", "H", "I", "J", "K", "L"]) ws.dataValidations.add(`${c}2:${c}${n}`, { type: "decimal", operator: "greaterThanOrEqual", allowBlank: true, formulae: [0], showErrorMessage: true, error: "Isi angka ≥ 0." });
-    ws.dataValidations.add(`M2:M${n}`, { type: "list", allowBlank: true, formulae: ['"Ya,Tidak"'] });
+    for (const c of ["E", "F", "G", "H", "I", "J", "K"]) ws.dataValidations.add(`${c}2:${c}${n}`, { type: "decimal", operator: "greaterThanOrEqual", allowBlank: true, formulae: [0], showErrorMessage: true, error: "Isi angka ≥ 0." });
+    ws.dataValidations.add(`L2:L${n}`, { type: "list", allowBlank: true, formulae: ['"Ya,Tidak"'] });
     const info = wb.addWorksheet("Petunjuk");
     [
       ["Kolom wajib", "Kode Barang, Penjualan 1 Hari, Buffer Stock (Hari), Lead Time (Hari)."],
@@ -342,7 +360,6 @@
       ["Minimum Order", "MOQ supplier. Final PR tidak akan di bawah angka ini."],
       ["Kelipatan Order", "Isi per kemasan (mis. 1 sak = 50000 gram). Final PR dibulatkan ke atas ke kelipatan ini."],
       ["Harga", "Harga beli terakhir. Kosong = pakai harga satuan di file Zahir."],
-      ["PO Outstanding", "Qty sudah dipesan tetapi belum diterima. Mengurangi Saran PR."],
       ["Aktif", "Tidak = barang tidak dihitung."],
       ["Supplier", "Nama supplier utama. Dipakai untuk memisah Cetak PO per supplier."],
     ].forEach((r, i) => { info.getCell(`A${i + 1}`).value = r[0]; info.getCell(`B${i + 1}`).value = r[1]; info.getCell(`A${i + 1}`).font = { bold: true }; });

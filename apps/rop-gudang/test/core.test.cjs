@@ -193,13 +193,14 @@ test("compute: status Di atas target, target per item, dan target tidak tercapai
   assert.equal(r.kpi.above, 1); assert.equal(r.kpi.excessValue, 11000);
 });
 
-test("compute: edit manual Final PR & PO outstanding", () => {
-  const r = run({}, { final: { K002: 600 }, onOrder: { A003: 150 } });
+test("compute: edit manual Final PR (PO outstanding tidak dipakai lagi)", () => {
+  const r = run({}, { final: { K002: 600 }, onOrder: { A003: 150 } }); // onOrder lama di browser diabaikan
   const k2 = byCode(r, "K002");
   assert.equal(k2.final, 600); assert.equal(k2.finalEdited, true); assert.equal(k2.finalAuto, 500); assert.equal(k2.nilaiPR, 57300);
   const a3 = byCode(r, "A003");
-  assert.equal(a3.pos, 450); assert.equal(a3.saran, 0); assert.equal(a3.final, 0); assert.equal(a3.status, "Aman");
-  assert.equal(r.kpi.edited, 2);
+  assert.equal(a3.pos, 300); assert.equal(a3.saran, 260); assert.equal(a3.final, 260); assert.equal(a3.status, "Order");
+  assert.equal(a3.onOrder, undefined);
+  assert.equal(r.kpi.edited, 1);
   // edit yang sama dengan rekomendasi tidak dihitung "diubah"
   assert.equal(byCode(run({}, { final: { K002: 500 } }), "K002").finalEdited, false);
 });

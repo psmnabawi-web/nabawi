@@ -112,8 +112,7 @@
             <tr><th>Target DSI</th><td>Rata-rata stok fisik dalam hari pemakaian <span class="muted">· sama dengan cara hitung KPI DSI gudang</span></td></tr>
             <tr><th>Stok fisik maks</th><td>Pemakaian/hari × MAX(Buffer + 1, 2 × Target − Buffer) <span class="muted">· stok bergerak antara buffer dan angka ini, rata-ratanya = target</span></td></tr>
             <tr><th>Stok maksimum</th><td>Stok fisik maks + Pemakaian/hari × Lead time <span class="muted">· dasar Saran PR; target 0 = ROP (sama persis dengan sheet lama)</span></td></tr>
-            <tr><th>Posisi stok</th><td>SOH Zahir + PO outstanding</td></tr>
-            <tr><th>Saran PR</th><td>Stok maksimum − Posisi stok, bila Posisi ≤ ROP</td></tr>
+            <tr><th>Saran PR</th><td>Stok maksimum − SOH Zahir, bila SOH ≤ ROP</td></tr>
             <tr><th>Final PR</th><td>MAX(MOQ, dibulatkan ke atas ke Kelipatan) · bisa diubah manual, tercatat di log</td></tr>
             <tr><th>DSI</th><td>SOH ÷ Pemakaian/hari (hari)</td></tr>
             <tr><th>DSI gudang</th><td>Nilai stok ÷ nilai pemakaian per hari (semua item berparameter) <span class="muted">· sama dengan kolom DSI sheet lama</span></td></tr>
@@ -121,7 +120,7 @@
           <ul class="status-legend">
             <li><span class="st st-oos">OOS</span> stok 0 padahal ada pemakaian</li>
             <li><span class="st st-kritis">Kritis</span> DSI ≤ lead time: stok habis sebelum barang datang, percepat order</li>
-            <li><span class="st st-order">Order</span> posisi stok ≤ ROP</li>
+            <li><span class="st st-order">Order</span> SOH ≤ ROP</li>
             <li><span class="st st-aman">Aman</span> di atas ROP, tidak melebihi stok fisik maksimum</li>
             <li><span class="st st-above">Di atas target</span> stok fisik melebihi stok fisik maksimum</li>
             <li><span class="st st-over">Overstock</span> DSI di atas batas overstock</li>
@@ -167,7 +166,7 @@
             <option value="zahir">Harga Zahir (HPP rata-rata), cadangan master</option>
           </select>
         </label>
-        <p class="muted small">Target DSI = rata-rata stok fisik (hari pemakaian), sama dengan KPI DSI gudang. Order dipicu saat posisi stok ≤ ROP, lalu ditutup sampai stok fisik maks (pemakaian × MAX(buffer + 1, 2 × target − buffer)) + pemakaian selama lead time. Target per item bisa diisi di kolom “Target DSI (Hari)” master. 0 = sama dengan sheet lama.</p>
+        <p class="muted small">Target DSI = rata-rata stok fisik (hari pemakaian), sama dengan KPI DSI gudang. Order dipicu saat SOH ≤ ROP, lalu ditutup sampai stok fisik maks (pemakaian × MAX(buffer + 1, 2 × target − buffer)) + pemakaian selama lead time. Target per item bisa diisi di kolom “Target DSI (Hari)” master. 0 = sama dengan sheet lama.</p>
       </fieldset>
       <div class="dlg-foot">
         <button class="btn ghost" value="cancel" type="submit">Batal</button>

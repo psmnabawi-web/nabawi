@@ -18,7 +18,7 @@
     del(k) { try { localStorage.removeItem(k); } catch (e) { /* abaikan */ } },
   };
   const KEY = { settings: "rop.settings.v1", master: "rop.master.v1", stock: "rop.stock.v1", edits: (h) => "rop.edits." + h };
-  const emptyEdits = () => ({ final: {}, onOrder: {}, note: {}, log: [], stockDate: "" });
+  const emptyEdits = () => ({ final: {}, note: {}, log: [], stockDate: "" });
   const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
   const idDate = (iso) => (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.split("-").reverse().join("/") : iso || "");
 
@@ -244,7 +244,7 @@
       chip.className = "chip " + (state.masterFromCache || state.masterWarn ? "warn" : "ok");
       chip.textContent = `${fmt(n)} item${state.masterFromCache ? " · cache" : ""}`;
       const hc = state.master.hasColumn || {};
-      const extra = ["target", "kelipatan", "onOrder", "supplier"].filter((k) => hc[k]).map((k) => ({ target: "Target DSI", kelipatan: "Kelipatan", onOrder: "PO outstanding", supplier: "Supplier" }[k]));
+      const extra = ["target", "kelipatan", "supplier"].filter((k) => hc[k]).map((k) => ({ target: "Target DSI", kelipatan: "Kelipatan", supplier: "Supplier" }[k]));
       info.innerHTML = `${esc(state.masterSource)} · dimuat ${esc(new Date(state.masterLoadedAt).toLocaleString("id-ID"))}${extra.length ? ` · kolom tambahan: ${esc(extra.join(", "))}` : ""}${state.masterWarn ? `<br><span class="sev-Sedang">${esc(state.masterWarn)}</span>` : ""}`;
     } else if (state.masterError) {
       chip.className = "chip err"; chip.textContent = "Belum ada";
@@ -288,8 +288,6 @@
     if (!r.masterFitsGudang) out.push(alertBox("warn", `<b>Master parameter tampaknya bukan untuk gudang ini.</b> Hanya ${r.kpi.masterMatched} dari ${r.kpi.masterActive} kode master ada di ${esc(gudangLabel(gudangObj()))}. Item master yang tidak ada di file tidak dihitung.`));
     const high = r.issues.filter((i) => i.severity === "Tinggi").length;
     if (high) out.push(alertBox("warn", `<b>${high} data issue prioritas tinggi.</b> ${r.kpi.noParamStock ? `${r.kpi.noParamStock} barang ada stoknya (${fmtRp(r.kpi.noParamValue)}) tetapi tidak punya parameter, jadi tidak pernah direkomendasikan. ` : ""}<a href="#" data-goto="issue">Lihat tab Data issue</a>.`));
-    const anyOnOrder = r.rows.some((x) => x.onOrder > 0);
-    if (!anyOnOrder && r.kpi.prCount) out.push(alertBox("warn", "<b>PO outstanding masih kosong.</b> Isi qty yang sudah dipesan tetapi belum diterima di kolom PO outstanding supaya tidak order dobel."));
     $("alerts").innerHTML = out.join("");
   }
 
@@ -334,7 +332,7 @@
     const f = state.filters, q = f.q.trim().toLowerCase();
     return list.filter((r) => (!q || r.kode.toLowerCase().includes(q) || (r.nama || "").toLowerCase().includes(q))
       && (!f.brand || r.brand === f.brand) && (!f.status || r.status === f.status)
-      && (!f.edited || r.finalEdited || r.onOrderEdited || r.note));
+      && (!f.edited || r.finalEdited || r.note));
   }
 
   const NUM = (key, label, opt) => Object.assign({ key, label, num: true }, opt || {});
@@ -347,7 +345,6 @@
     NUM("sohRaw", "SOH", { render: (r) => fmt(r.sohRaw) }),
     NUM("dsi", "DSI", { render: (r) => (r.dsi == null ? "-" : fmt(r.dsi, 1)), tdCls: (r) => (r.dsi == null ? "" : r.dsi <= (r.lead || 0) ? "dsi-low" : r.dsi < settings().dsiSafety ? "dsi-mid" : "") }),
     NUM("rop", "ROP", { render: (r) => (r.rop == null ? "-" : fmt(r.rop)) }),
-    NUM("onOrder", "PO outstanding", { input: "onOrder" }),
     NUM("saran", "Saran PR", { render: (r) => fmt(r.saran) }),
     NUM("moq", "MOQ", { render: (r) => (r.moq ? fmt(r.moq) : "-") }),
     NUM("final", "Final PR", { input: "final" }),
@@ -419,7 +416,6 @@
       const cls = [c.num ? "num" : "", c.cls || "", c.tdCls ? c.tdCls(r) : ""].filter(Boolean).join(" ");
       let inner;
       if (c.input === "final") inner = r.hasParam || r.final ? `<input class="cell${r.finalEdited ? " edited" : ""}" type="number" inputmode="decimal" min="0" step="any" data-code="${esc(r.code)}" data-field="final" value="${r.final}" aria-label="Final PR ${esc(r.nama)}" title="Rekomendasi sistem: ${esc(fmt(r.finalAuto))}">` : "-";
-      else if (c.input === "onOrder") inner = r.hasParam ? `<input class="cell${r.onOrderEdited ? " edited" : ""}" type="number" inputmode="decimal" min="0" step="any" data-code="${esc(r.code)}" data-field="onOrder" value="${r.onOrder || ""}" placeholder="0" aria-label="PO outstanding ${esc(r.nama)}">` : "-";
       else if (c.input === "note") inner = `<input class="cell text" type="text" maxlength="120" data-code="${esc(r.code)}" data-field="note" value="${esc(r.note)}" aria-label="Catatan ${esc(r.nama)}">`;
       else inner = c.render ? c.render(r) : esc(r[c.key]);
       return `<td${cls ? ` class="${cls}"` : ""}>${inner}</td>`;
@@ -458,13 +454,11 @@
         ${line("Stok maksimum (dasar PR)", `${fmt(r.max)} ${u}`, r.target > 0 ? `stok fisik maks + ${fmt(d)} × lead time ${fmt(r.lead)}` : "target 0 = ROP (sheet lama)", true)}
         ${line("Rata-rata stok fisik", r.avgDays == null ? "-" : `${fmt(r.avgDays, 1)} hari`, r.cycleDays == null ? "" : `bergerak ${fmt(r.buffer)}–${fmt(r.physDays)} hari · order tiap ±${fmt(r.cycleDays, 1)} hari`)}
         ${line("SOH Zahir", `${fmt(r.sohRaw)} ${u}`, r.inZahir ? "file Zahir" : "tidak ada di file → 0")}
-        ${line("PO outstanding", `${fmt(r.onOrder || 0)} ${u}`, r.onOrderEdited ? "diisi manual" : "")}
-        ${line("Posisi stok", `${fmt(r.pos)} ${u}`, "SOH + PO outstanding")}
         ${line("DSI", r.dsi == null ? "-" : `${fmt(r.dsi, 1)} hari`, `SOH ÷ pemakaian · ${esc(r.band)}`)}
-        ${line("Saran PR", `${fmt(r.saran)} ${u}`, r.saran > 0 ? `${fmt(r.max)} − ${fmt(r.pos)} (posisi ≤ ROP)` : "posisi di atas ROP / pemakaian 0", true)}
+        ${line("Saran PR", `${fmt(r.saran)} ${u}`, r.saran > 0 ? `${fmt(r.max)} − ${fmt(r.soh)} (SOH ≤ ROP)` : "SOH di atas ROP / pemakaian 0", true)}
         ${line("MOQ · kelipatan", `${fmt(r.moq || 0)} · ${fmt(r.kelipatan)}`, r.kelipatanFromMaster ? "kelipatan dari master" : r.kelipatan > 1 ? "pembulatan otomatis Gram/Ml" : "")}
         ${line("Final PR", `${fmt(r.final)} ${u}`, r.finalEdited ? `diubah manual · sistem ${fmt(r.finalAuto)}` : "MAX(MOQ, CEILING(Saran, kelipatan))", true)}
-        ${line("DSI setelah PR", r.dsiAfter == null ? "-" : `${fmt(r.dsiAfter, 1)} hari`, "(posisi + Final PR) ÷ pemakaian")}
+        ${line("DSI setelah PR", r.dsiAfter == null ? "-" : `${fmt(r.dsiAfter, 1)} hari`, "(SOH + Final PR) ÷ pemakaian")}
         ${line("Harga", fmtRp(r.harga), r.hargaSrc ? `sumber ${esc(r.hargaSrc)}${r.hargaZahir && r.hargaMaster ? ` · Zahir ${fmtRp(r.hargaZahir)} · master ${fmtRp(r.hargaMaster)}` : ""}` : "tidak ada")}
         ${line("Nilai PR", fmtRp(r.nilaiPR), "Final PR × harga", true)}
       </table>`;
@@ -481,7 +475,8 @@
     const r = state.result.rows.find((x) => x.code === code);
     if (!r) return;
     const E = state.edits;
-    const before = field === "note" ? r.note : field === "final" ? r.final : r.onOrder || 0;
+    if (field !== "final" && field !== "note") return;
+    const before = field === "note" ? r.note : r.final;
     let after;
     if (field === "note") {
       after = String(rawVal || "").trim().slice(0, 120);
@@ -489,14 +484,10 @@
     } else {
       const v = String(rawVal).trim() === "" ? null : Number(rawVal);
       if (v != null && (!isFinite(v) || v < 0)) { toast("Isi angka ≥ 0.", true); renderTable(); return; }
-      if (field === "final") {
-        if (v == null || v === r.finalAuto) { delete E.final[code]; after = r.finalAuto; } else { E.final[code] = v; after = v; }
-      } else {
-        if (!v) { delete E.onOrder[code]; after = 0; } else { E.onOrder[code] = v; after = v; }
-      }
+      if (v == null || v === r.finalAuto) { delete E.final[code]; after = r.finalAuto; } else { E.final[code] = v; after = v; }
     }
     if (String(before) === String(after)) return;
-    E.log.push({ t: Date.now(), code, kode: r.kode, nama: r.nama, field: { final: "Final PR", onOrder: "PO outstanding", note: "Catatan" }[field], from: before, to: after, system: field === "final" ? r.finalAuto : "", by: state.settings.preparedBy || "" });
+    E.log.push({ t: Date.now(), code, kode: r.kode, nama: r.nama, field: { final: "Final PR", note: "Catatan" }[field], from: before, to: after, system: field === "final" ? r.finalAuto : "", by: state.settings.preparedBy || "" });
     if (E.log.length > 2000) E.log = E.log.slice(-2000);
     saveEdits();
     const ae = document.activeElement;
@@ -725,11 +716,11 @@
     $("fStatus").addEventListener("change", (e) => { state.filters.status = e.target.value; renderTable(); });
     $("fEdited").addEventListener("change", (e) => { state.filters.edited = e.target.checked; renderTable(); });
     $("btnResetEdits").addEventListener("click", () => {
-      const n = Object.keys(state.edits.final).length + Object.keys(state.edits.onOrder).length + Object.keys(state.edits.note).length;
+      const n = Object.keys(state.edits.final).length + Object.keys(state.edits.note).length;
       if (!n) return toast("Belum ada perubahan manual.");
-      if (!confirm(`Hapus ${n} perubahan manual (Final PR, PO outstanding, catatan) untuk file ini? Log tetap disimpan.`)) return;
+      if (!confirm(`Hapus ${n} perubahan manual (Final PR, catatan) untuk file ini? Log tetap disimpan.`)) return;
       state.edits.log.push({ t: Date.now(), code: "", kode: "", nama: "(semua)", field: "Reset perubahan", from: n, to: 0, system: "", by: state.settings.preparedBy || "" });
-      Object.assign(state.edits, { final: {}, onOrder: {}, note: {} });
+      Object.assign(state.edits, { final: {}, note: {} });
       saveEdits(); recompute();
     });
 

@@ -49,10 +49,10 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await page.waitForFunction(() => document.getElementById("kpis").textContent.includes("Rp 764.300"));
     assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.dataset.code), "K002");
     assert.ok(await page.locator('input[data-code="K002"][data-field="final"].edited').count());
-    // PO outstanding A003 = 150 → keluar dari PR
-    const po = page.locator('input[data-code="A003"][data-field="onOrder"]');
-    await po.fill("150"); await po.press("Enter");
-    await page.waitForFunction(() => document.getElementById("kpis").textContent.includes("Rp 374.300"));
+    // PO outstanding sudah dihapus: tidak ada kolom, input, maupun pengingat
+    assert.equal(await page.locator('input[data-field="onOrder"]').count(), 0);
+    assert.doesNotMatch(await page.textContent("#tbl thead"), /outstanding/i);
+    assert.doesNotMatch(await page.textContent("#alerts"), /outstanding/i);
 
     // rincian hitungan
     await page.click('button[data-detail="A002"]');
@@ -78,19 +78,20 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await page.click("#btnPO");
     await page.waitForSelector("#dlgPO[open]");
     assert.equal(await page.inputValue("#poBy"), "supplier");
-    assert.equal(await page.locator("#poGroups input[type=checkbox]").count(), 3);
-    assert.equal(await page.textContent("#poSummary"), "3 PO · 5 item · Rp 374.300");
+    assert.equal(await page.locator("#poGroups input[type=checkbox]").count(), 4);
+    assert.equal(await page.textContent("#poSummary"), "4 PO · 6 item · Rp 764.300");
     const ymd = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`; });
     assert.equal(await page.inputValue("#poPrefix"), `PO/${ymd}/`);
     assert.equal(await page.inputValue("#poSeq"), "1");
     await page.fill("#poSign3", "Manager SCM");
     await page.click("#btnDoPrint");
     await page.waitForFunction(() => window.__printed === 1);
-    assert.equal(await page.locator("#printArea .po").count(), 3);
+    assert.equal(await page.locator("#printArea .po").count(), 4);
     const po1 = await page.textContent("#printArea .po:nth-child(1)");
     assert.match(po1, new RegExp(`PO/${ymd}/001`)); assert.match(po1, /CV Tepung Jaya/); assert.match(po1, /Gula Uji/); assert.match(po1, /Gula Uji\s*1\s*Kg/); assert.match(po1, /Rp 16\.000/); assert.match(po1, /Manager SCM/);
-    const po3 = await page.textContent("#printArea .po:nth-child(3)");
-    assert.match(po3, new RegExp(`PO/${ymd}/003`)); assert.match(po3, /Minyak Uji/); assert.match(po3, /Barang Hilang/);
+    assert.match(po1, /Tepung Uji\s*10\s*Kg/);
+    const po4 = await page.textContent("#printArea .po:nth-child(4)");
+    assert.match(po4, new RegExp(`PO/${ymd}/004`)); assert.match(po4, /Minyak Uji/); assert.match(po4, /Barang Hilang/);
     await page.emulateMedia({ media: "print" });
     assert.equal(await page.isVisible("#results"), false);
     assert.equal(await page.isVisible("#printArea"), true);
@@ -100,7 +101,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
     assert.equal(await page.evaluate(() => document.body.classList.contains("printing")), false);
     await page.click("#btnPO"); await page.waitForSelector("#dlgPO[open]");
-    assert.equal(await page.inputValue("#poSeq"), "4"); // nomor berikutnya tidak mengulang
+    assert.equal(await page.inputValue("#poSeq"), "5"); // nomor berikutnya tidak mengulang
     await page.selectOption("#poBy", "satu");
     assert.equal(await page.locator("#poGroups input[type=checkbox]").count(), 1);
     await page.keyboard.press("Escape");
@@ -113,7 +114,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     const wb = new ExcelJS.Workbook(); await wb.xlsx.load(fs.readFileSync(xlsx));
     const ws = wb.getWorksheet("Perhitungan");
     let k2 = -1; for (let r = 6; r <= ws.rowCount; r++) if (ws.getCell(`B${r}`).value === "K002") k2 = r;
-    assert.equal(ws.getCell(`U${k2}`).value, 600);
+    assert.equal(ws.getCell(`S${k2}`).value, 600); assert.equal(ws.getCell("S5").value, "Final PR");
     const log = wb.getWorksheet("Log Perubahan");
     const logRows = []; log.eachRow((row) => logRows.push(row.getCell(4).value));
     assert.ok(logRows.includes("Cetak PO"), "log Cetak PO");

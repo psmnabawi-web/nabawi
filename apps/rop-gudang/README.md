@@ -13,7 +13,7 @@ File Zahir diproses di browser pengguna dan **tidak dikirim ke server mana pun**
 | 1 | Zahir → laporan **Daftar Produk Per Gudang** → download (Excel/.xls). Jangan diedit. | 1 menit |
 | 2 | Buka aplikasi → tarik file ke kotak **Upload stok Zahir**. | 10 detik |
 | 3 | Cek bar hijau **File Zahir terverifikasi** (semua subtotal cocok). Bila merah: download ulang. | — |
-| 4 | Isi **PO outstanding** untuk barang yang sudah dipesan tetapi belum datang. | 2–5 menit |
+| 4 | Nolkan **Final PR** untuk barang yang sudah dipesan tetapi belum datang (aplikasi tidak menghitung PO outstanding). | 2–5 menit |
 | 5 | Review tab **Rekomendasi PR** dari atas (OOS → Kritis → Order). Ubah **Final PR** bila perlu + isi catatan. | 10–15 menit |
 | 6 | **Export Excel** (arsip & dasar PO) dan/atau **Salin teks PR** (kirim ke WhatsApp purchasing). | 1 menit |
 
@@ -21,7 +21,7 @@ Perubahan manual tersimpan di browser per file (dikunci SHA-256 file), tercatat 
 
 ## Cara hitung
 
-Pemicu order sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (Total Safety = ROP). Qty order disetel supaya **rata-rata stok fisik = target DSI** (default **3 hari**), ditambah PO outstanding dan pembulatan:
+Pemicu order sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (Total Safety = ROP). Qty order disetel supaya **rata-rata stok fisik = target DSI** (default **3 hari**), ditambah pembulatan MOQ/kelipatan. PO outstanding tidak dihitung:
 
 | Besaran | Rumus |
 |---|---|
@@ -29,8 +29,7 @@ Pemicu order sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (Total Safety = R
 | ROP | Pemakaian/hari × (Buffer + Lead time) |
 | Stok fisik maksimum | Pemakaian/hari × MAX(Buffer + 1, 2 × Target DSI − Buffer) · stok sesaat setelah barang datang |
 | Stok maksimum (dasar PR) | Stok fisik maksimum + Pemakaian/hari × Lead time |
-| Posisi stok | SOH Zahir (negatif dihitung 0) + PO outstanding |
-| Saran PR | Stok maksimum − Posisi stok, bila Posisi ≤ ROP; selain itu 0 |
+| Saran PR | Stok maksimum − SOH Zahir (negatif dihitung 0), bila SOH ≤ ROP; selain itu 0 |
 | Final PR | MAX(MOQ, CEILING(Saran PR, Kelipatan)) |
 | DSI | SOH ÷ Pemakaian/hari |
 | DSI gudang | Nilai stok ÷ nilai pemakaian per hari (semua item berparameter; sama dengan kolom DSI sheet lama) |
@@ -48,7 +47,7 @@ Pemicu order sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (Total Safety = R
 |---|---|---|
 | OOS | Stok 0, ada pemakaian | Order hari ini / transfer |
 | Kritis | DSI ≤ lead time: habis sebelum barang datang | Order + percepat supplier |
-| Order | Posisi stok ≤ ROP | Order sesuai Final PR |
+| Order | SOH ≤ ROP | Order sesuai Final PR |
 | Aman | Di atas ROP, tidak melebihi stok fisik maksimum | — |
 | Di atas target | Stok fisik melebihi stok fisik maksimum | Tahan order, habiskan dulu |
 | Overstock | DSI > batas overstock (default 30 hari) | Tahan order, dorong pemakaian |
@@ -71,7 +70,7 @@ Pemicu order sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (Total Safety = R
 | Harga | | harga beli terakhir |
 | Nama, Satuan, Kategori | | informasi & pengecekan satuan |
 | Supplier | | memisah Cetak PO per supplier |
-| Target DSI (Hari), Kelipatan Order, PO Outstanding, Aktif | | kolom tambahan opsional |
+| Target DSI (Hari), Kelipatan Order, Aktif | | kolom tambahan opsional |
 
 Tombol **Unduh template master** menghasilkan file Excel berisi semua kolom di atas (terisi parameter yang sedang dipakai). File itu bisa di-upload kembali bila Google Sheet tidak bisa diakses.
 
@@ -156,4 +155,5 @@ Fixture di `test/fixtures` adalah data sintetis. **Jangan commit file Zahir asli
 - Tidak ada login: siapa pun yang tahu alamat situs bisa membuka aplikasi, tetapi aplikasi tidak menyimpan data di server. Yang terlihat hanya parameter dari sheet (karena itu sheet harus *Pelihat*).
 - CSP ketat: skrip hanya dari situs sendiri (+ cdn.sheetjs.com untuk .xls biner lama), koneksi hanya ke Google Sheets.
 - Data tersimpan di localStorage browser: pengaturan, cache parameter, file terakhir, dan perubahan manual. Ganti perangkat = mulai dari upload lagi.
-- Belum ada alur approval PR multi-user dan PO outstanding otomatis dari Zahir; keduanya butuh backend (pengembangan tahap berikutnya).
+- PO outstanding sengaja tidak dihitung (keputusan pemilik). Barang yang sudah dipesan tetapi belum diterima akan direkomendasikan lagi sampai stoknya masuk Zahir: nolkan Final PR-nya secara manual.
+- Belum ada alur approval PR multi-user; butuh backend (pengembangan tahap berikutnya).

@@ -16,7 +16,7 @@ const FX = (f) => path.join(__dirname, "fixtures", f);
 const z = C.parseZahir(C.textToRows(C.decodeText(fs.readFileSync(FX("zahir-contoh.xls")))));
 const m = C.parseMaster(C.textToRows(fs.readFileSync(FX("master-contoh.csv"), "utf8")), { localeHint: "id" });
 const MAIN = "GUDANG PUSAT › GUDANG PUSAT";
-const edits = { final: { K002: 600 }, onOrder: { A003: 50 }, note: { K002: "naik karena promo" } };
+const edits = { final: { K002: 600 }, note: { K002: "naik karena promo" } };
 const result = C.compute({ stockItems: z.items.filter((i) => i.gkey === MAIN), master: m, edits });
 const log = [{ t: Date.UTC(2026, 10, 16, 3), code: "K002", kode: "K002", nama: "Plastik Uji", field: "Final PR", from: 500, to: 600, system: 500, by: "Tes" }];
 const meta = { gudangLabel: "GUDANG PUSAT", company: "PT. Contoh Usaha", stockDate: "16/11/2026", preparedBy: "Tes", generatedAt: Date.UTC(2026, 10, 16, 3), fileName: "zahir-contoh.xls", fileHash: "abc123", masterSource: "fixture", masterLoadedAt: Date.UTC(2026, 10, 16, 2) };
@@ -37,24 +37,25 @@ test("workbook: sheet, header, rumus inti, input & override manual", async () =>
   fs.writeFileSync(path.join(OUT, "export-contoh.xlsx"), Buffer.from(buf));
   assert.deepEqual(wb2.worksheets.map((w) => w.name), ["Ringkasan", "PR", "Perhitungan", "Data Issue", "Stok Zahir", "Log Perubahan"]);
   const ws = wb2.getWorksheet("Perhitungan");
-  assert.equal(ws.getCell("B5").value, "Kode"); assert.equal(ws.getCell("Z5").value, "Status"); assert.equal(ws.getCell("AE5").value, "Supplier");
+  assert.equal(ws.getCell("B5").value, "Kode"); assert.equal(ws.getCell("X5").value, "Status"); assert.equal(ws.getCell("AC5").value, "Supplier");
   const r = rowOf(ws, "A003");
   assert.ok(r > 5);
-  assert.equal(ws.getCell(`N${r}`).formula, `G${r}*(H${r}+I${r})`);
-  assert.equal(ws.getCell(`R${r}`).formula, `IF(AND(N(G${r})>0,P${r}<=N${r},P${r}<O${r}),O${r}-P${r},0)`);
-  assert.equal(ws.getCell(`U${r}`).formula, `IF(R${r}>0,MAX(S${r},CEILING(R${r},IF(N(T${r})>0,T${r},1))),0)`);
+  assert.equal(ws.getCell(`M${r}`).formula, `G${r}*(H${r}+I${r})`); // ROP
+  assert.equal(ws.getCell(`P${r}`).formula, `IF(AND(N(G${r})>0,MAX(K${r},0)<=M${r},MAX(K${r},0)<N${r}),N${r}-MAX(K${r},0),0)`); // Saran PR
+  assert.equal(ws.getCell(`S${r}`).formula, `IF(P${r}>0,MAX(Q${r},CEILING(P${r},IF(N(R${r})>0,R${r},1))),0)`); // Final PR
   assert.equal(ws.getCell(`J${r}`).formula, "Ringkasan!$C$16"); // target DSI default dirujuk ke sel parameter global
   assert.equal(ws.getCell(`J5`).value, "Target DSI (hari)");
-  assert.equal(ws.getCell(`O${r}`).formula, `G${r}*IF(N(J${r})=0,H${r}+I${r},MAX(H${r}+1,2*J${r}-H${r})+I${r})`);
-  assert.equal(ws.getCell(`AH5`).value, "Stok fisik maks");
-  assert.equal(ws.getCell(`L${r}`).value, 50); // PO outstanding dari edit
+  assert.equal(ws.getCell(`N${r}`).formula, `G${r}*IF(N(J${r})=0,H${r}+I${r},MAX(H${r}+1,2*J${r}-H${r})+I${r})`); // Stok maksimum
+  assert.equal(ws.getCell(`AF5`).value, "Stok fisik maks");
+  const headers = []; ws.getRow(5).eachCell((c) => headers.push(String(c.value)));
+  assert.ok(!headers.some((h) => /outstanding|posisi/i.test(h)), "kolom PO outstanding/posisi sudah dihapus");
   const k2 = rowOf(ws, "K002");
-  assert.equal(ws.getCell(`U${k2}`).value, 600); // override = nilai, bukan rumus
-  assert.match(ws.getCell(`U${k2}`).note.texts ? ws.getCell(`U${k2}`).note.texts.map((t) => t.text).join("") : String(ws.getCell(`U${k2}`).note), /Rekomendasi sistem: 500/);
-  assert.equal(ws.getCell(`AC${k2}`).value, "naik karena promo");
+  assert.equal(ws.getCell(`S${k2}`).value, 600); // override = nilai, bukan rumus
+  assert.match(ws.getCell(`S${k2}`).note.texts ? ws.getCell(`S${k2}`).note.texts.map((t) => t.text).join("") : String(ws.getCell(`S${k2}`).note), /Rekomendasi sistem: 500/);
+  assert.equal(ws.getCell(`AA${k2}`).value, "naik karena promo");
   const k3 = rowOf(ws, "K003");
   assert.equal(ws.getCell(`G${k3}`).value, null); // tanpa parameter → input kosong
-  assert.equal(ws.getCell(`Z${k3}`).result, "Tanpa parameter");
+  assert.equal(ws.getCell(`X${k3}`).result, "Tanpa parameter");
   assert.ok(ws.views[0].state === "frozen");
   const dv = ws.getCell(`G${r}`).dataValidation || {};
   assert.equal(dv.type, "decimal"); assert.equal(dv.operator, "greaterThanOrEqual");
@@ -64,15 +65,16 @@ test("workbook: sheet, header, rumus inti, input & override manual", async () =>
   const prCodes = []; for (let i = 5; i < 5 + result.kpi.prCount; i++) prCodes.push(pr.getCell(`C${i}`).value);
   assert.deepEqual(prCodes, ["A004", "K009", "A002", "K002", "A003", "A001"]);
   assert.equal(pr.getCell(`D${5 + result.kpi.prCount}`).value, "TOTAL");
-  assert.match(pr.getCell("M5").formula, /^IFERROR\(INDEX\(Perhitungan!\$U\$6:\$U\$\d+,\$R5\),""\)$/);
-  assert.match(pr.getCell("R5").formula, /^MATCH\(\$C5,Perhitungan!\$B\$6:\$B\$\d+,0\)$/);
+  assert.equal(pr.getCell("L4").value, "Final PR");
+  assert.match(pr.getCell("L5").formula, /^IFERROR\(INDEX\(Perhitungan!\$S\$6:\$S\$\d+,\$Q5\),""\)$/);
+  assert.match(pr.getCell("Q5").formula, /^MATCH\(\$C5,Perhitungan!\$B\$6:\$B\$\d+,0\)$/);
 
   const rs = wb2.getWorksheet("Ringkasan");
   const kr = (label) => { for (let i = 24; i < 60; i++) if (String(rs.getCell(`B${i}`).value || "").startsWith(label)) return i; return -1; };
   assert.equal(rs.getCell("C16").value, 3);
   assert.equal(rs.getCell(`C${kr("Target DSI (hari)")}`).formula, "Ringkasan!$C$16");
   const ip = kr("Item perlu order");
-  assert.match(rs.getCell(`C${ip}`).formula, /^COUNTIF\(Perhitungan!\$U\$6:\$U\$\d+,">0"\)$/);
+  assert.match(rs.getCell(`C${ip}`).formula, /^COUNTIF\(Perhitungan!\$S\$6:\$S\$\d+,">0"\)$/);
   assert.equal(rs.getCell(`C${ip}`).result, result.kpi.prCount);
   assert.equal(rs.getCell(`C${kr("Nilai PR")}`).result, result.kpi.prValue);
   assert.equal(rs.getCell(`C${kr("DSI gudang aktual")}`).result, result.kpi.dsiActual);
@@ -145,7 +147,7 @@ test("rumus Excel dihitung ulang LibreOffice = hasil aplikasi", { skip: !hasLO &
   assert.ok(recRows.every((x) => x[9] === "Cocok"), JSON.stringify(recRows));
   const prs = csv("PR");
   const prTotal = prs.find((x) => x[3] === "TOTAL");
-  assert.equal(Math.round(Number(prTotal[14])), result.kpi.prValue);
+  assert.equal(Math.round(Number(prTotal[13])), result.kpi.prValue);
   assert.equal(prs[4][12] !== undefined, true);
   fs.rmSync(dir, { recursive: true, force: true });
 });

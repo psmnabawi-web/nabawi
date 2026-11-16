@@ -4,7 +4,7 @@
  *       master parameter (Google Sheet tab PKU / upload) → parseMaster()
  *       compute() → baris rekomendasi pembelian (ROP, Saran PR, Final PR, status) + KPI + data issue
  *
- * Rumus (identik dengan sheet "Perhitungan Kebutuhan /ROP WH", ditambah PO outstanding & siklus order):
+ * Rumus (pemicu identik dengan sheet "Perhitungan Kebutuhan /ROP WH", ditambah target DSI):
  *   Safety stock  = Pemakaian/hari × Buffer (hari)
  *   ROP           = Pemakaian/hari × (Buffer + Lead time)          ← "Total Safety" di sheet lama
  *   Target DSI    = rata-rata stok FISIK dalam hari pemakaian (sama dengan KPI DSI gudang = nilai stok ÷ nilai pemakaian/hari)
@@ -12,8 +12,7 @@
  *                   → stok fisik bergerak antara Buffer dan stok fisik maksimum, rata-ratanya = Target (asumsi review harian)
  *   Stok maksimum (posisi, dasar PR)         = Stok fisik maksimum + Pemakaian × Lead time
  *                   Target 0 = sama persis dengan sheet lama (stok maksimum = ROP)
- *   Posisi stok   = SOH (min 0) + PO outstanding
- *   Saran PR      = Stok maksimum − Posisi stok, bila Posisi ≤ ROP (dan < Stok maksimum); selain itu 0
+ *   Saran PR      = Stok maksimum − SOH, bila SOH ≤ ROP (dan < Stok maksimum); selain itu 0
  *   Final PR      = 0 bila Saran 0; selain itu MAX(MOQ, CEILING(Saran, kelipatan))
  */
 (function (root, factory) {
@@ -316,11 +315,10 @@
     { key: "moq", label: "Minimum Order", test: (h) => /MINIMUM ORDER|\bMOQ\b|MIN(IMAL)? ORDER/.test(h) },
     { key: "kelipatan", label: "Kelipatan Order", test: (h) => /KELIPATAN|PACK SIZE/.test(h) },
     { key: "harga", label: "Harga", test: (h) => /(^|\s)HARGA( TERAKHIR| BELI| SATUAN| PEMBELIAN)?$/.test(h) },
-    { key: "onOrder", label: "PO Outstanding", test: (h) => /PO OUTSTANDING|OUTSTANDING PO|ON ORDER|DALAM PERJALANAN/.test(h) },
     { key: "aktif", label: "Aktif", test: (h) => /^AKTIF$|^STATUS AKTIF$/.test(h) },
     { key: "supplier", label: "Supplier", test: (h) => /^(NAMA )?(SUPPLIER|VENDOR|PEMASOK)( UTAMA)?$/.test(h) },
   ];
-  const NUM_FIELDS = ["usage", "buffer", "lead", "target", "moq", "kelipatan", "harga", "onOrder"];
+  const NUM_FIELDS = ["usage", "buffer", "lead", "target", "moq", "kelipatan", "harga"];
 
   function findMasterHeader(rows) {
     for (let i = 0; i < Math.min(rows.length, 15); i++) {
@@ -378,7 +376,7 @@
   const STATUS = {
     OOS: { label: "OOS", rank: 0, desc: "Stok habis padahal ada pemakaian" },
     KRITIS: { label: "Kritis", rank: 1, desc: "Stok tidak cukup sampai barang datang (DSI ≤ lead time)" },
-    ORDER: { label: "Order", rank: 2, desc: "Posisi stok di bawah/sama dengan ROP" },
+    ORDER: { label: "Order", rank: 2, desc: "SOH di bawah/sama dengan ROP" },
     AMAN: { label: "Aman", rank: 3, desc: "Di atas ROP, DSI tidak melebihi target" },
     ABOVE: { label: "Di atas target", rank: 4, desc: "Stok fisik di atas stok fisik maksimum (target DSI)" },
     OVER: { label: "Overstock", rank: 5, desc: "DSI melebihi batas overstock" },
@@ -403,7 +401,7 @@
   function compute(input) {
     const s = Object.assign({}, DEFAULT_SETTINGS, input.settings || {});
     const edits = input.edits || {};
-    const eFinal = edits.final || {}, eOn = edits.onOrder || {}, eNote = edits.note || {};
+    const eFinal = edits.final || {}, eNote = edits.note || {};
     const stock = (input.stockItems || []);
     const master = input.master || { items: [], byCode: {} };
     const stockByCode = new Map();
@@ -446,9 +444,6 @@
       const unit = row.satuan || row.satuanMaster || "";
       row.kelipatan = m ? (m.kelipatan > 0 ? m.kelipatan : (s.roundGramMl && ROUND_UNITS.test(unit.trim()) ? s.roundStep : 1)) : null;
       row.kelipatanFromMaster = !!(m && m.kelipatan > 0);
-      const onOrderMaster = m && m.onOrder > 0 ? m.onOrder : 0;
-      row.onOrder = eOn[code] != null ? eOn[code] : onOrderMaster;
-      row.onOrderEdited = eOn[code] != null;
       if (s.priceSource === "zahir") { row.harga = row.hargaZahir > 0 ? row.hargaZahir : row.hargaMaster; row.hargaSrc = row.hargaZahir > 0 ? "Zahir" : row.hargaMaster > 0 ? "Master" : ""; }
       else { row.harga = row.hargaMaster > 0 ? row.hargaMaster : row.hargaZahir; row.hargaSrc = row.hargaMaster > 0 ? "Master" : row.hargaZahir > 0 ? "Zahir" : ""; }
       row.soh = soh;
@@ -464,7 +459,7 @@
         row.max = round6(d * row.maxDays);
         row.avgDays = d > 0 ? round6((row.buffer + row.physDays) / 2) : null;   // rata-rata stok fisik bila order sesuai rumus
         row.cycleDays = d > 0 ? round6(row.physDays - row.buffer) : null;      // qty order ≈ sekian hari pemakaian = order tiap ± sekian hari
-        row.pos = round6(soh + row.onOrder);
+        row.pos = soh; // posisi stok = SOH (PO outstanding tidak dihitung)
         row.dsi = d > 0 ? round6(soh / d) : null;
         const need = d > 0 && row.pos <= row.rop && row.pos < row.max;
         row.saran = need ? round6(row.max - row.pos) : 0;
@@ -484,7 +479,7 @@
         row.band = dsiBand(row.dsi, s);
         row.excess = d > 0 ? (row.target > 0 ? Math.max(0, round6(soh - row.physMax)) : 0) : soh; // kelebihan di atas stok fisik maksimum (target)
       } else {
-        Object.assign(row, { ss: null, rop: null, max: null, pos: soh + (row.onOrder || 0), dsi: null, saran: 0, finalAuto: 0, final: eFinal[code] != null ? eFinal[code] : 0, finalEdited: eFinal[code] != null, dsiAfter: null, status: STATUS.NOPARAM.label, rank: STATUS.NOPARAM.rank, band: "" });
+        Object.assign(row, { ss: null, rop: null, max: null, pos: soh, dsi: null, saran: 0, finalAuto: 0, final: eFinal[code] != null ? eFinal[code] : 0, finalEdited: eFinal[code] != null, dsiAfter: null, status: STATUS.NOPARAM.label, rank: STATUS.NOPARAM.rank, band: "" });
       }
       row.nilaiPR = Math.round(row.final * (row.harga || 0) * 100) / 100;
       row.nilaiSOH = Math.round(soh * (row.harga || 0) * 100) / 100;
@@ -521,7 +516,7 @@
       if (r.status === "Overstock") { k.over++; k.overValue += r.nilaiSOH; }
       if (r.status === "Tidak bergerak") { k.dead++; k.deadValue += r.nilaiSOH; }
       if (!r.hasParam && r.sohRaw > 0) { k.noParamStock++; k.noParamValue += Math.max(0, r.sohRaw) * (r.hargaZahir || 0); }
-      if (r.finalEdited || r.onOrderEdited) k.edited++;
+      if (r.finalEdited) k.edited++;
       if (r.status === "Di atas target") k.above++;
       if (r.hasParam) {
         // DSI gudang (berbobot nilai) = nilai stok ÷ nilai pemakaian per hari; sama dengan kolom DSI di sheet lama (Value SOH ÷ Value Penjualan)
