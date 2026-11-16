@@ -244,7 +244,7 @@
       chip.className = "chip " + (state.masterFromCache || state.masterWarn ? "warn" : "ok");
       chip.textContent = `${fmt(n)} item${state.masterFromCache ? " · cache" : ""}`;
       const hc = state.master.hasColumn || {};
-      const extra = ["cycle", "kelipatan", "onOrder"].filter((k) => hc[k]).map((k) => ({ cycle: "Siklus", kelipatan: "Kelipatan", onOrder: "PO outstanding" }[k]));
+      const extra = ["target", "kelipatan", "onOrder", "supplier"].filter((k) => hc[k]).map((k) => ({ target: "Target DSI", kelipatan: "Kelipatan", onOrder: "PO outstanding", supplier: "Supplier" }[k]));
       info.innerHTML = `${esc(state.masterSource)} · dimuat ${esc(new Date(state.masterLoadedAt).toLocaleString("id-ID"))}${extra.length ? ` · kolom tambahan: ${esc(extra.join(", "))}` : ""}${state.masterWarn ? `<br><span class="sev-Sedang">${esc(state.masterWarn)}</span>` : ""}`;
     } else if (state.masterError) {
       chip.className = "chip err"; chip.textContent = "Belum ada";
@@ -275,8 +275,8 @@
     $("inpDate").value = state.edits.stockDate || "";
     $("inpBy").value = state.settings.preparedBy || "";
     const s = settings();
-    const fromMaster = state.master && state.master.hasColumn && state.master.hasColumn.cycle;
-    $("lblCycle").textContent = `${fmt(s.cycleDays)} hari${fromMaster ? " (default; master punya kolom Siklus)" : ""}`;
+    const fromMaster = state.master && state.master.hasColumn && state.master.hasColumn.target;
+    $("lblCycle").textContent = `${fmt(s.targetDsi)} hari${fromMaster ? " (default; sebagian item punya target sendiri di master)" : ""}`;
   }
 
   function alertBox(kind, html) { return `<div class="alert ${kind}"><span class="dot"></span><div>${html}</div></div>`; }
@@ -296,11 +296,13 @@
   function renderKpis() {
     const k = state.result.kpi;
     const brands = Object.entries(k.byBrand).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([b, v]) => `${esc(b)} ${fmtRp(v)}`).join(" · ");
+    const t = settings().targetDsi;
+    const dsiCls = k.dsiActual == null ? "" : k.dsiActual > t * 1.1 ? "blue" : k.dsiActual < t * 0.6 ? "red" : "green";
     const cards = [
+      { cls: dsiCls, label: `DSI gudang · target ${fmt(t)} hari`, value: k.dsiActual == null ? "-" : `${fmt(k.dsiActual, 1)} hari`, sub: `Setelah PR: ${k.dsiAfterPR == null ? "-" : fmt(k.dsiAfterPR, 1) + " hari"} · nilai stok ÷ nilai pemakaian/hari` },
       { cls: "gold", label: "Perlu order", value: fmt(k.prCount) + " item", sub: `OOS ${k.oos} · Kritis ${k.kritis} · Order ${k.order}` },
       { cls: "", label: "Nilai PR", value: fmtRp(k.prValue), sub: brands || "—" },
-      { cls: "red", label: "Stok habis (OOS)", value: fmt(k.oos) + " item", sub: "Pemakaian > 0, stok 0" },
-      { cls: "blue", label: "Overstock", value: fmtRp(k.overValue), sub: `${k.over} item · DSI > ${fmt(settings().overstockDays)} hari` },
+      { cls: "blue", label: `Kelebihan di atas target`, value: fmtRp(k.excessValue), sub: `${k.excessCount} item bergerak melebihi stok maks · ${k.over} item DSI > ${fmt(settings().overstockDays)} hari` },
       { cls: "grey", label: "Tidak bergerak", value: fmtRp(k.deadValue), sub: `${k.dead} item · pemakaian 0` },
       { cls: "violet", label: "Tanpa parameter", value: fmtRp(k.noParamValue), sub: `${k.noParamStock} item ada stok · tidak dihitung` },
     ];
@@ -320,16 +322,12 @@
     $("btnResetEdits").hidden = isIssue;
   }
 
-  const stClass = (s) => ({ "OOS": "oos", "Kritis": "kritis", "Order": "order", "Aman": "aman", "Overstock": "over", "Tidak bergerak": "dead", "Tidak aktif": "idle", "Tanpa parameter": "noparam" }[s] || "idle");
+  const stClass = (s) => ({ "OOS": "oos", "Kritis": "kritis", "Order": "order", "Aman": "aman", "Di atas target": "above", "Overstock": "over", "Tidak bergerak": "dead", "Tidak aktif": "idle", "Tanpa parameter": "noparam" }[s] || "idle");
 
   function tabRows(tab) {
     const rows = state.result.rows;
     if (tab === "pr") return rows.filter((r) => r.final > 0 || (r.hasParam && r.rank <= 2));
-    if (tab === "over") return rows.filter((r) => r.status === "Overstock" || r.status === "Tidak bergerak").map((r) => {
-      const excess = r.status === "Tidak bergerak" ? r.soh : Math.max(0, r.soh - (r.max || 0));
-      r.excess = excess; r.excessValue = Math.round(excess * (r.harga || 0));
-      return r;
-    });
+    if (tab === "over") return rows.filter((r) => r.status === "Di atas target" || r.status === "Overstock" || r.status === "Tidak bergerak");
     return rows;
   }
   function applyFilters(list) {
@@ -374,6 +372,7 @@
     "Kode ganda di master": "Perbaiki kode di master.",
     "Kode ganda di file Zahir": "Cek master produk Zahir.",
     "Harga kosong": "Isi harga terakhir.",
+    "Target DSI tidak tercapai": "Perpendek lead time/buffer, atau tetapkan target khusus item ini.",
   };
   function issueList() {
     const z = state.zahir, list = state.result.issues.slice();
@@ -452,10 +451,10 @@
         ${line("Pemakaian / hari", `${fmt(d)} ${u}`, "master")}
         ${line("Buffer", `${fmt(r.buffer)} hari`, "master")}
         ${line("Lead time", `${fmt(r.lead)} hari`, "master")}
-        ${line("Siklus order", `${fmt(r.cycle)} hari`, r.cycleFromMaster ? "master" : "default pengaturan")}
+        ${line("Target DSI", `${fmt(r.target)} hari`, r.targetFromMaster ? "master" : "default pengaturan")}
         ${line("Safety stock", `${fmt(r.ss)} ${u}`, `${fmt(d)} × ${fmt(r.buffer)}`)}
         ${line("ROP", `${fmt(r.rop)} ${u}`, `${fmt(d)} × (${fmt(r.buffer)} + ${fmt(r.lead)})`, true)}
-        ${line("Stok maksimum", `${fmt(r.max)} ${u}`, `ROP + ${fmt(d)} × ${fmt(r.cycle)}`)}
+        ${line("Stok maksimum", `${fmt(r.max)} ${u}`, `${fmt(d)} × MAX(${fmt(r.target)}, ${fmt(r.buffer)} + ${fmt(r.lead)})`, true)}
         ${line("SOH Zahir", `${fmt(r.sohRaw)} ${u}`, r.inZahir ? "file Zahir" : "tidak ada di file → 0")}
         ${line("PO outstanding", `${fmt(r.onOrder || 0)} ${u}`, r.onOrderEdited ? "diisi manual" : "")}
         ${line("Posisi stok", `${fmt(r.pos)} ${u}`, "SOH + PO outstanding")}
@@ -664,7 +663,7 @@
     $("setSheet").placeholder = sc.raw && !state.settings.sheetUrl ? "Dari konfigurasi situs (kosongkan untuk tetap memakai itu)" : "https://docs.google.com/spreadsheets/d/…/edit#gid=0";
     $("setTab").value = state.settings.tab || ""; $("setTab").placeholder = sc.tab;
     $("setGid").value = state.settings.gid || ""; $("setGid").placeholder = sc.gid;
-    $("setCycle").value = s.cycleDays; $("setOver").value = s.overstockDays;
+    $("setTarget").value = s.targetDsi; $("setOver").value = s.overstockDays;
     $("setRound").checked = !!s.roundGramMl; $("setStep").value = s.roundStep; $("setPrice").value = s.priceSource;
     $("dlgSettings").showModal();
   }
@@ -674,7 +673,7 @@
     const d = Object.assign({}, Core.DEFAULT_SETTINGS, C.DEFAULTS || {});
     Object.assign(state.settings, {
       sheetUrl: $("setSheet").value.trim(), tab: $("setTab").value.trim(), gid: $("setGid").value.trim(),
-      cycleDays: num("setCycle", d.cycleDays, 0), overstockDays: num("setOver", d.overstockDays, 1),
+      targetDsi: num("setTarget", d.targetDsi, 0), overstockDays: num("setOver", d.overstockDays, 1),
       roundGramMl: $("setRound").checked, roundStep: num("setStep", d.roundStep, 1), priceSource: $("setPrice").value === "zahir" ? "zahir" : "master",
     });
     LS.set(KEY.settings, state.settings);

@@ -75,7 +75,7 @@
           <input type="text" id="inpBy" maxlength="60" placeholder="Nama PIC purchasing / SCM" autocomplete="name">
         </label>
         <div class="field">
-          <span>Siklus order</span>
+          <span>Target DSI</span>
           <strong id="lblCycle" class="mono">0 hari</strong>
         </div>
       </div>
@@ -87,7 +87,7 @@
         <div class="tabs" role="tablist" id="tabs">
           <button role="tab" data-tab="pr" aria-selected="true">Rekomendasi PR <span class="count" id="cntPr">0</span></button>
           <button role="tab" data-tab="all" aria-selected="false">Semua item <span class="count" id="cntAll">0</span></button>
-          <button role="tab" data-tab="over" aria-selected="false">Overstock &amp; tidak bergerak <span class="count" id="cntOver">0</span></button>
+          <button role="tab" data-tab="over" aria-selected="false">Di atas target &amp; tidak bergerak <span class="count" id="cntOver">0</span></button>
           <button role="tab" data-tab="issue" aria-selected="false">Data issue <span class="count" id="cntIssue">0</span></button>
         </div>
         <div class="filters" id="filters">
@@ -109,17 +109,19 @@
           <table class="formula">
             <tr><th>Safety stock</th><td>Pemakaian/hari × Buffer (hari)</td></tr>
             <tr><th>ROP</th><td>Pemakaian/hari × (Buffer + Lead time) <span class="muted">· sama dengan “Total Safety” di sheet lama</span></td></tr>
-            <tr><th>Stok maksimum</th><td>ROP + Pemakaian/hari × Siklus order <span class="muted">· siklus 0 = hasil sama persis dengan sheet lama</span></td></tr>
+            <tr><th>Stok maksimum</th><td>Pemakaian/hari × MAX(Target DSI, Buffer + Lead time) <span class="muted">· target 7 hari = setelah PR stok cukup 7 hari; target 0 = sama persis dengan sheet lama</span></td></tr>
             <tr><th>Posisi stok</th><td>SOH Zahir + PO outstanding</td></tr>
             <tr><th>Saran PR</th><td>Stok maksimum − Posisi stok, bila Posisi ≤ ROP</td></tr>
             <tr><th>Final PR</th><td>MAX(MOQ, dibulatkan ke atas ke Kelipatan) · bisa diubah manual, tercatat di log</td></tr>
             <tr><th>DSI</th><td>SOH ÷ Pemakaian/hari (hari)</td></tr>
+            <tr><th>DSI gudang</th><td>Nilai stok ÷ nilai pemakaian per hari (semua item berparameter) <span class="muted">· sama dengan kolom DSI sheet lama</span></td></tr>
           </table>
           <ul class="status-legend">
             <li><span class="st st-oos">OOS</span> stok 0 padahal ada pemakaian</li>
             <li><span class="st st-kritis">Kritis</span> DSI ≤ lead time: stok habis sebelum barang datang, percepat order</li>
             <li><span class="st st-order">Order</span> posisi stok ≤ ROP</li>
-            <li><span class="st st-aman">Aman</span> di atas ROP</li>
+            <li><span class="st st-aman">Aman</span> di atas ROP, tidak melebihi stok maksimum (target DSI)</li>
+            <li><span class="st st-above">Di atas target</span> stok melebihi stok maksimum (DSI di atas target)</li>
             <li><span class="st st-over">Overstock</span> DSI di atas batas overstock</li>
             <li><span class="st st-dead">Tidak bergerak</span> ada stok, pemakaian 0</li>
             <li><span class="st st-noparam">Tanpa parameter</span> kode tidak ada di master</li>
@@ -152,7 +154,7 @@
       <fieldset>
         <legend>Perhitungan</legend>
         <div class="grid2">
-          <label class="field"><span>Siklus order default (hari)</span><input type="number" id="setCycle" min="0" step="0.5"></label>
+          <label class="field"><span>Target DSI (hari)</span><input type="number" id="setTarget" min="0" step="0.5"></label>
           <label class="field"><span>Batas overstock (DSI, hari)</span><input type="number" id="setOver" min="1" step="1"></label>
         </div>
         <label class="check"><input type="checkbox" id="setRound"> Bulatkan Final PR satuan Gram/Ml ke atas ke kelipatan</label>
@@ -163,7 +165,7 @@
             <option value="zahir">Harga Zahir (HPP rata-rata), cadangan master</option>
           </select>
         </label>
-        <p class="muted small">Siklus order dipakai untuk item yang tidak punya kolom “Siklus Order (Hari)” di master. 0 = hasil sama dengan sheet lama (order hanya menutup sampai ROP).</p>
+        <p class="muted small">Order dipicu saat posisi stok ≤ ROP, lalu ditutup sampai stok maksimum = pemakaian × MAX(target DSI, buffer + lead time). Target per item bisa diisi di kolom “Target DSI (Hari)” master. 0 = sama dengan sheet lama (order hanya sampai ROP).</p>
       </fieldset>
       <div class="dlg-foot">
         <button class="btn ghost" value="cancel" type="submit">Batal</button>

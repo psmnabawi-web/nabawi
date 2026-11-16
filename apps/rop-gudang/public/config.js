@@ -13,7 +13,7 @@ window.ROP_CONFIG = {
 
   // Master parameter ROP. Default: tab "PKU" di spreadsheet "Perhitungan Kebutuhan /ROP WH Pekanbaru".
   // Kolom dibaca berdasarkan nama header: Kode Barang, Nama, Satuan, Kategori, Penjualan 1 Hari, Buffer Stock (Hari),
-  // Lead Time (Hari), Minimum Order Versi Purchasing, Harga. Opsional: Siklus Order (Hari), Kelipatan Order, PO Outstanding.
+  // Lead Time (Hari), Minimum Order Versi Purchasing, Harga. Opsional: Target DSI (Hari), Kelipatan Order, PO Outstanding, Supplier.
   MASTER: {
     SHEET_URL: "",      // link spreadsheet atau ID-nya
     GID: "0",           // gid tab parameter (tab PKU = 0)
@@ -23,7 +23,7 @@ window.ROP_CONFIG = {
 
   // Nilai awal pengaturan (bisa diubah di menu Pengaturan; tersimpan per browser).
   DEFAULTS: {
-    cycleDays: 0,        // siklus order (hari) bila master tidak punya kolom Siklus. 0 = sama persis dengan sheet lama
+    targetDsi: 7,        // target DSI (hari): order menutup stok sampai pemakaian × MAX(target, buffer + lead time). 0 = sama persis dengan sheet lama
     overstockDays: 30,   // DSI di atas ini = Overstock
     roundGramMl: true,   // Final PR satuan Gram/Ml dibulatkan ke atas ke kelipatan roundStep (bila Kelipatan di master kosong)
     roundStep: 1000,

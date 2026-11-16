@@ -94,7 +94,7 @@ test("parseMaster: header tab PKU, locale ID, kode dinormalisasi, kode ganda & k
   assert.equal(m.byCode.K002.kode, "k 002");
   assert.equal(m.byCode.A004.harga, 21000);
   assert.equal(m.byCode.K002.harga, 95.5);
-  assert.equal(m.hasColumn.cycle, false); assert.equal(m.hasColumn.kelipatan, false);
+  assert.equal(m.hasColumn.target, false); assert.equal(m.hasColumn.kelipatan, false);
   const types = m.issues.map((i) => i.type).sort();
   assert.deepEqual(types, ["Baris tanpa kode", "Kode ganda di master"]);
 });
@@ -112,8 +112,8 @@ test("parseMaster: label header gabungan ala gviz tetap terbaca", () => {
   assert.equal(m.byCode.X1.moq, 12); assert.equal(m.byCode.X1.harga, 1500); assert.equal(m.byCode.X1.buffer, 2);
 });
 
-test("compute (default): ROP, Saran PR, Final PR, status, nilai — setara sheet lama + pembulatan", () => {
-  const r = run();
+test("compute (target DSI 0 = sheet lama): ROP, Saran PR, Final PR, status, nilai + pembulatan", () => {
+  const r = run({ targetDsi: 0 });
   assert.equal(r.masterFitsGudang, true);
   assert.equal(r.rows.length, 9); // 8 baris Zahir + K009 (ada di master, tidak ada di file)
   const a1 = byCode(r, "A001");
@@ -144,17 +144,50 @@ test("compute (default): ROP, Saran PR, Final PR, status, nilai — setara sheet
 });
 
 test("compute: tanpa pembulatan = Final PR sama dengan PR sheet lama (dengan MOQ minimum)", () => {
-  const r = run({ roundGramMl: false });
+  const r = run({ targetDsi: 0, roundGramMl: false });
   assert.equal(byCode(r, "A002").final, 200);
   assert.equal(r.kpi.prValue, 338750 - 16000 + 3200);
 });
 
-test("compute: siklus order menaikkan stok maksimum dan memicu order di titik ROP", () => {
-  const r = run({ cycleDays: 2 });
+test("compute (default target DSI 7): order di titik ROP, ditutup sampai stok 7 hari", () => {
+  const r = run();
+  assert.equal(r.settings.targetDsi, 7);
   const a1 = byCode(r, "A001");
-  assert.equal(a1.max, 7500); assert.equal(a1.saran, 2500); assert.equal(a1.status, "Order");
-  assert.equal(a1.final, 10000); // MAX(MOQ 10.000, CEILING(2.500; 1.000))
-  assert.equal(byCode(r, "A003").saran, 260);
+  assert.equal(a1.rop, 5000); assert.equal(a1.max, 8750); assert.equal(a1.saran, 3750); assert.equal(a1.status, "Order");
+  assert.equal(a1.final, 10000); // MAX(MOQ 10.000, CEILING(3.750; 1.000))
+  const a3 = byCode(r, "A003");
+  assert.equal(a3.max, 560); assert.equal(a3.saran, 260); assert.equal(a3.final, 260); assert.equal(a3.dsiAfter, 7);
+  assert.equal(byCode(r, "A004").final, 7); assert.equal(byCode(r, "K009").final, 70);
+  const k2 = byCode(r, "K002");
+  assert.equal(k2.max, 700); assert.equal(k2.saran, 500); assert.equal(k2.final, 500); assert.equal(k2.dsiAfter, 7);
+  const k1 = byCode(r, "11401");
+  assert.equal(k1.max, 140); assert.equal(k1.excess, 860); assert.equal(k1.excessValue, 430000); assert.equal(k1.status, "Overstock");
+  assert.equal(byCode(r, "A005").excess, 1000);
+  const k = r.kpi;
+  assert.equal(k.prCount, 6); assert.equal(k.prValue, 785750);
+  assert.equal(k.oos, 3); assert.equal(k.kritis, 1); assert.equal(k.order, 2);
+  // DSI gudang = nilai stok ÷ nilai pemakaian per hari = 1.046.600 ÷ 186.525
+  assert.equal(k.paramStockValue, 1046600); assert.equal(k.usageValue, 186525);
+  assert.equal(k.dsiActual, 5.61); assert.equal(k.dsiAfterPR, 9.82);
+  assert.equal(k.excessCount, 1); assert.equal(k.excessValue, 430000);
+});
+
+test("compute: status Di atas target, target per item, dan target tidak tercapai", () => {
+  const rows = [["Kode Barang", "Nama", "Satuan", "Penjualan 1 Hari", "Buffer Stock (Hari)", "Lead Time (Hari)", "Target DSI (Hari)", "Harga"],
+    ["X1", "Kotak", "Pcs", "10", "2", "2", "", "100"],
+    ["X2", "Plastik", "Pcs", "10", "10", "14", "", "50"],
+    ["X3", "Botol", "Pcs", "10", "1", "1", "3", "20"]];
+  const m = C.parseMaster(rows);
+  assert.equal(m.ok, true, m.error); assert.equal(m.hasColumn.target, true);
+  const stock = [["X1", 150], ["X2", 100], ["X3", 25]].map(([c, q]) => ({ code: c, kode: c, nama: c, qty: q, satuan: "Pcs", harga: 0, kategori: "K", gudang: "W" }));
+  const r = C.compute({ stockItems: stock, master: m });
+  const x1 = byCode(r, "X1");
+  assert.equal(x1.max, 70); assert.equal(x1.dsi, 15); assert.equal(x1.status, "Di atas target"); assert.equal(x1.excess, 80); assert.equal(x1.excessValue, 8000);
+  const x2 = byCode(r, "X2");
+  assert.equal(x2.max, 240); assert.equal(x2.status, "Kritis"); // DSI 10 ≤ lead time 14 assert.ok(x2.issues.includes("Target DSI tidak tercapai"));
+  const x3 = byCode(r, "X3");
+  assert.equal(x3.targetFromMaster, true); assert.equal(x3.target, 3); assert.equal(x3.max, 30); assert.equal(x3.status, "Aman");
+  assert.equal(r.kpi.above, 1); assert.equal(r.kpi.excessValue, 8000);
 });
 
 test("compute: edit manual Final PR & PO outstanding", () => {
@@ -168,10 +201,10 @@ test("compute: edit manual Final PR & PO outstanding", () => {
   assert.equal(byCode(run({}, { final: { K002: 500 } }), "K002").finalEdited, false);
 });
 
-test("compute: kelipatan dari master & kolom siklus per item", () => {
-  const rows = [["Kode Barang", "Nama", "Satuan", "Penjualan 1 Hari", "Buffer Stock (Hari)", "Lead Time (Hari)", "Siklus Order (Hari)", "Minimum Order", "Kelipatan Order", "Harga", "PO Outstanding", "Aktif"],
+test("compute: kelipatan dari master & kolom target per item", () => {
+  const rows = [["Kode Barang", "Nama", "Satuan", "Penjualan 1 Hari", "Buffer Stock (Hari)", "Lead Time (Hari)", "Target DSI (Hari)", "Minimum Order", "Kelipatan Order", "Harga", "PO Outstanding", "Aktif"],
     ["G1", "Gula", "Gram", "15925", "2", "5", "", "50000", "50000", "18", "", "Ya"],
-    ["G2", "Garam", "Gram", "100", "2", "2", "3", "", "", "10", "", "Ya"],
+    ["G2", "Garam", "Gram", "100", "2", "2", "10", "", "", "10", "", "Ya"],
     ["G3", "Lama", "Pcs", "10", "1", "1", "", "", "", "", "", "Tidak"]];
   const m = C.parseMaster(rows);
   assert.equal(m.ok, true, m.error);
@@ -180,7 +213,7 @@ test("compute: kelipatan dari master & kolom siklus per item", () => {
   const g1 = byCode(r, "G1");
   assert.equal(g1.rop, 111475); assert.equal(g1.saran, 59515); assert.equal(g1.final, 100000); assert.equal(g1.kelipatanFromMaster, true);
   const g2 = byCode(r, "G2");
-  assert.equal(g2.cycleFromMaster, true); assert.equal(g2.max, 700); assert.equal(g2.saran, 600); assert.equal(g2.final, 1000);
+  assert.equal(g2.targetFromMaster, true); assert.equal(g2.max, 1000); assert.equal(g2.saran, 900); assert.equal(g2.final, 1000);
   assert.equal(byCode(r, "G3"), undefined); // tidak aktif → tidak dihitung
 });
 
@@ -195,10 +228,10 @@ test("prioritySort & prText", () => {
   const r = run();
   const pr = r.rows.filter((x) => x.final > 0).sort(C.prioritySort).map((x) => x.code);
   assert.deepEqual(pr.slice(0, 3).sort(), ["A002", "A004", "K009"]);
-  assert.equal(pr[3], "K002"); assert.equal(pr[4], "A003");
+  assert.deepEqual(pr.slice(3), ["K002", "A003", "A001"]); // Kritis, lalu Order dengan DSI terkecil
   const t = C.prText(r.rows, { gudang: "GUDANG PUSAT", stockDate: "16/11/2026", preparedBy: "Tes" });
   assert.match(t, /Rekomendasi Pembelian GUDANG PUSAT/);
-  assert.match(t, /Jumlah item: 5 · Nilai: Rp 338\.750/);
+  assert.match(t, /Jumlah item: 6 · Nilai: Rp 785\.750/);
   assert.match(t, /\*Stok habis \(3\)\*/);
   assert.match(t, /Plastik Uji \(K002\): 500 Pcs/);
 });
@@ -217,17 +250,17 @@ test("Supplier di master, pengelompokan PO, dan konversi Gram→Kg", () => {
   assert.equal(byCode(r, "A002").supplier, "CV Tepung Jaya");
   assert.equal(byCode(r, "K009").supplier, "");
   const g = C.poGroups(r.rows, "supplier");
-  assert.deepEqual(g.map((x) => [x.key, x.items.length, x.missingSupplier]), [["CV Tepung Jaya", 1, false], ["PT Kemasan Uji", 1, false], ["UD Telur Segar", 1, false], ["(Supplier belum diisi)", 2, true]]);
-  assert.equal(g[3].total, 105000 + 20000);
+  assert.deepEqual(g.map((x) => [x.key, x.items.length, x.missingSupplier]), [["CV Tepung Jaya", 2, false], ["PT Kemasan Uji", 1, false], ["UD Telur Segar", 1, false], ["(Supplier belum diisi)", 2, true]]);
+  assert.equal(g[3].total, 147000 + 70000);
   assert.equal(g[1].maxLead, 2);
   const kat = C.poGroups(r.rows, "kategori");
   assert.deepEqual(kat.map((x) => x.key), ["(Tanpa kategori)", "Bahan Baku", "Kemasan"]);
   const one = C.poGroups(r.rows, "satu");
-  assert.equal(one.length, 1); assert.equal(one[0].items.length, 5); assert.equal(one[0].total, 338750);
+  assert.equal(one.length, 1); assert.equal(one[0].items.length, 6); assert.equal(one[0].total, 785750);
   const a2 = byCode(r, "A002");
   assert.deepEqual(C.poLine(a2, true), { qty: 1, satuan: "Kg", harga: 16000, jumlah: 16000 });
   assert.deepEqual(C.poLine(a2, false), { qty: 1000, satuan: "Gram", harga: 16, jumlah: 16000 });
-  assert.deepEqual(C.poLine(byCode(r, "A003"), true), { qty: 100, satuan: "Butir", harga: 1500, jumlah: 150000 });
+  assert.deepEqual(C.poLine(byCode(r, "A003"), true), { qty: 260, satuan: "Butir", harga: 1500, jumlah: 390000 });
   assert.equal(C.poNumber("PO/20261116/", 7), "PO/20261116/007");
 });
 

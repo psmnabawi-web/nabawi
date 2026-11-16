@@ -21,19 +21,22 @@ Perubahan manual tersimpan di browser per file (dikunci SHA-256 file), tercatat 
 
 ## Cara hitung
 
-Sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (kolom Total Safety & PR), ditambah PO outstanding, siklus order, dan pembulatan:
+Pemicu order sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (Total Safety = ROP). Qty order menutup stok sampai **target DSI** (default **7 hari**), ditambah PO outstanding dan pembulatan:
 
 | Besaran | Rumus |
 |---|---|
 | Safety stock | Pemakaian/hari × Buffer (hari) |
 | ROP | Pemakaian/hari × (Buffer + Lead time) |
-| Stok maksimum | ROP + Pemakaian/hari × Siklus order (hari) |
+| Stok maksimum | Pemakaian/hari × MAX(Target DSI, Buffer + Lead time) |
 | Posisi stok | SOH Zahir (negatif dihitung 0) + PO outstanding |
 | Saran PR | Stok maksimum − Posisi stok, bila Posisi ≤ ROP; selain itu 0 |
 | Final PR | MAX(MOQ, CEILING(Saran PR, Kelipatan)) |
 | DSI | SOH ÷ Pemakaian/hari |
+| DSI gudang | Nilai stok ÷ nilai pemakaian per hari (semua item berparameter; sama dengan kolom DSI sheet lama) |
+| Kelebihan | SOH − Stok maksimum (barang bergerak) · seluruh SOH (barang tidak bergerak) |
 
-- **Siklus order 0 (default)** = hasil Saran PR sama persis dengan kolom PR di sheet lama.
+- **Target DSI 7 (default)**: setelah PR, posisi stok cukup untuk 7 hari pemakaian. Bila Buffer + Lead time > 7 (mis. lead time supplier 14 hari), stok maksimum memakai Buffer + Lead time dan item ditandai *Target DSI tidak tercapai*.
+- Target bisa diubah di Pengaturan (berlaku semua item) atau per item lewat kolom `Target DSI (Hari)` di master. **Target 0** = hasil Saran PR sama persis dengan kolom PR di sheet lama (order hanya sampai ROP).
 - **Kelipatan**: kolom `Kelipatan Order` di master. Bila kosong, satuan Gram/Ml dibulatkan ke atas per 1.000 (bisa dimatikan di Pengaturan).
 - **Harga**: kolom `Harga` di master (harga beli terakhir); bila kosong pakai harga satuan Zahir (HPP rata-rata).
 - Kode yang ada di master tetapi tidak ada di file dihitung stok 0 (sama dengan VLOOKUP sheet lama) dan ditandai di Data issue. Aturan ini hanya berlaku bila master memang untuk gudang yang dipilih (≥ 50% kode master ada di gudang itu).
@@ -43,7 +46,8 @@ Sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (kolom Total Safety & PR), dit
 | OOS | Stok 0, ada pemakaian | Order hari ini / transfer |
 | Kritis | DSI ≤ lead time: habis sebelum barang datang | Order + percepat supplier |
 | Order | Posisi stok ≤ ROP | Order sesuai Final PR |
-| Aman | Di atas ROP | — |
+| Aman | Di atas ROP, tidak melebihi stok maksimum | — |
+| Di atas target | Stok melebihi stok maksimum (DSI > target) | Tahan order, habiskan dulu |
 | Overstock | DSI > batas overstock (default 30 hari) | Tahan order, dorong pemakaian |
 | Tidak bergerak | Ada stok, pemakaian 0 | Cek parameter / cuci gudang |
 | Tanpa parameter | Kode tidak ada di master | Lengkapi master |
@@ -64,7 +68,7 @@ Sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (kolom Total Safety & PR), dit
 | Harga | | harga beli terakhir |
 | Nama, Satuan, Kategori | | informasi & pengecekan satuan |
 | Supplier | | memisah Cetak PO per supplier |
-| Siklus Order (Hari), Kelipatan Order, PO Outstanding, Aktif | | kolom tambahan opsional |
+| Target DSI (Hari), Kelipatan Order, PO Outstanding, Aktif | | kolom tambahan opsional |
 
 Tombol **Unduh template master** menghasilkan file Excel berisi semua kolom di atas (terisi parameter yang sedang dipakai). File itu bisa di-upload kembali bila Google Sheet tidak bisa diakses.
 

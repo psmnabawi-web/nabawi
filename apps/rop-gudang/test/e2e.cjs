@@ -37,21 +37,22 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await page.setInputFiles("#fileZahir", FX("zahir-contoh.xls"));
     await page.waitForSelector("#results:not([hidden])");
     const kpi = await page.textContent("#kpis");
-    assert.match(kpi, /5 item/); assert.match(kpi, /Rp 338\.750/);
+    assert.match(kpi, /6 item/); assert.match(kpi, /Rp 785\.750/);
+    assert.match(kpi, /DSI gudang · target 7 hari/); assert.match(kpi, /5,6 hari/); assert.match(kpi, /Setelah PR: 9,8 hari/);
     assert.match(await page.textContent("#alerts"), /6 dari 6 subtotal/);
     assert.equal(await page.inputValue("#selGudang"), "GUDANG PUSAT › GUDANG PUSAT");
-    assert.equal(await page.textContent("#cntPr"), "5");
+    assert.equal(await page.textContent("#cntPr"), "6");
 
     // edit Final PR K002 500 → 600 (Tab pindah sel; fokus harus tetap di sel berikutnya)
     const fin = page.locator('input[data-code="K002"][data-field="final"]');
     await fin.fill("600"); await fin.press("Tab");
-    await page.waitForFunction(() => document.getElementById("kpis").textContent.includes("Rp 348.300"));
+    await page.waitForFunction(() => document.getElementById("kpis").textContent.includes("Rp 795.300"));
     assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.dataset.code), "K002");
     assert.ok(await page.locator('input[data-code="K002"][data-field="final"].edited').count());
     // PO outstanding A003 = 150 → keluar dari PR
     const po = page.locator('input[data-code="A003"][data-field="onOrder"]');
     await po.fill("150"); await po.press("Enter");
-    await page.waitForFunction(() => document.getElementById("kpis").textContent.includes("Rp 198.300"));
+    await page.waitForFunction(() => document.getElementById("kpis").textContent.includes("Rp 405.300"));
 
     // rincian hitungan
     await page.click('button[data-detail="A002"]');
@@ -78,7 +79,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await page.waitForSelector("#dlgPO[open]");
     assert.equal(await page.inputValue("#poBy"), "supplier");
     assert.equal(await page.locator("#poGroups input[type=checkbox]").count(), 3);
-    assert.equal(await page.textContent("#poSummary"), "3 PO · 4 item · Rp 198.300");
+    assert.equal(await page.textContent("#poSummary"), "3 PO · 5 item · Rp 405.300");
     const ymd = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`; });
     assert.equal(await page.inputValue("#poPrefix"), `PO/${ymd}/`);
     assert.equal(await page.inputValue("#poSeq"), "1");
@@ -138,18 +139,20 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     const zx = path.join(OUT, "zahir-contoh.xlsx"); fs.writeFileSync(zx, Buffer.from(await zwb.xlsx.writeBuffer()));
     await page.setInputFiles("#fileZahir", zx);
     await page.waitForFunction(() => /9 baris · subtotal 6\/6 cocok/.test(document.getElementById("fileChip").textContent));
-    assert.match(await page.textContent("#kpis"), /5 item/);
+    assert.match(await page.textContent("#kpis"), /6 item/);
 
     // gudang Sales
     await page.selectOption("#selGudang", "GUDANG PUSAT › Sales");
     assert.match(await page.textContent("#alerts"), /bukan untuk gudang ini/);
     await page.selectOption("#selGudang", "GUDANG PUSAT › GUDANG PUSAT");
 
-    // pengaturan: siklus 2 hari → A001 ikut order
+    // pengaturan: target DSI 0 = perilaku sheet lama → A001 (tepat di ROP) tidak lagi order
     await page.click("#btnSettings");
-    await page.fill("#setCycle", "2");
+    assert.equal(await page.inputValue("#setTarget"), "7");
+    await page.fill("#setTarget", "0");
     await page.click("#btnSaveSettings");
-    await page.waitForFunction(() => document.getElementById("cntPr").textContent === "6");
+    await page.waitForFunction(() => document.getElementById("cntPr").textContent === "5");
+    assert.match(await page.textContent("#kpis"), /Rp 338\.750/);
 
     // mobile: tidak ada scroll horizontal halaman
     await page.setViewportSize({ width: 390, height: 844 });
@@ -186,7 +189,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await p3.click("#btnSheetQuick");
     await p3.waitForSelector("#masterChip.ok");
     await p3.waitForSelector("#results:not([hidden])");
-    assert.match(await p3.textContent("#kpis"), /5 item/);
+    assert.match(await p3.textContent("#kpis"), /6 item/);
     await ctx3.close();
 
     assert.deepEqual(problems, [], problems.join("\n"));

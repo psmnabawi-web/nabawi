@@ -297,3 +297,5 @@ table.po-items { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
   #btnSettings { position: absolute; top: 10px; right: 16px; }
   .actions .btn:not(.icon) { padding: 8px 8px; font-size: 13.5px; }
 }
+.st-above { background: #e6f0fb; color: #2b5ea7; }
+.kpi.green { --accent: var(--green); }
