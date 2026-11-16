@@ -80,7 +80,19 @@ Tombol **Unduh template master** menghasilkan file Excel berisi semua kolom di a
 
 Rumus Excel diuji: workbook ditulis tanpa nilai cache, dihitung ulang oleh LibreOffice, lalu hasilnya dibandingkan dengan hitungan aplikasi (`test/export.test.cjs`).
 
-## Setup & deploy (sekali, ±5 menit)
+## Deploy otomatis (aktif)
+
+Workflow `.github/workflows/deploy-rop-gudang.yml` menerbitkan `public/` ke situs Firebase Hosting **terpisah** di project `sssg-dashboard-2026` setiap ada perubahan di branch pengembangan / `main` (tes dulu, baru deploy). Situs SSSG tidak disentuh: config deploy memakai `site` eksplisit dan nama situs SSSG ditolak. Bisa juga dijalankan manual dari tab Actions.
+
+**Link untuk tim.** Link Google Sheet tidak ikut ter-deploy. Bagikan alamat aplikasi dengan sumber parameter di belakang `#`:
+
+```
+https://<situs>.web.app/#sheet=<ID_SPREADSHEET>&gid=0&tab=PKU
+```
+
+Bagian setelah `#` tidak pernah dikirim ke server. Cukup dibuka sekali per perangkat; setelah itu alamat biasa sudah memakai sheet tersebut. Link ini juga bisa disalin dari menu Pengaturan → **Salin link aplikasi untuk tim**.
+
+## Deploy manual ke project sendiri (opsional, ±5 menit)
 
 1. **Google Sheet parameter** → Bagikan → Akses umum: **Siapa saja yang memiliki link → Pelihat**. Jangan *Editor*: link ini ikut ter-deploy di situs.
 2. Di Google Cloud Shell (atau laptop dengan Node.js 20+), jalankan:

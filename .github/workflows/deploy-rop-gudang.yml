@@ -3,11 +3,15 @@ name: Deploy ROP Gudang
 # apps/rop-gudang/public → situs Firebase Hosting TERPISAH di project sssg-dashboard-2026 (token SSSG_FIREBASE_TOKEN).
 # Situs SSSG (sssg-dashboard-2026, dashboard-inti-warna) tidak pernah disentuh: config deploy ditulis dengan "site" eksplisit
 # dan script menolak nama situs SSSG. Link Google Sheet parameter TIDAK ikut ter-deploy (dibagikan lewat link #sheet=...).
-# STATUS: hanya manual (workflow_dispatch). Pemicu push sengaja BELUM diaktifkan sampai pemilik project mengonfirmasi
-# bahwa app ini boleh ditaruh di project sssg-dashboard-2026. Untuk mengaktifkan deploy otomatis, tambahkan:
-#   push: { branches: ["claude/zealous-carson-bns1ge", "main"], paths: ["apps/rop-gudang/public/**", "apps/rop-gudang/firebase.json"] }
+# Disetujui pemilik project (16/11/2026): app ini ditaruh sebagai situs terpisah di project sssg-dashboard-2026.
 on:
   workflow_dispatch:
+  push:
+    branches: ["claude/zealous-carson-bns1ge", "main"]
+    paths:
+      - "apps/rop-gudang/public/**"
+      - "apps/rop-gudang/firebase.json"
+      - ".github/workflows/deploy-rop-gudang.yml"
 
 concurrency:
   group: deploy-rop-gudang
