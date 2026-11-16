@@ -4,3 +4,4 @@ firebase-debug.log
 # berisi link Google Sheet parameter; ditulis oleh deploy.sh, jangan di-commit (repo publik)
 public/config.local.json
 test/out/
+firebase.ci.json

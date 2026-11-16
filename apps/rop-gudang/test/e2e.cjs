@@ -124,6 +124,20 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     assert.ok(sw <= 390, "scrollWidth mobile " + sw);
     await page.screenshot({ path: path.join(OUT, "mobile.png"), fullPage: false });
 
+    // link untuk tim: perangkat baru membuka https://situs/#sheet=<ID>&gid=0&tab=PKU → sumber parameter tersimpan, hash dibersihkan
+    const ctx2 = await browser.newContext();
+    await ctx2.grantPermissions(["clipboard-read", "clipboard-write"], { origin: base.replace(/\/$/, "") });
+    await ctx2.route("https://docs.google.com/**", (route) => route.fulfill({ status: 200, contentType: "text/csv; charset=utf-8", body: fs.readFileSync(FX("master-contoh.csv"), "utf8") }));
+    const p2 = await ctx2.newPage();
+    p2.on("pageerror", (e) => problems.push("pageerror(p2): " + e.message));
+    await p2.goto(base + "#sheet=TESTSHEET_abcdefghijklmnopqrstuvwxyz&gid=0&tab=PKU");
+    await p2.waitForSelector("#masterChip.ok");
+    assert.equal(await p2.evaluate(() => location.hash), "");
+    assert.match(await p2.evaluate(() => localStorage.getItem("rop.settings.v1")), /TESTSHEET_abcdefghijklmnopqrstuvwxyz/);
+    await p2.click("#btnSettings"); await p2.click("#btnShareLink");
+    assert.equal(await p2.evaluate(() => navigator.clipboard.readText()), base + "#sheet=TESTSHEET_abcdefghijklmnopqrstuvwxyz&gid=0&tab=PKU");
+    await ctx2.close();
+
     assert.deepEqual(problems, [], problems.join("\n"));
     console.log("E2E OK · screenshot & export di test/out/");
   } catch (e) {

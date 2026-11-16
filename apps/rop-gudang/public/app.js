@@ -588,6 +588,7 @@
     $("btnExport").addEventListener("click", doExport);
     $("btnCopy").addEventListener("click", doCopy);
     $("btnSettings").addEventListener("click", openSettings);
+    $("btnShareLink").addEventListener("click", copyTeamLink);
     $("dlgSettings").addEventListener("close", () => { if ($("dlgSettings").returnValue === "save") saveSettings(); });
 
     $("selGudang").addEventListener("change", (e) => {
@@ -634,9 +635,40 @@
     tbl.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches("input.cell")) { e.preventDefault(); e.target.blur(); } });
   }
 
+  // Link aplikasi untuk tim: https://<situs>/#sheet=<ID>&gid=0&tab=PKU
+  // Bagian setelah "#" tidak pernah dikirim ke server, jadi link sheet tidak tersimpan di situs maupun repo.
+  function readHashConfig() {
+    const h = location.hash.replace(/^#/, "");
+    if (!h) return false;
+    const p = new URLSearchParams(h);
+    const raw = p.get("sheet") || "";
+    const id = (raw.match(/\/d\/([a-zA-Z0-9_-]{20,})/) || [])[1] || (/^[a-zA-Z0-9_-]{20,}$/.test(raw) ? raw : "");
+    if (!id) return false;
+    state.settings.sheetUrl = `https://docs.google.com/spreadsheets/d/${id}/edit`;
+    const gid = (p.get("gid") || "").replace(/\D/g, "");
+    if (gid) state.settings.gid = gid;
+    const tab = (p.get("tab") || "").trim().slice(0, 60);
+    if (tab) state.settings.tab = tab;
+    LS.set(KEY.settings, state.settings);
+    try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* abaikan */ }
+    return true;
+  }
+  function teamLink() {
+    const sc = sheetConf();
+    if (!sc.id) return "";
+    return `${location.origin}${location.pathname}#sheet=${sc.id}&gid=${encodeURIComponent(sc.gid)}&tab=${encodeURIComponent(sc.tab)}`;
+  }
+  async function copyTeamLink() {
+    const link = teamLink();
+    if (!link) return toast("Isi dan simpan link Google Sheet dulu.", true);
+    try { await navigator.clipboard.writeText(link); toast("Link aplikasi untuk tim tersalin."); }
+    catch (e) { prompt("Salin link ini untuk tim:", link); }
+  }
+
   // ---------------- start ----------------
   async function init() {
     state.settings = LS.get(KEY.settings, {}) || {};
+    const fromHash = readHashConfig();
     try {
       const r = await fetch("config.local.json", { cache: "no-store" });
       if (r.ok && /json/.test(r.headers.get("content-type") || "")) state.local = await r.json();
@@ -651,6 +683,7 @@
     renderAll();
     await loadMasterFromSheet(false);
     recompute();
+    if (fromHash && state.master && !state.masterError) toast("Sumber parameter tersimpan dari link. Berikutnya cukup buka alamat aplikasi.");
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 
