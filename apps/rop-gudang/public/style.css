@@ -243,3 +243,57 @@ table.formula { border-collapse: collapse; font-size: 13px; width: 100%; }
 /* kotak tempel link sheet di kartu Parameter */
 .inline-form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .inline-form input { flex: 1 1 260px; min-width: 0; min-height: 36px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+
+/* ---------- Cetak PO ---------- */
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.dlg textarea { min-height: 64px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; resize: vertical; width: 100%; }
+.dlg-foot .grow { flex: 1 1 auto; align-self: center; }
+.po-groups { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.po-groups label { display: flex; gap: 8px; align-items: center; font-size: 13px; padding: 3px 0; cursor: pointer; }
+.po-groups label span { flex: 1 1 auto; min-width: 0; }
+.po-groups label b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.po-groups .warn { color: var(--orange); }
+#printArea { display: none; }
+@media (max-width: 640px) { .grid3 { grid-template-columns: minmax(0, 1fr); } }
+
+/* dokumen PO (hanya tampil saat cetak) */
+.po { color: #111; font: 10.5pt/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+.po-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid #14305a; padding-bottom: 8px; margin-bottom: 12px; }
+.po-company { font-size: 13pt; font-weight: 700; color: #14305a; }
+.po-company small { display: block; font-size: 9pt; font-weight: 400; color: #555; }
+.po-title { text-align: right; }
+.po-title h2 { font-size: 16pt; letter-spacing: .06em; color: #14305a; margin: 0 0 4px; }
+.po-title table td { padding: 1px 0 1px 10px; font-size: 9.5pt; }
+.po-title table td:first-child { color: #555; }
+.po-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.po-box { border: 1px solid #c9ced8; border-radius: 4px; padding: 6px 9px; min-height: 58px; }
+.po-box .lbl { font-size: 8.5pt; text-transform: uppercase; letter-spacing: .05em; color: #555; }
+.po-box .val { font-weight: 600; margin-top: 2px; }
+.po-box .line { border-bottom: 1px dotted #888; height: 18px; margin-top: 4px; }
+table.po-items { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+.po-items th { background: #14305a; color: #fff; text-align: left; padding: 5px 6px; font-weight: 600; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.po-items td { border-bottom: 1px solid #d9dde4; padding: 4px 6px; vertical-align: top; }
+.po-items .r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.po-items tfoot td { font-weight: 700; border-top: 2px solid #14305a; border-bottom: 0; }
+.po-items tr { break-inside: avoid; }
+.po-note { margin-top: 10px; font-size: 9.5pt; white-space: pre-line; }
+.po-sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 22px; text-align: center; font-size: 9.5pt; break-inside: avoid; }
+.po-sign .space { height: 56px; }
+.po-sign .name { border-top: 1px solid #333; padding-top: 3px; min-height: 18px; }
+.po-foot { margin-top: 14px; font-size: 8pt; color: #777; border-top: 1px solid #e3e6ec; padding-top: 4px; }
+
+@media print {
+  body.printing { background: #fff; }
+  body.printing > *:not(#printArea) { display: none !important; }
+  body.printing #printArea { display: block; }
+  .po { break-after: page; page-break-after: always; }
+  .po:last-child { break-after: auto; page-break-after: auto; }
+  @page { size: A4 portrait; margin: 12mm 12mm 14mm; }
+}
+.po-box .po-sub { margin-top: 4px; font-size: 9pt; }
+@media (max-width: 640px) {
+  .topbar { position: relative; }
+  .brand { padding-right: 48px; }
+  #btnSettings { position: absolute; top: 10px; right: 16px; }
+  .actions .btn:not(.icon) { padding: 8px 8px; font-size: 13.5px; }
+}

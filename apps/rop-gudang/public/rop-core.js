@@ -302,7 +302,7 @@
   // Dibaca berdasarkan NAMA header (bukan posisi kolom), jadi tab "PKU" di Google Sheet bisa dipakai apa adanya.
   const MASTER_FIELDS = [
     { key: "kode", label: "Kode Barang", required: true, test: (h) => /\bKODE\b/.test(h) },
-    { key: "nama", label: "Nama", test: (h) => /\bNAMA\b/.test(h) },
+    { key: "nama", label: "Nama", test: (h) => /^NAMA( BARANG| PRODUK)?$/.test(h) || /^\S+ NAMA$/.test(h) },
     { key: "satuan", label: "Satuan", test: (h) => /\bSATUAN\b/.test(h) },
     { key: "brand", label: "Kategori", test: (h) => /\b(KATEGORI|BRAND)\b/.test(h) },
     { key: "usage", label: "Penjualan 1 Hari", required: true, test: (h) => /PENJUALAN 1 HARI|PEMAKAIAN|KEBUTUHAN 1 HARI|USAGE|RATA-?RATA (PER |\/ ?)HARI|PENJUALAN PER HARI/.test(h) },
@@ -314,6 +314,7 @@
     { key: "harga", label: "Harga", test: (h) => /(^|\s)HARGA( TERAKHIR| BELI| SATUAN| PEMBELIAN)?$/.test(h) },
     { key: "onOrder", label: "PO Outstanding", test: (h) => /PO OUTSTANDING|OUTSTANDING PO|ON ORDER|DALAM PERJALANAN/.test(h) },
     { key: "aktif", label: "Aktif", test: (h) => /^AKTIF$|^STATUS AKTIF$/.test(h) },
+    { key: "supplier", label: "Supplier", test: (h) => /^(NAMA )?(SUPPLIER|VENDOR|PEMASOK)( UTAMA)?$/.test(h) },
   ];
   const NUM_FIELDS = ["usage", "buffer", "lead", "cycle", "moq", "kelipatan", "harga", "onOrder"];
 
@@ -348,7 +349,7 @@
       const nama = normText(get("nama"));
       const usageRaw = get("usage");
       if (!kode) { if (nama && !isBlank(usageRaw)) blankCode++; return; }
-      const it = { kode, code: normCode(kode), nama, satuan: normText(get("satuan")), brand: normText(get("brand")), row: hdr.row + i + 2 };
+      const it = { kode, code: normCode(kode), nama, satuan: normText(get("satuan")), brand: normText(get("brand")), supplier: normText(get("supplier")), row: hdr.row + i + 2 };
       for (const k of NUM_FIELDS) {
         const v = get(k);
         const n = parseNum(v, locale);
@@ -424,7 +425,7 @@
       const row = {
         code, kode: st ? st.kode : m.kode, nama: st ? st.nama : m.nama,
         satuan: st ? st.satuan : m.satuan, satuanMaster: m ? m.satuan : "",
-        brand: m ? m.brand : "", kategori: st ? st.kategori : "", gudang: st ? st.gudang : "",
+        brand: m ? m.brand : "", supplier: m ? m.supplier || "" : "", kategori: st ? st.kategori : "", gudang: st ? st.gudang : "",
         inZahir: !!st, hasParam: !!m, aktif: m ? m.aktif !== false : true,
         sohRaw: st ? st.qty : 0, hargaZahir: st ? st.harga : 0, hargaMaster: m && m.harga > 0 ? m.harga : 0,
         issues: [],
@@ -550,6 +551,34 @@
     return lines.join("\n");
   }
 
+  // ---------- Purchase Order ----------
+  // Kelompok PO: supplier (kolom "Supplier" di master) · kategori (Zahir) · brand (kolom Kategori master) · satu.
+  const PO_GROUP_LABEL = { supplier: "(Supplier belum diisi)", kategori: "(Tanpa kategori)", brand: "(Tanpa kategori)", satu: "Semua item" };
+  function poGroups(rows, by) {
+    const key = (r) => (by === "supplier" ? r.supplier : by === "kategori" ? r.kategori : by === "brand" ? r.brand : "") || PO_GROUP_LABEL[by] || PO_GROUP_LABEL.satu;
+    const map = new Map();
+    for (const r of rows) {
+      if (!(r.final > 0)) continue;
+      const k = by === "satu" ? PO_GROUP_LABEL.satu : key(r);
+      let g = map.get(k);
+      if (!g) { g = { key: k, items: [], total: 0, maxLead: 0, missingSupplier: by === "supplier" && !r.supplier }; map.set(k, g); }
+      g.items.push(r); g.total += r.nilaiPR || 0; g.maxLead = Math.max(g.maxLead, r.lead || 0);
+    }
+    const out = Array.from(map.values());
+    for (const g of out) { g.items.sort((a, b) => (a.nama || "").localeCompare(b.nama || "", "id")); g.total = Math.round(g.total * 100) / 100; }
+    return out.sort((a, b) => (a.missingSupplier - b.missingSupplier) || a.key.localeCompare(b.key, "id"));
+  }
+  // Baris PO: Gram → Kg dan Ml → Liter (qty ÷ 1000, harga × 1000) bila convert = true. Jumlah tidak berubah.
+  function poLine(r, convert) {
+    const unit = (r.satuan || r.satuanMaster || "").trim();
+    const U = unit.toUpperCase();
+    let qty = r.final, price = r.harga || 0, sat = unit;
+    if (convert && /^(GRAM|GR|G|GRM)$/.test(U)) { qty = round6(qty / 1000); price = round6(price * 1000); sat = "Kg"; }
+    else if (convert && /^(ML|MILILITER|MILLILITER)$/.test(U)) { qty = round6(qty / 1000); price = round6(price * 1000); sat = "Liter"; }
+    return { qty, satuan: sat, harga: price, jumlah: Math.round((r.final * (r.harga || 0)) * 100) / 100 };
+  }
+  function poNumber(prefix, seq) { return `${prefix}${String(seq).padStart(3, "0")}`; }
+
   async function sha256Hex(bytes) {
     const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
     const subtle = (typeof crypto !== "undefined" && crypto.subtle) ? crypto.subtle : null;
@@ -560,7 +589,7 @@
 
   return {
     normCode, normText, normHeader, parseNum, detectLocale, sniff, decodeText, textToRows, markupToRows,
-    parseZahir, parseMaster, compute, summarize, prioritySort, prText, ceilStep, dsiBand, sha256Hex, fmtNum, fmtRp,
+    parseZahir, parseMaster, compute, summarize, prioritySort, prText, ceilStep, dsiBand, sha256Hex, fmtNum, fmtRp, poGroups, poLine, poNumber,
     MASTER_FIELDS, DEFAULT_SETTINGS, STATUS,
   };
 });

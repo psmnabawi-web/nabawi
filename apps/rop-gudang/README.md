@@ -63,9 +63,24 @@ Sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (kolom Total Safety & PR), dit
 | Minimum Order Versi Purchasing | | MOQ |
 | Harga | | harga beli terakhir |
 | Nama, Satuan, Kategori | | informasi & pengecekan satuan |
+| Supplier | | memisah Cetak PO per supplier |
 | Siklus Order (Hari), Kelipatan Order, PO Outstanding, Aktif | | kolom tambahan opsional |
 
 Tombol **Unduh template master** menghasilkan file Excel berisi semua kolom di atas (terisi parameter yang sedang dipakai). File itu bisa di-upload kembali bila Google Sheet tidak bisa diakses.
+
+## Cetak PO
+
+Tombol **Cetak PO** menyusun dokumen Purchase Order A4 dari item dengan Final PR > 0 (termasuk yang sudah diubah manual), lalu membuka dialog print browser. Pilih *Simpan sebagai PDF* untuk menyimpan file.
+
+| Pengaturan | Isi |
+|---|---|
+| Satu PO per | **Supplier** (kolom `Supplier` di master; item tanpa supplier dikumpulkan di satu PO dengan kolom supplier kosong untuk diisi tangan) · Kategori Zahir · Kategori master · satu PO |
+| Nomor PO | Awalan `PO/YYYYMMDD/` + nomor urut 3 digit. Nomor berikutnya diingat per tanggal di perangkat itu, jadi cetak ulang tidak memakai nomor yang sama. Dua perangkat berbeda bisa menghasilkan nomor sama: tetapkan satu perangkat/PIC penerbit PO. |
+| Tanggal kirim | Kosong = tanggal PO + lead time terpanjang item di PO itu |
+| Tampilan | Dengan/tanpa harga; Gram ditampilkan Kg dan Ml ditampilkan Liter (qty ÷ 1.000, harga × 1.000, jumlah tetap) |
+| Tanda tangan | Dibuat oleh · Diperiksa · Disetujui |
+
+Setiap cetak dicatat di **Log Perubahan** (nomor PO, kelompok, jumlah item, nilai, oleh siapa). Catatan per item tidak ikut dicetak (catatan internal).
 
 ## Export Excel
 

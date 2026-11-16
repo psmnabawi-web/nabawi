@@ -37,7 +37,7 @@ test("workbook: sheet, header, rumus inti, input & override manual", async () =>
   fs.writeFileSync(path.join(OUT, "export-contoh.xlsx"), Buffer.from(buf));
   assert.deepEqual(wb2.worksheets.map((w) => w.name), ["Ringkasan", "PR", "Perhitungan", "Data Issue", "Stok Zahir", "Log Perubahan"]);
   const ws = wb2.getWorksheet("Perhitungan");
-  assert.equal(ws.getCell("B5").value, "Kode"); assert.equal(ws.getCell("Z5").value, "Status");
+  assert.equal(ws.getCell("B5").value, "Kode"); assert.equal(ws.getCell("Z5").value, "Status"); assert.equal(ws.getCell("AE5").value, "Supplier");
   const r = rowOf(ws, "A003");
   assert.ok(r > 5);
   assert.equal(ws.getCell(`N${r}`).formula, `G${r}*(H${r}+I${r})`);
@@ -88,6 +88,7 @@ test("template master bisa dibaca balik oleh parseMaster", async () => {
   assert.equal(m2.items.length, m.items.length);
   assert.equal(m2.byCode.A001.usage, 1250); assert.equal(m2.byCode.A001.moq, 10000); assert.equal(m2.byCode.K002.harga, 95.5);
   assert.equal(m2.hasColumn.kelipatan, true); assert.equal(m2.hasColumn.cycle, true);
+  assert.equal(m2.byCode.A001.supplier, "CV Tepung Jaya");
 });
 
 const hasLO = spawnSync("soffice", ["--version"]).status === 0;

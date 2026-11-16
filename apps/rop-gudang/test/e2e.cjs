@@ -22,6 +22,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     const ctx = await browser.newContext({ acceptDownloads: true, viewport: { width: 1440, height: 900 } });
     await ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: base.replace(/\/$/, "") });
     await ctx.route("https://docs.google.com/**", (route) => { sheetHits++; route.fulfill({ status: 200, contentType: "text/csv; charset=utf-8", body: fs.readFileSync(FX("master-contoh.csv"), "utf8") }); });
+    await ctx.addInitScript(() => { window.print = () => { window.__printed = (window.__printed || 0) + 1; }; });
     await ctx.addInitScript((s) => { if (!localStorage.getItem("rop.settings.v1")) localStorage.setItem("rop.settings.v1", JSON.stringify({ sheetUrl: s, preparedBy: "Tes E2E" })); }, SHEET);
     const page = await ctx.newPage();
     page.on("pageerror", (e) => problems.push("pageerror: " + e.message));
@@ -72,6 +73,37 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     const clip = await page.evaluate(() => navigator.clipboard.readText());
     assert.match(clip, /Rekomendasi Pembelian GUDANG PUSAT/); assert.match(clip, /Plastik Uji \(K002\): 600 Pcs/);
 
+    // cetak PO: per supplier (kolom Supplier di master), Gram → Kg, nomor urut, log
+    await page.click("#btnPO");
+    await page.waitForSelector("#dlgPO[open]");
+    assert.equal(await page.inputValue("#poBy"), "supplier");
+    assert.equal(await page.locator("#poGroups input[type=checkbox]").count(), 3);
+    assert.equal(await page.textContent("#poSummary"), "3 PO · 4 item · Rp 198.300");
+    const ymd = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`; });
+    assert.equal(await page.inputValue("#poPrefix"), `PO/${ymd}/`);
+    assert.equal(await page.inputValue("#poSeq"), "1");
+    await page.fill("#poSign3", "Manager SCM");
+    await page.click("#btnDoPrint");
+    await page.waitForFunction(() => window.__printed === 1);
+    assert.equal(await page.locator("#printArea .po").count(), 3);
+    const po1 = await page.textContent("#printArea .po:nth-child(1)");
+    assert.match(po1, new RegExp(`PO/${ymd}/001`)); assert.match(po1, /CV Tepung Jaya/); assert.match(po1, /Gula Uji/); assert.match(po1, /Gula Uji\s*1\s*Kg/); assert.match(po1, /Rp 16\.000/); assert.match(po1, /Manager SCM/);
+    const po3 = await page.textContent("#printArea .po:nth-child(3)");
+    assert.match(po3, new RegExp(`PO/${ymd}/003`)); assert.match(po3, /Minyak Uji/); assert.match(po3, /Barang Hilang/);
+    await page.emulateMedia({ media: "print" });
+    assert.equal(await page.isVisible("#results"), false);
+    assert.equal(await page.isVisible("#printArea"), true);
+    await page.pdf({ path: path.join(OUT, "po.pdf"), format: "A4", printBackground: true });
+    await page.screenshot({ path: path.join(OUT, "po-print.png"), fullPage: true });
+    await page.emulateMedia({ media: "screen" });
+    await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
+    assert.equal(await page.evaluate(() => document.body.classList.contains("printing")), false);
+    await page.click("#btnPO"); await page.waitForSelector("#dlgPO[open]");
+    assert.equal(await page.inputValue("#poSeq"), "4"); // nomor berikutnya tidak mengulang
+    await page.selectOption("#poBy", "satu");
+    assert.equal(await page.locator("#poGroups input[type=checkbox]").count(), 1);
+    await page.keyboard.press("Escape");
+
     // export Excel
     const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#btnExport")]);
     assert.match(dl.suggestedFilename(), /^PR_GUDANG_PUSAT_\d{8}\.xlsx$/);
@@ -82,6 +114,8 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     let k2 = -1; for (let r = 6; r <= ws.rowCount; r++) if (ws.getCell(`B${r}`).value === "K002") k2 = r;
     assert.equal(ws.getCell(`U${k2}`).value, 600);
     const log = wb.getWorksheet("Log Perubahan");
+    const logRows = []; log.eachRow((row) => logRows.push(row.getCell(4).value));
+    assert.ok(logRows.includes("Cetak PO"), "log Cetak PO");
     assert.equal(log.getCell("B5").value, "K002"); assert.equal(log.getCell("H5").value, "Tes E2E");
     assert.equal(wb.getWorksheet("Ringkasan").getCell("C7").value, "Tes E2E");
 

@@ -80,7 +80,7 @@
     // ---------------- Perhitungan ----------------
     const HC = ["No", "Kode", "Nama", "Satuan", "Kategori", "Kategori Zahir", "Pemakaian / hari", "Buffer (hari)", "Lead time (hari)", "Siklus order (hari)",
       "SOH Zahir", "PO outstanding", "Safety stock", "ROP", "Stok maksimum", "Posisi stok", "DSI (hari)", "Saran PR", "MOQ", "Kelipatan",
-      "Final PR", "DSI setelah PR", "Harga", "Nilai PR", "Nilai SOH", "Status", "Band DSI (sheet lama)", "Sumber harga", "Catatan", "Data issue"];
+      "Final PR", "DSI setelah PR", "Harga", "Nilai PR", "Nilai SOH", "Status", "Band DSI (sheet lama)", "Sumber harga", "Catatan", "Data issue", "Supplier"];
     title(wsC, `Perhitungan ROP — ${meta.gudangLabel || ""}`, "Kolom kuning = input (boleh diubah). Kolom putih = rumus. Oranye = Final PR diubah manual di aplikasi.");
     wsC.getCell("A3").value = "Rumus: Safety stock = Pemakaian × Buffer · ROP = Pemakaian × (Buffer + Lead time) · Stok maks = ROP + Pemakaian × Siklus · Saran PR = Stok maks − Posisi stok bila Posisi ≤ ROP · Final PR = MAX(MOQ, CEILING(Saran, Kelipatan))";
     wsC.getCell("A3").font = { size: 9, color: { argb: MUTED } };
@@ -116,7 +116,7 @@
       v(25, { formula: `MAX(K${n},0)*W${n}`, result: r.nilaiSOH || 0 });
       v(26, { formula: `IF(G${n}="","Tanpa parameter",IF(G${n}<=0,IF(K${n}>0,"Tidak bergerak","Tidak aktif"),IF(K${n}<=0,"OOS",IF(Q${n}<=I${n},"Kritis",IF(AND(P${n}<=N${n},P${n}<O${n}),"Order",IF(Q${n}>${R(G.over)},"Overstock","Aman"))))))`, result: r.status });
       v(27, { formula: `IF(Q${n}="","",IF(Q${n}<${R(G.dsiMin)},"Min ≤3 hari",IF(Q${n}<${R(G.dsiSafe)},"Safety 4–6 hari","Max ≥7 hari")))`, result: r.band || "" });
-      v(28, r.hargaSrc || ""); v(29, r.note || ""); v(30, (r.issues || []).join("; "));
+      v(28, r.hargaSrc || ""); v(29, r.note || ""); v(30, (r.issues || []).join("; ")); v(31, r.supplier || "");
       [7, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21].forEach((c) => (row.getCell(c).numFmt = fmtQty(row.getCell(c).value && row.getCell(c).value.result != null ? row.getCell(c).value.result : row.getCell(c).value)));
       [8, 9, 10].forEach((c) => (row.getCell(c).numFmt = "#,##0.##;-#,##0.##;0"));
       [17, 22].forEach((c) => (row.getCell(c).numFmt = "#,##0.0"));
@@ -125,7 +125,7 @@
       [7, 8, 9, 10, 11, 12, 19, 20, 23, 29].forEach((c) => { if (!(c === 21)) inputCell(row.getCell(c)); });
       for (let c = 1; c <= HC.length; c++) if (!row.getCell(c).border) border(row.getCell(c));
     });
-    const widthsC = [5, 12, 34, 8, 13, 22, 11, 9, 9, 9, 11, 11, 11, 11, 11, 11, 9, 11, 10, 10, 11, 10, 12, 14, 14, 14, 15, 10, 24, 34];
+    const widthsC = [5, 12, 34, 8, 13, 22, 11, 9, 9, 9, 11, 11, 11, 11, 11, 11, 9, 11, 10, 10, 11, 10, 12, 14, 14, 14, 15, 10, 24, 34, 20];
     widthsC.forEach((w, i) => (wsC.getColumn(i + 1).width = w));
     wsC.views = [{ state: "frozen", xSplit: 3, ySplit: H0 }];
     wsC.autoFilter = { from: { row: H0, column: 1 }, to: { row: last, column: HC.length } };
@@ -303,15 +303,15 @@
   function buildMasterTemplate(ExcelJS, master) {
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet("Master Parameter");
-    const H = ["Kode Barang", "Nama", "Satuan", "Kategori", "Penjualan 1 Hari", "Buffer Stock (Hari)", "Lead Time (Hari)", "Siklus Order (Hari)", "Minimum Order", "Kelipatan Order", "Harga", "PO Outstanding", "Aktif"];
+    const H = ["Kode Barang", "Nama", "Satuan", "Kategori", "Penjualan 1 Hari", "Buffer Stock (Hari)", "Lead Time (Hari)", "Siklus Order (Hari)", "Minimum Order", "Kelipatan Order", "Harga", "PO Outstanding", "Aktif", "Supplier"];
     const hr = ws.getRow(1); H.forEach((h, i) => (hr.getCell(i + 1).value = h)); styleHeader(hr, 1, H.length);
     const items = (master && master.items) || [];
     items.forEach((m, i) => {
       const row = ws.getRow(2 + i);
-      [m.kode, m.nama, m.satuan, m.brand, m.usage, m.buffer, m.lead, m.cycle, m.moq, m.kelipatan, m.harga, m.onOrder, m.aktif === false ? "Tidak" : "Ya"].forEach((v, c) => (row.getCell(c + 1).value = v == null ? null : v));
+      [m.kode, m.nama, m.satuan, m.brand, m.usage, m.buffer, m.lead, m.cycle, m.moq, m.kelipatan, m.harga, m.onOrder, m.aktif === false ? "Tidak" : "Ya", m.supplier || ""].forEach((v, c) => (row.getCell(c + 1).value = v == null ? null : v));
     });
     ws.getColumn(1).numFmt = "@";
-    [14, 34, 9, 16, 14, 14, 13, 14, 13, 13, 12, 13, 8].forEach((w, i) => (ws.getColumn(i + 1).width = w));
+    [14, 34, 9, 16, 14, 14, 13, 14, 13, 13, 12, 13, 8, 24].forEach((w, i) => (ws.getColumn(i + 1).width = w));
     ws.views = [{ state: "frozen", ySplit: 1, xSplit: 2 }];
     const n = Math.max(items.length + 1, 200);
     for (const c of ["E", "F", "G", "H", "I", "J", "K", "L"]) ws.dataValidations.add(`${c}2:${c}${n}`, { type: "decimal", operator: "greaterThanOrEqual", allowBlank: true, formulae: [0], showErrorMessage: true, error: "Isi angka ≥ 0." });
@@ -328,6 +328,7 @@
       ["Harga", "Harga beli terakhir. Kosong = pakai harga satuan di file Zahir."],
       ["PO Outstanding", "Qty sudah dipesan tetapi belum diterima. Mengurangi Saran PR."],
       ["Aktif", "Tidak = barang tidak dihitung."],
+      ["Supplier", "Nama supplier utama. Dipakai untuk memisah Cetak PO per supplier."],
     ].forEach((r, i) => { info.getCell(`A${i + 1}`).value = r[0]; info.getCell(`B${i + 1}`).value = r[1]; info.getCell(`A${i + 1}`).font = { bold: true }; });
     info.getColumn(1).width = 22; info.getColumn(2).width = 100;
     return wb;

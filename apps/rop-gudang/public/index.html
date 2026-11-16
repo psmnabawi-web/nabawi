@@ -20,6 +20,7 @@
     </div>
     <div class="actions">
       <button id="btnCopy" class="btn" type="button" disabled>Salin teks PR</button>
+      <button id="btnPO" class="btn" type="button" disabled>Cetak PO</button>
       <button id="btnExport" class="btn primary" type="button" disabled>Export Excel</button>
       <button id="btnSettings" class="btn icon" type="button" aria-label="Pengaturan" title="Pengaturan">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
@@ -170,6 +171,53 @@
       </div>
     </form>
   </dialog>
+
+  <dialog id="dlgPO" class="dlg">
+    <form method="dialog" class="dlg-inner" id="formPO">
+      <div class="dlg-head"><h3>Cetak Purchase Order</h3><button class="btn icon" value="cancel" aria-label="Tutup">✕</button></div>
+      <fieldset>
+        <legend>Isi PO</legend>
+        <label class="field"><span>Satu PO per</span>
+          <select id="poBy">
+            <option value="supplier">Supplier (kolom “Supplier” di master)</option>
+            <option value="kategori">Kategori Zahir (Bahan Baku, Kemasan, …)</option>
+            <option value="brand">Kategori master (Gumik / Storypie)</option>
+            <option value="satu">Satu PO untuk semua item</option>
+          </select>
+        </label>
+        <p class="muted small" id="poByHint"></p>
+        <div id="poGroups" class="po-groups"></div>
+      </fieldset>
+      <fieldset>
+        <legend>Nomor &amp; tanggal</legend>
+        <div class="grid2">
+          <label class="field"><span>Awalan nomor PO</span><input type="text" id="poPrefix" maxlength="30"></label>
+          <label class="field"><span>Nomor urut mulai</span><input type="number" id="poSeq" min="1" step="1"></label>
+          <label class="field"><span>Tanggal PO</span><input type="date" id="poDate"></label>
+          <label class="field"><span>Tanggal kirim diminta</span><input type="date" id="poDue"></label>
+        </div>
+        <p class="muted small">Tanggal kirim kosong = tanggal PO + lead time terpanjang item di PO itu.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Tampilan</legend>
+        <label class="check"><input type="checkbox" id="poPrice"> Tampilkan harga &amp; total</label>
+        <label class="check"><input type="checkbox" id="poConvert"> Tampilkan Gram sebagai Kg dan Ml sebagai Liter</label>
+        <label class="field"><span>Catatan / syarat</span><textarea id="poNote" rows="3" maxlength="500"></textarea></label>
+        <div class="grid3">
+          <label class="field"><span>Dibuat oleh</span><input type="text" id="poSign1" maxlength="40"></label>
+          <label class="field"><span>Diperiksa</span><input type="text" id="poSign2" maxlength="40"></label>
+          <label class="field"><span>Disetujui</span><input type="text" id="poSign3" maxlength="40"></label>
+        </div>
+      </fieldset>
+      <div class="dlg-foot">
+        <span class="muted small grow" id="poSummary"></span>
+        <button class="btn ghost" value="cancel" type="submit">Batal</button>
+        <button class="btn primary" type="button" id="btnDoPrint">Cetak / Simpan PDF</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="printArea" aria-hidden="true"></div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 

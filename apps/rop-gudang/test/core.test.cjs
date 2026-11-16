@@ -211,3 +211,23 @@ test("ceilStep & dsiBand", () => {
   const s = C.DEFAULT_SETTINGS;
   assert.equal(C.dsiBand(3.4, s), "Min ≤3 hari"); assert.equal(C.dsiBand(3.5, s), "Safety 4–6 hari"); assert.equal(C.dsiBand(6.5, s), "Max ≥7 hari"); assert.equal(C.dsiBand(null, s), "");
 });
+
+test("Supplier di master, pengelompokan PO, dan konversi Gram→Kg", () => {
+  const r = run();
+  assert.equal(byCode(r, "A002").supplier, "CV Tepung Jaya");
+  assert.equal(byCode(r, "K009").supplier, "");
+  const g = C.poGroups(r.rows, "supplier");
+  assert.deepEqual(g.map((x) => [x.key, x.items.length, x.missingSupplier]), [["CV Tepung Jaya", 1, false], ["PT Kemasan Uji", 1, false], ["UD Telur Segar", 1, false], ["(Supplier belum diisi)", 2, true]]);
+  assert.equal(g[3].total, 105000 + 20000);
+  assert.equal(g[1].maxLead, 2);
+  const kat = C.poGroups(r.rows, "kategori");
+  assert.deepEqual(kat.map((x) => x.key), ["(Tanpa kategori)", "Bahan Baku", "Kemasan"]);
+  const one = C.poGroups(r.rows, "satu");
+  assert.equal(one.length, 1); assert.equal(one[0].items.length, 5); assert.equal(one[0].total, 338750);
+  const a2 = byCode(r, "A002");
+  assert.deepEqual(C.poLine(a2, true), { qty: 1, satuan: "Kg", harga: 16000, jumlah: 16000 });
+  assert.deepEqual(C.poLine(a2, false), { qty: 1000, satuan: "Gram", harga: 16, jumlah: 16000 });
+  assert.deepEqual(C.poLine(byCode(r, "A003"), true), { qty: 100, satuan: "Butir", harga: 1500, jumlah: 150000 });
+  assert.equal(C.poNumber("PO/20261116/", 7), "PO/20261116/007");
+});
+

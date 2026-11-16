@@ -232,7 +232,7 @@
     renderMasterPanel(); renderFilePanel();
     const ready = !!state.result;
     $("results").hidden = !ready;
-    $("btnExport").disabled = !ready; $("btnCopy").disabled = !ready;
+    $("btnExport").disabled = !ready; $("btnCopy").disabled = !ready; $("btnPO").disabled = !ready;
     if (!ready) return;
     renderToolbar(); renderAlerts(); renderKpis(); renderFilters(); renderTable();
   }
@@ -547,6 +547,116 @@
     }
   }
 
+  // ---------------- cetak PO ----------------
+  const PO_KEY = "rop.po.v1";
+  const poSeqKey = (ymd) => "rop.poSeq." + ymd;
+  const fmtRp2 = (n) => (n == null || !isFinite(n) ? "-" : "Rp " + Number(n).toLocaleString("id-ID", { maximumFractionDigits: 2 }));
+  const hasSupplierCol = () => state.result.rows.some((r) => r.final > 0 && r.supplier);
+  function addDays(iso, n) {
+    const [y, m, d] = iso.split("-").map(Number);
+    const dt = new Date(y, m - 1, d + n);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+  }
+  const longDate = (iso) => { const [y, m, d] = iso.split("-").map(Number); return new Date(y, m - 1, d).toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" }); };
+  const defaultPrefix = (iso) => `PO/${iso.replace(/-/g, "")}/`;
+
+  function openPO() {
+    if (!state.result) return;
+    const s = LS.get(PO_KEY, {}) || {};
+    const sup = hasSupplierCol();
+    $("poBy").querySelector('option[value="supplier"]').textContent = sup ? "Supplier (kolom “Supplier” di master)" : "Supplier (kolom “Supplier” belum ada di master)";
+    $("poBy").value = s.by && (s.by !== "supplier" || sup) ? s.by : sup ? "supplier" : "kategori";
+    $("poPrice").checked = s.price !== false;
+    $("poConvert").checked = s.convert !== false;
+    $("poNote").value = s.note != null ? s.note : `Barang dikirim ke gudang ${gudangLabel(gudangObj())}. Mohon konfirmasi ketersediaan, harga, dan tanggal kirim sebelum pengiriman.`;
+    $("poSign1").value = state.settings.preparedBy || ""; $("poSign2").value = s.sign2 || ""; $("poSign3").value = s.sign3 || "";
+    const d = today();
+    $("poDate").value = d; $("poDue").value = "";
+    setPOPrefix(d);
+    renderPOGroups();
+    $("dlgPO").showModal();
+  }
+  function setPOPrefix(iso) {
+    const ymd = iso.replace(/-/g, "");
+    $("poPrefix").value = defaultPrefix(iso);
+    $("poSeq").value = (Number(LS.get(poSeqKey(ymd), 0)) || 0) + 1;
+  }
+  function renderPOGroups() {
+    const by = $("poBy").value;
+    const groups = Core.poGroups(state.result.rows, by);
+    state.poGroups = groups;
+    $("poByHint").textContent = by === "supplier" && !hasSupplierCol() ? "Master belum punya kolom “Supplier”, jadi semua item masuk satu PO dengan kolom supplier kosong. Tambahkan kolom Supplier di tab PKU agar PO otomatis terpisah per supplier." : "";
+    $("poGroups").innerHTML = groups.map((g, i) => `<label><input type="checkbox" data-po-group="${i}" checked><span>${esc(g.key)}${g.missingSupplier ? ' <em class="warn">· supplier diisi manual</em>' : ""}</span><b>${g.items.length} item · ${fmtRp(g.total)}</b></label>`).join("") || '<p class="muted small">Tidak ada item dengan Final PR &gt; 0.</p>';
+    updatePOSummary();
+  }
+  function selectedPOGroups() {
+    return (state.poGroups || []).filter((g, i) => { const el = $("poGroups").querySelector(`input[data-po-group="${i}"]`); return el && el.checked; });
+  }
+  function updatePOSummary() {
+    const sel = selectedPOGroups();
+    $("poSummary").textContent = `${sel.length} PO · ${sel.reduce((a, g) => a + g.items.length, 0)} item · ${fmtRp(sel.reduce((a, g) => a + g.total, 0))}`;
+    $("btnDoPrint").disabled = !sel.length;
+  }
+
+  function poHtml(g, no, opt) {
+    const company = state.zahir.meta.company || "";
+    const gud = gudangLabel(gudangObj());
+    const due = opt.due || addDays(opt.date, Math.ceil(g.maxLead || 0));
+    const supplier = opt.by === "supplier" && !g.missingSupplier ? g.key : "";
+    const lines = g.items.map((r) => ({ r, L: Core.poLine(r, opt.convert) }));
+    const total = lines.reduce((a, x) => a + x.L.jumlah, 0);
+    const cols = opt.price ? 7 : 5;
+    return `<section class="po">
+      <div class="po-head">
+        <div class="po-company">${esc(company || "Purchase Order")}<small>Gudang ${esc(gud)}</small></div>
+        <div class="po-title"><h2>PURCHASE ORDER</h2><table>
+          <tr><td>No. PO</td><td><b>${esc(no)}</b></td></tr>
+          <tr><td>Tanggal</td><td>${esc(longDate(opt.date))}</td></tr>
+          <tr><td>Kirim paling lambat</td><td>${esc(longDate(due))}</td></tr>
+        </table></div>
+      </div>
+      <div class="po-parties">
+        <div class="po-box"><div class="lbl">Kepada (supplier)</div>${supplier ? `<div class="val">${esc(supplier)}</div>` : '<div class="line"></div><div class="line"></div>'}</div>
+        <div class="po-box"><div class="lbl">Kirim ke</div><div class="val">${esc([company, "Gudang " + gud].filter(Boolean).join(" · "))}</div>${opt.by === "kategori" || opt.by === "brand" ? `<div class="po-sub">Kelompok: ${esc(g.key)}</div>` : ""}</div>
+      </div>
+      <table class="po-items">
+        <thead><tr><th class="r">No</th><th>Kode</th><th>Nama barang</th><th class="r">Qty</th><th>Satuan</th>${opt.price ? '<th class="r">Harga satuan</th><th class="r">Jumlah</th>' : ""}</tr></thead>
+        <tbody>${lines.map((x, i) => `<tr><td class="r">${i + 1}</td><td>${esc(x.r.kode)}</td><td>${esc(x.r.nama)}</td><td class="r">${fmt(x.L.qty, 3)}</td><td>${esc(x.L.satuan)}</td>${opt.price ? `<td class="r">${fmtRp2(x.L.harga)}</td><td class="r">${fmtRp(x.L.jumlah)}</td>` : ""}</tr>`).join("")}</tbody>
+        <tfoot><tr><td colspan="${opt.price ? 6 : 4}">Total ${lines.length} item</td><td class="r">${opt.price ? fmtRp(total) : ""}</td></tr></tfoot>
+      </table>
+      ${opt.note ? `<div class="po-note"><b>Catatan:</b> ${esc(opt.note)}</div>` : ""}
+      <div class="po-sign">
+        ${["Dibuat oleh", "Diperiksa", "Disetujui"].map((t, i) => `<div><div>${t}</div><div class="space"></div><div class="name">${esc(opt.sign[i] || "")}</div></div>`).join("")}
+      </div>
+      <div class="po-foot">Dicetak ${esc(new Date().toLocaleString("id-ID"))} dari ROP Gudang · stok Zahir ${esc(state.file.name)} (${esc(state.file.hash.slice(0, 8))}) · tanggal stok ${esc(idDate(state.edits.stockDate))} · ${cols === 7 ? "harga = harga beli terakhir/HPP" : "tanpa harga"}</div>
+    </section>`;
+  }
+
+  function doPrintPO() {
+    const groups = selectedPOGroups();
+    if (!groups.length) return;
+    const opt = {
+      by: $("poBy").value, price: $("poPrice").checked, convert: $("poConvert").checked, note: $("poNote").value.trim(),
+      prefix: $("poPrefix").value.trim(), seq: Math.max(1, parseInt($("poSeq").value, 10) || 1), date: $("poDate").value || today(), due: $("poDue").value,
+      sign: [$("poSign1").value.trim(), $("poSign2").value.trim(), $("poSign3").value.trim()],
+    };
+    LS.set(PO_KEY, { by: opt.by, price: opt.price, convert: opt.convert, note: opt.note, sign2: opt.sign[1], sign3: opt.sign[2] });
+    const numbers = groups.map((g, i) => Core.poNumber(opt.prefix, opt.seq + i));
+    $("printArea").innerHTML = groups.map((g, i) => poHtml(g, numbers[i], opt)).join("");
+    // nomor urut berikutnya per tanggal (per perangkat) supaya cetak ulang tidak memakai nomor yang sama
+    const ymd = (opt.prefix.match(/(\d{8})/) || [])[1] || opt.date.replace(/-/g, "");
+    LS.set(poSeqKey(ymd), Math.max(Number(LS.get(poSeqKey(ymd), 0)) || 0, opt.seq + groups.length - 1));
+    const items = groups.reduce((a, g) => a + g.items.length, 0), value = groups.reduce((a, g) => a + g.total, 0);
+    state.edits.log.push({ t: Date.now(), code: "", kode: numbers.join(", "), nama: groups.map((g) => g.key).join(", "), field: "Cetak PO", from: "", to: `${groups.length} PO`, system: `${items} item · ${fmtRp(value)}`, by: opt.sign[0] || state.settings.preparedBy || "" });
+    saveEdits();
+    $("dlgPO").close();
+    document.body.classList.add("printing");
+    const done = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", done); };
+    window.addEventListener("afterprint", done);
+    toast(`${numbers.length} PO siap dicetak (${numbers[0]}${numbers.length > 1 ? " … " + numbers[numbers.length - 1] : ""}). Pilih “Simpan sebagai PDF” untuk menyimpan file.`);
+    setTimeout(() => window.print(), 50);
+  }
+
   // ---------------- pengaturan ----------------
   function openSettings() {
     const s = settings(), sc = sheetConf();
@@ -589,6 +699,11 @@
     $("btnCopy").addEventListener("click", doCopy);
     $("btnSettings").addEventListener("click", openSettings);
     $("btnShareLink").addEventListener("click", copyTeamLink);
+    $("btnPO").addEventListener("click", openPO);
+    $("poBy").addEventListener("change", renderPOGroups);
+    $("poGroups").addEventListener("change", updatePOSummary);
+    $("btnDoPrint").addEventListener("click", doPrintPO);
+    $("poDate").addEventListener("change", (e) => { if (/^PO\/\d{8}\/$/.test($("poPrefix").value) && e.target.value) setPOPrefix(e.target.value); });
     $("stepMaster").addEventListener("click", (e) => { if (e.target.closest("#btnSheetQuick")) saveQuickSheet(); });
     $("stepMaster").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.id === "inpSheetQuick") { e.preventDefault(); saveQuickSheet(); } });
     $("dlgSettings").addEventListener("close", () => { if ($("dlgSettings").returnValue === "save") saveSettings(); });
