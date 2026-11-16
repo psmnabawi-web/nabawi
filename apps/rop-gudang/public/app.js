@@ -164,8 +164,8 @@
     if (!sc.id) {
       const c = masterFromCache();
       if (c) setMaster(c.m, c.source, true, c.loadedAt);
-      else state.masterError = "Link Google Sheet parameter belum diatur. Buka Pengaturan (ikon roda gigi) atau upload file master.";
-      renderAll();
+      else state.masterError = "Sumber parameter belum diatur di perangkat ini. Tempel link Google Sheet parameter (tab PKU) di bawah, cukup sekali.";
+      recompute();
       return;
     }
     $("masterChip").className = "chip"; $("masterChip").textContent = "Memuat…";
@@ -184,7 +184,7 @@
         if (!m.ok) throw new Error(m.error);
         setMaster(m, `Google Sheet tab ${sc.tab} (${t.label})`, false);
         if (t.label === "gviz") state.masterWarn = "Parameter dibaca lewat jalur cadangan (gviz). Kode berupa angka murni bisa terlewat; cek Data issue.";
-        renderAll();
+        recompute();
         if (manual) toast(`Parameter dimuat: ${m.items.length} item.`);
         return;
       } catch (e) { lastErr = `${t.label}: ${e.message || e}`; }
@@ -192,7 +192,7 @@
     const c = masterFromCache();
     if (c) { setMaster(c.m, c.source, true, c.loadedAt); state.masterWarn = `Google Sheet tidak bisa dibaca (${lastErr}). Memakai parameter tersimpan terakhir.`; }
     else state.masterError = `Google Sheet tidak bisa dibaca (${lastErr}). Pastikan link benar dan sheet dibagikan "Siapa saja yang memiliki link: Pelihat", atau upload file master.`;
-    renderAll();
+    recompute();
     if (manual) toast("Gagal memuat Google Sheet.", true);
   }
 
@@ -248,7 +248,8 @@
       info.innerHTML = `${esc(state.masterSource)} · dimuat ${esc(new Date(state.masterLoadedAt).toLocaleString("id-ID"))}${extra.length ? ` · kolom tambahan: ${esc(extra.join(", "))}` : ""}${state.masterWarn ? `<br><span class="sev-Sedang">${esc(state.masterWarn)}</span>` : ""}`;
     } else if (state.masterError) {
       chip.className = "chip err"; chip.textContent = "Belum ada";
-      info.innerHTML = `<span class="sev-Tinggi">${esc(state.masterError)}</span>`;
+      info.innerHTML = `<span class="sev-Tinggi">${esc(state.masterError)}</span>
+        <span class="inline-form"><input type="url" id="inpSheetQuick" placeholder="https://docs.google.com/spreadsheets/d/…/edit" aria-label="Link Google Sheet parameter" value="${esc(state.settings.sheetUrl || "")}"><button type="button" class="btn small primary" id="btnSheetQuick">Simpan &amp; muat</button></span>`;
     } else { chip.className = "chip"; chip.textContent = "Memuat…"; info.textContent = ""; }
     $("btnReloadMaster").disabled = !sheetConf().id;
   }
@@ -567,8 +568,7 @@
       roundGramMl: $("setRound").checked, roundStep: num("setStep", d.roundStep, 1), priceSource: $("setPrice").value === "zahir" ? "zahir" : "master",
     });
     LS.set(KEY.settings, state.settings);
-    if (JSON.stringify(sheetConf()) !== prevSheet) loadMasterFromSheet(true);
-    recompute();
+    if (JSON.stringify(sheetConf()) !== prevSheet) loadMasterFromSheet(true); else recompute();
     toast("Pengaturan disimpan.");
   }
 
@@ -589,6 +589,8 @@
     $("btnCopy").addEventListener("click", doCopy);
     $("btnSettings").addEventListener("click", openSettings);
     $("btnShareLink").addEventListener("click", copyTeamLink);
+    $("stepMaster").addEventListener("click", (e) => { if (e.target.closest("#btnSheetQuick")) saveQuickSheet(); });
+    $("stepMaster").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.id === "inpSheetQuick") { e.preventDefault(); saveQuickSheet(); } });
     $("dlgSettings").addEventListener("close", () => { if ($("dlgSettings").returnValue === "save") saveSettings(); });
 
     $("selGudang").addEventListener("change", (e) => {
@@ -652,6 +654,19 @@
     LS.set(KEY.settings, state.settings);
     try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* abaikan */ }
     return true;
+  }
+  function saveQuickSheet() {
+    const el = $("inpSheetQuick");
+    if (!el) return;
+    const raw = el.value.trim();
+    const id = (raw.match(/\/d\/([a-zA-Z0-9_-]{20,})/) || [])[1] || (/^[a-zA-Z0-9_-]{20,}$/.test(raw) ? raw : "");
+    if (!id) return toast("Link tidak valid. Contoh: https://docs.google.com/spreadsheets/d/…/edit", true);
+    state.settings.sheetUrl = `https://docs.google.com/spreadsheets/d/${id}/edit`;
+    const gid = (raw.match(/[#&?]gid=(\d+)/) || [])[1];
+    if (gid) state.settings.gid = gid;
+    LS.set(KEY.settings, state.settings);
+    state.masterError = "";
+    loadMasterFromSheet(true);
   }
   function teamLink() {
     const sc = sheetConf();

@@ -65,8 +65,21 @@ jobs:
         working-directory: apps/rop-gudang
         env:
           SITE: ${{ steps.site.outputs.site }}
+          # Opsional: link Google Sheet parameter (Settings → Secrets and variables → Actions → ROP_SHEET_URL).
+          # Bila diisi, alamat situs biasa langsung memakai sheet ini tanpa link #sheet=. Link tidak pernah masuk repo.
+          ROP_SHEET_URL: ${{ secrets.ROP_SHEET_URL }}
         run: |
           rm -f public/config.local.json
+          if [ -n "$ROP_SHEET_URL" ]; then
+            node -e '
+              const u=process.env.ROP_SHEET_URL.trim();
+              if(!/docs\.google\.com\/spreadsheets\/d\/[A-Za-z0-9_-]{20,}/.test(u)){console.error("ROP_SHEET_URL tidak valid");process.exit(1);}
+              const gid=(u.match(/[#&?]gid=(\d+)/)||[])[1]||"0";
+              require("fs").writeFileSync("public/config.local.json",JSON.stringify({MASTER:{SHEET_URL:u,GID:gid,TAB:"PKU"}}));'
+            echo "Sumber parameter: dari secret ROP_SHEET_URL"
+          else
+            echo "Secret ROP_SHEET_URL kosong: pengguna memakai link #sheet= atau kotak tempel link"
+          fi
           node -e '
             const fs=require("fs"); const c=JSON.parse(fs.readFileSync("firebase.json","utf8"));
             c.hosting.site=process.env.SITE; fs.writeFileSync("firebase.ci.json", JSON.stringify(c,null,2));'

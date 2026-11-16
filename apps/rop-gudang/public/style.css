@@ -239,3 +239,7 @@ table.formula { border-collapse: collapse; font-size: 13px; width: 100%; }
   .card { box-shadow: none; border: 0; }
   .table-wrap { max-height: none; overflow: visible; }
 }
+
+/* kotak tempel link sheet di kartu Parameter */
+.inline-form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.inline-form input { flex: 1 1 260px; min-width: 0; min-height: 36px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }

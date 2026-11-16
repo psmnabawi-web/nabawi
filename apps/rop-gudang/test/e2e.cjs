@@ -138,6 +138,23 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     assert.equal(await p2.evaluate(() => navigator.clipboard.readText()), base + "#sheet=TESTSHEET_abcdefghijklmnopqrstuvwxyz&gid=0&tab=PKU");
     await ctx2.close();
 
+    // perangkat baru membuka alamat biasa: kotak tempel link di kartu Parameter → parameter termuat → hasil langsung tampil
+    const ctx3 = await browser.newContext();
+    await ctx3.route("https://docs.google.com/**", (route) => route.fulfill({ status: 200, contentType: "text/csv; charset=utf-8", body: fs.readFileSync(FX("master-contoh.csv"), "utf8") }));
+    const p3 = await ctx3.newPage();
+    p3.on("pageerror", (e) => problems.push("pageerror(p3): " + e.message));
+    await p3.goto(base);
+    await p3.waitForSelector("#inpSheetQuick");
+    await p3.setInputFiles("#fileZahir", FX("zahir-contoh.xls"));
+    await p3.waitForSelector("#fileChip.ok");
+    assert.equal(await p3.isHidden("#results"), true);
+    await p3.fill("#inpSheetQuick", "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnopqrstuvwxyz/edit?usp=sharing");
+    await p3.click("#btnSheetQuick");
+    await p3.waitForSelector("#masterChip.ok");
+    await p3.waitForSelector("#results:not([hidden])");
+    assert.match(await p3.textContent("#kpis"), /5 item/);
+    await ctx3.close();
+
     assert.deepEqual(problems, [], problems.join("\n"));
     console.log("E2E OK · screenshot & export di test/out/");
   } catch (e) {
