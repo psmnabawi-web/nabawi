@@ -81,9 +81,9 @@
     // ---------------- Perhitungan ----------------
     const HC = ["No", "Kode", "Nama", "Satuan", "Kategori", "Kategori Zahir", "Pemakaian / hari", "Buffer (hari)", "Lead time (hari)", "Target DSI (hari)",
       "SOH Zahir", "PO outstanding", "Safety stock", "ROP", "Stok maksimum", "Posisi stok", "DSI (hari)", "Saran PR", "MOQ", "Kelipatan",
-      "Final PR", "DSI setelah PR", "Harga", "Nilai PR", "Nilai SOH", "Status", "Band DSI (sheet lama)", "Sumber harga", "Catatan", "Data issue", "Supplier", "Kelebihan di atas stok maks", "Nilai kelebihan"];
+      "Final PR", "DSI setelah PR", "Harga", "Nilai PR", "Nilai SOH", "Status", "Band DSI (sheet lama)", "Sumber harga", "Catatan", "Data issue", "Supplier", "Kelebihan di atas stok fisik maks", "Nilai kelebihan", "Stok fisik maks", "Rata-rata stok fisik (hari)", "Order tiap ± (hari)"];
     title(wsC, `Perhitungan ROP — ${meta.gudangLabel || ""}`, "Kolom kuning = input (boleh diubah). Kolom putih = rumus. Oranye = Final PR diubah manual di aplikasi.");
-    wsC.getCell("A3").value = "Rumus: Safety stock = Pemakaian × Buffer · ROP = Pemakaian × (Buffer + Lead time) · Stok maks = Pemakaian × MAX(Target DSI, Buffer + Lead time) · Saran PR = Stok maks − Posisi stok bila Posisi ≤ ROP · Final PR = MAX(MOQ, CEILING(Saran, Kelipatan))";
+    wsC.getCell("A3").value = "Rumus: Safety stock = Pemakaian × Buffer · ROP = Pemakaian × (Buffer + Lead time) · Stok fisik maks = Pemakaian × MAX(Buffer + 1, 2 × Target DSI − Buffer) · Stok maks = Stok fisik maks + Pemakaian × Lead time (Target 0 = ROP) · Saran PR = Stok maks − Posisi stok bila Posisi ≤ ROP · Final PR = MAX(MOQ, CEILING(Saran, Kelipatan))";
     wsC.getCell("A3").font = { size: 9, color: { argb: MUTED } };
     const H0 = 5, D0 = 6;
     const hr = wsC.getRow(H0); HC.forEach((h, i) => (hr.getCell(i + 1).value = h)); styleHeader(hr, 1, HC.length);
@@ -100,7 +100,7 @@
       v(11, r.sohRaw); v(12, r.onOrder || 0);
       v(13, { formula: `G${n}*H${n}`, result: r.ss || 0 });
       v(14, { formula: `G${n}*(H${n}+I${n})`, result: r.rop || 0 });
-      v(15, { formula: `G${n}*MAX(J${n},H${n}+I${n})`, result: r.max || 0 });
+      v(15, { formula: `G${n}*IF(N(J${n})=0,H${n}+I${n},MAX(H${n}+1,2*J${n}-H${n})+I${n})`, result: r.max || 0 });
       v(16, { formula: `MAX(K${n},0)+L${n}`, result: r.pos || 0 });
       v(17, { formula: `IF(N(G${n})>0,MAX(K${n},0)/G${n},"")`, result: r.dsi == null ? "" : r.dsi });
       v(18, { formula: `IF(AND(N(G${n})>0,P${n}<=N${n},P${n}<O${n}),O${n}-P${n},0)`, result: r.saran || 0 });
@@ -115,12 +115,15 @@
       v(23, r.harga || 0);
       v(24, { formula: `U${n}*W${n}`, result: r.nilaiPR || 0 });
       v(25, { formula: `MAX(K${n},0)*W${n}`, result: r.nilaiSOH || 0 });
-      v(26, { formula: `IF(G${n}="","Tanpa parameter",IF(G${n}<=0,IF(K${n}>0,"Tidak bergerak","Tidak aktif"),IF(K${n}<=0,"OOS",IF(Q${n}<=I${n},"Kritis",IF(AND(P${n}<=N${n},P${n}<O${n}),"Order",IF(Q${n}>${R(G.over)},"Overstock",IF(MAX(K${n},0)>O${n},"Di atas target","Aman")))))))`, result: r.status });
+      v(26, { formula: `IF(G${n}="","Tanpa parameter",IF(G${n}<=0,IF(K${n}>0,"Tidak bergerak","Tidak aktif"),IF(K${n}<=0,"OOS",IF(Q${n}<=I${n},"Kritis",IF(AND(P${n}<=N${n},P${n}<O${n}),"Order",IF(Q${n}>${R(G.over)},"Overstock",IF(AND(N(J${n})>0,MAX(K${n},0)>AH${n}),"Di atas target","Aman")))))))`, result: r.status });
       v(27, { formula: `IF(Q${n}="","",IF(Q${n}<${R(G.dsiMin)},"Min ≤3 hari",IF(Q${n}<${R(G.dsiSafe)},"Safety 4–6 hari","Max ≥7 hari")))`, result: r.band || "" });
       v(28, r.hargaSrc || ""); v(29, r.note || ""); v(30, (r.issues || []).join("; ")); v(31, r.supplier || "");
-      v(32, { formula: `IF(G${n}="","",IF(G${n}<=0,MAX(K${n},0),MAX(0,MAX(K${n},0)-O${n})))`, result: r.hasParam ? r.excess || 0 : "" });
+      v(32, { formula: `IF(G${n}="","",IF(G${n}<=0,MAX(K${n},0),IF(N(J${n})=0,0,MAX(0,MAX(K${n},0)-AH${n}))))`, result: r.hasParam ? r.excess || 0 : "" });
       v(33, { formula: `IF(AF${n}="","",AF${n}*W${n})`, result: r.hasParam ? r.excessValue || 0 : "" });
-      row.getCell(32).numFmt = "#,##0.##;-#,##0.##;0"; row.getCell(33).numFmt = RP;
+      v(34, { formula: `IF(N(G${n})>0,G${n}*IF(N(J${n})=0,H${n}+1,MAX(H${n}+1,2*J${n}-H${n})),"")`, result: r.usage > 0 ? r.physMax : "" });
+      v(35, { formula: `IF(N(G${n})>0,(H${n}+AH${n}/G${n})/2,"")`, result: r.usage > 0 ? r.avgDays : "" });
+      v(36, { formula: `IF(N(G${n})>0,AH${n}/G${n}-H${n},"")`, result: r.usage > 0 ? r.cycleDays : "" });
+      row.getCell(32).numFmt = "#,##0.##;-#,##0.##;0"; row.getCell(33).numFmt = RP; row.getCell(34).numFmt = "#,##0.##"; row.getCell(35).numFmt = "#,##0.0"; row.getCell(36).numFmt = "#,##0.0";
       [7, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21].forEach((c) => (row.getCell(c).numFmt = fmtQty(row.getCell(c).value && row.getCell(c).value.result != null ? row.getCell(c).value.result : row.getCell(c).value)));
       [8, 9, 10].forEach((c) => (row.getCell(c).numFmt = "#,##0.##;-#,##0.##;0"));
       [17, 22].forEach((c) => (row.getCell(c).numFmt = "#,##0.0"));
@@ -129,7 +132,7 @@
       [7, 8, 9, 10, 11, 12, 19, 20, 23, 29].forEach((c) => { if (!(c === 21)) inputCell(row.getCell(c)); });
       for (let c = 1; c <= HC.length; c++) if (!row.getCell(c).border) border(row.getCell(c));
     });
-    const widthsC = [5, 12, 34, 8, 13, 22, 11, 9, 9, 9, 11, 11, 11, 11, 11, 11, 9, 11, 10, 10, 11, 10, 12, 14, 14, 14, 15, 10, 24, 34, 20, 14, 15];
+    const widthsC = [5, 12, 34, 8, 13, 22, 11, 9, 9, 9, 11, 11, 11, 11, 11, 11, 9, 11, 10, 10, 11, 10, 12, 14, 14, 14, 15, 10, 24, 34, 20, 14, 15, 13, 12, 11];
     widthsC.forEach((w, i) => (wsC.getColumn(i + 1).width = w));
     wsC.views = [{ state: "frozen", xSplit: 3, ySplit: H0 }];
     wsC.autoFilter = { from: { row: H0, column: 1 }, to: { row: last, column: HC.length } };
@@ -205,7 +208,7 @@
     kv(12, "Parameter dimuat", meta.masterLoadedAt ? new Date(meta.masterLoadedAt).toLocaleString("id-ID") : "");
     kv(13, "Jumlah item dihitung", rows.length, "#,##0");
     section(15, "Parameter global (boleh diubah, kuning)");
-    kv(16, "Target DSI (hari) — stok maksimum = pemakaian × MAX(target, buffer + lead time); dipakai bila master tidak punya kolom Target DSI", s.targetDsi);
+    kv(16, "Target DSI (hari) = rata-rata stok fisik; dipakai bila master tidak punya kolom Target DSI (0 = sheet lama)", s.targetDsi);
     kv(17, "Batas overstock (DSI, hari)", s.overstockDays);
     kv(18, "Batas band Min (DSI <)", s.dsiMin);
     kv(19, "Batas band Safety (DSI <)", s.dsiSafety);
@@ -219,7 +222,8 @@
     const kpiRows = [
       ["Target DSI (hari)", { formula: R(G.target), result: s.targetDsi }, "#,##0.0"],
       ["DSI gudang aktual (hari) = nilai stok ÷ nilai pemakaian per hari", { formula: `IFERROR(SUMIF(${RC("G")},"<>",${RC("Y")})/${sumG},"")`, result: k.dsiActual == null ? "" : k.dsiActual }, "#,##0.0"],
-      ["DSI gudang setelah PR (hari)", { formula: `IFERROR(SUMPRODUCT((${RC("G")}<>"")*(${RC("P")}+${RC("U")})*${RC("W")})/${sumG},"")`, result: k.dsiAfterPR == null ? "" : k.dsiAfterPR }, "#,##0.0"],
+      ["DSI bila kelebihan & barang tidak bergerak dihabiskan (hari)", { formula: `IFERROR((SUMIF(${RC("G")},"<>",${RC("Y")})-SUMIF(${RC("G")},">0",${RC("AG")})-SUMIF(${RC("Z")},"Tidak bergerak",${RC("Y")}))/${sumG},"")`, result: k.dsiNoExcess == null ? "" : k.dsiNoExcess }, "#,##0.0"],
+      ["DSI desain parameter (hari) = rata-rata stok fisik bila order sesuai rumus", { formula: `IFERROR(SUMPRODUCT(${RC("G")},${RC("W")},${RC("AI")})/${sumG},"")`, result: k.dsiDesign == null ? "" : k.dsiDesign }, "#,##0.0"],
       ["Di atas target, barang bergerak (item)", { formula: `COUNTIFS(${RC("G")},">0",${RC("AF")},">0")`, result: k.excessCount }, "#,##0"],
       ["Kelebihan stok di atas target (nilai)", { formula: `SUMIF(${RC("G")},">0",${RC("AG")})`, result: k.excessValue }, RP],
       ["Item perlu order (Final PR > 0)", { formula: `COUNTIF(${RC("U")},">0")`, result: k.prCount }, "#,##0"],
@@ -334,7 +338,7 @@
       ["Penjualan 1 Hari", "Rata-rata pemakaian per hari dalam SATUAN ZAHIR (gram, pcs, liter, ...)."],
       ["Buffer Stock (Hari)", "Safety stock dalam hari pemakaian."],
       ["Lead Time (Hari)", "Hari dari PR dibuat sampai barang diterima gudang."],
-      ["Target DSI (Hari)", "Target stok dalam hari pemakaian setelah order (default aplikasi 7). Kosong = pakai default. 0 = sama dengan sheet lama (order hanya sampai ROP)."],
+      ["Target DSI (Hari)", "Target rata-rata stok fisik dalam hari pemakaian (default aplikasi 3). Kosong = pakai default. 0 = sama dengan sheet lama (order hanya sampai ROP)."],
       ["Minimum Order", "MOQ supplier. Final PR tidak akan di bawah angka ini."],
       ["Kelipatan Order", "Isi per kemasan (mis. 1 sak = 50000 gram). Final PR dibulatkan ke atas ke kelipatan ini."],
       ["Harga", "Harga beli terakhir. Kosong = pakai harga satuan di file Zahir."],

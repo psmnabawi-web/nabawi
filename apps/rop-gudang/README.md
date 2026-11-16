@@ -21,21 +21,24 @@ Perubahan manual tersimpan di browser per file (dikunci SHA-256 file), tercatat 
 
 ## Cara hitung
 
-Pemicu order sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (Total Safety = ROP). Qty order menutup stok sampai **target DSI** (default **7 hari**), ditambah PO outstanding dan pembulatan:
+Pemicu order sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (Total Safety = ROP). Qty order disetel supaya **rata-rata stok fisik = target DSI** (default **3 hari**), ditambah PO outstanding dan pembulatan:
 
 | Besaran | Rumus |
 |---|---|
 | Safety stock | Pemakaian/hari × Buffer (hari) |
 | ROP | Pemakaian/hari × (Buffer + Lead time) |
-| Stok maksimum | Pemakaian/hari × MAX(Target DSI, Buffer + Lead time) |
+| Stok fisik maksimum | Pemakaian/hari × MAX(Buffer + 1, 2 × Target DSI − Buffer) · stok sesaat setelah barang datang |
+| Stok maksimum (dasar PR) | Stok fisik maksimum + Pemakaian/hari × Lead time |
 | Posisi stok | SOH Zahir (negatif dihitung 0) + PO outstanding |
 | Saran PR | Stok maksimum − Posisi stok, bila Posisi ≤ ROP; selain itu 0 |
 | Final PR | MAX(MOQ, CEILING(Saran PR, Kelipatan)) |
 | DSI | SOH ÷ Pemakaian/hari |
 | DSI gudang | Nilai stok ÷ nilai pemakaian per hari (semua item berparameter; sama dengan kolom DSI sheet lama) |
-| Kelebihan | SOH − Stok maksimum (barang bergerak) · seluruh SOH (barang tidak bergerak) |
+| Kelebihan | SOH − Stok fisik maksimum (barang bergerak) · seluruh SOH (barang tidak bergerak) |
+| DSI desain | Rata-rata stok fisik bila semua item diorder sesuai rumus = (Buffer + hari stok fisik maks) ÷ 2, dibobot nilai pemakaian |
 
-- **Target DSI 7 (default)**: setelah PR, posisi stok cukup untuk 7 hari pemakaian. Bila Buffer + Lead time > 7 (mis. lead time supplier 14 hari), stok maksimum memakai Buffer + Lead time dan item ditandai *Target DSI tidak tercapai*.
+- **Target DSI 3 (default) = rata-rata stok FISIK 3 hari**, sama dengan cara hitung KPI DSI gudang (nilai stok ÷ nilai pemakaian per hari). Stok fisik bergerak antara Buffer (sesaat sebelum barang datang) dan stok fisik maksimum (sesaat setelah datang); rata-ratanya = target. Contoh buffer 2 hari, target 3: stok bergerak 2–4 hari, qty order ≈ 2 hari pemakaian (order tiap ±2 hari). ASUMSI: stok direview harian.
+- Bila Buffer + 0,5 > Target (buffer sudah di atas target), target tidak bisa dicapai; item ditandai *Target DSI tidak tercapai*.
 - Target bisa diubah di Pengaturan (berlaku semua item) atau per item lewat kolom `Target DSI (Hari)` di master. **Target 0** = hasil Saran PR sama persis dengan kolom PR di sheet lama (order hanya sampai ROP).
 - **Kelipatan**: kolom `Kelipatan Order` di master. Bila kosong, satuan Gram/Ml dibulatkan ke atas per 1.000 (bisa dimatikan di Pengaturan).
 - **Harga**: kolom `Harga` di master (harga beli terakhir); bila kosong pakai harga satuan Zahir (HPP rata-rata).
@@ -46,8 +49,8 @@ Pemicu order sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (Total Safety = R
 | OOS | Stok 0, ada pemakaian | Order hari ini / transfer |
 | Kritis | DSI ≤ lead time: habis sebelum barang datang | Order + percepat supplier |
 | Order | Posisi stok ≤ ROP | Order sesuai Final PR |
-| Aman | Di atas ROP, tidak melebihi stok maksimum | — |
-| Di atas target | Stok melebihi stok maksimum (DSI > target) | Tahan order, habiskan dulu |
+| Aman | Di atas ROP, tidak melebihi stok fisik maksimum | — |
+| Di atas target | Stok fisik melebihi stok fisik maksimum | Tahan order, habiskan dulu |
 | Overstock | DSI > batas overstock (default 30 hari) | Tahan order, dorong pemakaian |
 | Tidak bergerak | Ada stok, pemakaian 0 | Cek parameter / cuci gudang |
 | Tanpa parameter | Kode tidak ada di master | Lengkapi master |

@@ -7,7 +7,11 @@
  * Rumus (identik dengan sheet "Perhitungan Kebutuhan /ROP WH", ditambah PO outstanding & siklus order):
  *   Safety stock  = Pemakaian/hari × Buffer (hari)
  *   ROP           = Pemakaian/hari × (Buffer + Lead time)          ← "Total Safety" di sheet lama
- *   Stok maksimum = Pemakaian/hari × MAX(Target DSI, Buffer + Lead time)   ← target DSI default 7 hari; 0 = sama persis dengan sheet lama
+ *   Target DSI    = rata-rata stok FISIK dalam hari pemakaian (sama dengan KPI DSI gudang = nilai stok ÷ nilai pemakaian/hari)
+ *   Stok fisik maksimum (saat barang datang) = Pemakaian × MAX(Buffer + 1, 2 × Target − Buffer)
+ *                   → stok fisik bergerak antara Buffer dan stok fisik maksimum, rata-ratanya = Target (asumsi review harian)
+ *   Stok maksimum (posisi, dasar PR)         = Stok fisik maksimum + Pemakaian × Lead time
+ *                   Target 0 = sama persis dengan sheet lama (stok maksimum = ROP)
  *   Posisi stok   = SOH (min 0) + PO outstanding
  *   Saran PR      = Stok maksimum − Posisi stok, bila Posisi ≤ ROP (dan < Stok maksimum); selain itu 0
  *   Final PR      = 0 bila Saran 0; selain itu MAX(MOQ, CEILING(Saran, kelipatan))
@@ -370,13 +374,13 @@
   }
 
   // ---------- perhitungan ROP ----------
-  const DEFAULT_SETTINGS = { targetDsi: 7, overstockDays: 30, roundGramMl: true, roundStep: 1000, priceSource: "master", dsiMin: 3.5, dsiSafety: 6.5 };
+  const DEFAULT_SETTINGS = { targetDsi: 3, overstockDays: 30, roundGramMl: true, roundStep: 1000, priceSource: "master", dsiMin: 3.5, dsiSafety: 6.5 };
   const STATUS = {
     OOS: { label: "OOS", rank: 0, desc: "Stok habis padahal ada pemakaian" },
     KRITIS: { label: "Kritis", rank: 1, desc: "Stok tidak cukup sampai barang datang (DSI ≤ lead time)" },
     ORDER: { label: "Order", rank: 2, desc: "Posisi stok di bawah/sama dengan ROP" },
     AMAN: { label: "Aman", rank: 3, desc: "Di atas ROP, DSI tidak melebihi target" },
-    ABOVE: { label: "Di atas target", rank: 4, desc: "DSI di atas target (stok maksimum)" },
+    ABOVE: { label: "Di atas target", rank: 4, desc: "Stok fisik di atas stok fisik maksimum (target DSI)" },
     OVER: { label: "Overstock", rank: 5, desc: "DSI melebihi batas overstock" },
     DEAD: { label: "Tidak bergerak", rank: 6, desc: "Ada stok, pemakaian/hari = 0" },
     IDLE: { label: "Tidak aktif", rank: 7, desc: "Stok 0 dan pemakaian 0" },
@@ -453,7 +457,13 @@
       if (m) {
         row.ss = round6(d * row.buffer);
         row.rop = round6(d * (row.buffer + row.lead));
-        row.max = round6(d * Math.max(row.target, row.buffer + row.lead));
+        // hari stok fisik maksimum & stok maksimum posisi (lihat rumus di kepala file)
+        row.physDays = row.target > 0 ? Math.max(row.buffer + 1, 2 * row.target - row.buffer) : row.buffer + 1;
+        row.maxDays = row.target > 0 ? row.physDays + row.lead : row.buffer + row.lead;
+        row.physMax = round6(d * row.physDays);
+        row.max = round6(d * row.maxDays);
+        row.avgDays = d > 0 ? round6((row.buffer + row.physDays) / 2) : null;   // rata-rata stok fisik bila order sesuai rumus
+        row.cycleDays = d > 0 ? round6(row.physDays - row.buffer) : null;      // qty order ≈ sekian hari pemakaian = order tiap ± sekian hari
         row.pos = round6(soh + row.onOrder);
         row.dsi = d > 0 ? round6(soh / d) : null;
         const need = d > 0 && row.pos <= row.rop && row.pos < row.max;
@@ -468,11 +478,11 @@
         else if (row.dsi <= row.lead) st2 = STATUS.KRITIS;
         else if (need) st2 = STATUS.ORDER;
         else if (row.dsi > s.overstockDays) st2 = STATUS.OVER;
-        else if (soh > row.max) st2 = STATUS.ABOVE;
+        else if (row.target > 0 && soh > row.physMax) st2 = STATUS.ABOVE;
         else st2 = STATUS.AMAN;
         row.status = st2.label; row.rank = st2.rank;
         row.band = dsiBand(row.dsi, s);
-        row.excess = d > 0 ? Math.max(0, round6(soh - row.max)) : soh; // kelebihan di atas stok maksimum (target)
+        row.excess = d > 0 ? (row.target > 0 ? Math.max(0, round6(soh - row.physMax)) : 0) : soh; // kelebihan di atas stok fisik maksimum (target)
       } else {
         Object.assign(row, { ss: null, rop: null, max: null, pos: soh + (row.onOrder || 0), dsi: null, saran: 0, finalAuto: 0, final: eFinal[code] != null ? eFinal[code] : 0, finalEdited: eFinal[code] != null, dsiAfter: null, status: STATUS.NOPARAM.label, rank: STATUS.NOPARAM.rank, band: "" });
       }
@@ -489,7 +499,7 @@
       if (m && st && row.satuanMaster && row.satuan && row.satuanMaster.toUpperCase() !== row.satuan.toUpperCase()) add("Satuan beda", `Zahir: ${row.satuan} · Master: ${row.satuanMaster}. Pemakaian/hari harus dalam satuan Zahir.`, "Tinggi");
       if (row.sohRaw < 0) add("Stok negatif di Zahir", `Stok ${fmtNum(row.sohRaw)} dihitung 0.`, "Tinggi");
       if (m && row.final > 0 && !(row.harga > 0)) add("Harga kosong", "Nilai PR tidak terhitung.", "Sedang");
-      if (m && d > 0 && row.target > 0 && row.buffer + row.lead > row.target) add("Target DSI tidak tercapai", `Buffer ${fmtNum(row.buffer)} + lead time ${fmtNum(row.lead)} = ${fmtNum(row.buffer + row.lead)} hari > target ${fmtNum(row.target)} hari. Stok maksimum memakai ${fmtNum(row.buffer + row.lead)} hari.`, "Rendah");
+      if (m && d > 0 && row.target > 0 && row.buffer + 0.5 > row.target) add("Target DSI tidak tercapai", `Buffer ${fmtNum(row.buffer)} hari: rata-rata stok fisik minimal ±${fmtNum(row.buffer + 0.5)} hari, di atas target ${fmtNum(row.target)} hari. Turunkan buffer atau tetapkan target khusus item ini.`, "Rendah");
       rows.push(row);
     }
 
@@ -500,7 +510,7 @@
 
   function summarize(rows, s) {
     const k = { items: rows.length, withParam: 0, prCount: 0, prValue: 0, oos: 0, kritis: 0, order: 0, above: 0, over: 0, overValue: 0, dead: 0, deadValue: 0, noParamStock: 0, noParamValue: 0, stockValue: 0, byBrand: {}, edited: 0,
-      excessCount: 0, excessValue: 0, paramStockValue: 0, usageValue: 0, afterValue: 0, targetDsi: s.targetDsi };
+      excessCount: 0, excessValue: 0, paramStockValue: 0, usageValue: 0, afterValue: 0, designValue: 0, targetDsi: s.targetDsi };
     for (const r of rows) {
       if (r.hasParam) k.withParam++;
       k.stockValue += r.nilaiSOH;
@@ -518,12 +528,16 @@
         k.paramStockValue += r.nilaiSOH;
         k.usageValue += (r.usage > 0 ? r.usage : 0) * (r.harga || 0);
         k.afterValue += ((r.pos || 0) + (r.final || 0)) * (r.harga || 0);
+        if (r.usage > 0) k.designValue += r.usage * (r.harga || 0) * (r.avgDays || 0);
         if (r.usage > 0 && r.excess > 0) { k.excessCount++; k.excessValue += r.excessValue; }
       }
     }
     k.dsiActual = k.usageValue > 0 ? Math.round((k.paramStockValue / k.usageValue) * 100) / 100 : null;
     k.dsiAfterPR = k.usageValue > 0 ? Math.round((k.afterValue / k.usageValue) * 100) / 100 : null;
-    for (const f of ["prValue", "overValue", "deadValue", "noParamValue", "stockValue", "excessValue", "paramStockValue", "usageValue", "afterValue"]) k[f] = Math.round(k[f]);
+    // DSI desain = rata-rata stok fisik bila semua item diorder sesuai rumus; DSI tanpa kelebihan = aktual dikurangi kelebihan & barang tidak bergerak
+    k.dsiDesign = k.usageValue > 0 ? Math.round((k.designValue / k.usageValue) * 100) / 100 : null;
+    k.dsiNoExcess = k.usageValue > 0 ? Math.round(((k.paramStockValue - k.excessValue - k.deadValue) / k.usageValue) * 100) / 100 : null;
+    for (const f of ["prValue", "overValue", "deadValue", "noParamValue", "stockValue", "excessValue", "paramStockValue", "usageValue", "afterValue", "designValue"]) k[f] = Math.round(k[f]);
     return k;
   }
 

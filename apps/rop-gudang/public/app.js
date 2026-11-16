@@ -299,7 +299,7 @@
     const t = settings().targetDsi;
     const dsiCls = k.dsiActual == null ? "" : k.dsiActual > t * 1.1 ? "blue" : k.dsiActual < t * 0.6 ? "red" : "green";
     const cards = [
-      { cls: dsiCls, label: `DSI gudang · target ${fmt(t)} hari`, value: k.dsiActual == null ? "-" : `${fmt(k.dsiActual, 1)} hari`, sub: `Setelah PR: ${k.dsiAfterPR == null ? "-" : fmt(k.dsiAfterPR, 1) + " hari"} · nilai stok ÷ nilai pemakaian/hari` },
+      { cls: dsiCls, label: `DSI gudang · target ${fmt(t)} hari`, value: k.dsiActual == null ? "-" : `${fmt(k.dsiActual, 1)} hari`, sub: `Tanpa kelebihan & barang mati: ${k.dsiNoExcess == null ? "-" : fmt(k.dsiNoExcess, 1)} hari · desain parameter: ${k.dsiDesign == null ? "-" : fmt(k.dsiDesign, 1)} hari` },
       { cls: "gold", label: "Perlu order", value: fmt(k.prCount) + " item", sub: `OOS ${k.oos} · Kritis ${k.kritis} · Order ${k.order}` },
       { cls: "", label: "Nilai PR", value: fmtRp(k.prValue), sub: brands || "—" },
       { cls: "blue", label: `Kelebihan di atas target`, value: fmtRp(k.excessValue), sub: `${k.excessCount} item bergerak melebihi stok maks · ${k.over} item DSI > ${fmt(settings().overstockDays)} hari` },
@@ -454,7 +454,9 @@
         ${line("Target DSI", `${fmt(r.target)} hari`, r.targetFromMaster ? "master" : "default pengaturan")}
         ${line("Safety stock", `${fmt(r.ss)} ${u}`, `${fmt(d)} × ${fmt(r.buffer)}`)}
         ${line("ROP", `${fmt(r.rop)} ${u}`, `${fmt(d)} × (${fmt(r.buffer)} + ${fmt(r.lead)})`, true)}
-        ${line("Stok maksimum", `${fmt(r.max)} ${u}`, `${fmt(d)} × MAX(${fmt(r.target)}, ${fmt(r.buffer)} + ${fmt(r.lead)})`, true)}
+        ${line("Stok fisik maksimum", `${fmt(r.physMax)} ${u}`, r.target > 0 ? `${fmt(d)} × MAX(${fmt(r.buffer)} + 1, 2 × ${fmt(r.target)} − ${fmt(r.buffer)}) · stok sesaat setelah barang datang` : "target 0: buffer + 1 hari")}
+        ${line("Stok maksimum (dasar PR)", `${fmt(r.max)} ${u}`, r.target > 0 ? `stok fisik maks + ${fmt(d)} × lead time ${fmt(r.lead)}` : "target 0 = ROP (sheet lama)", true)}
+        ${line("Rata-rata stok fisik", r.avgDays == null ? "-" : `${fmt(r.avgDays, 1)} hari`, r.cycleDays == null ? "" : `bergerak ${fmt(r.buffer)}–${fmt(r.physDays)} hari · order tiap ±${fmt(r.cycleDays, 1)} hari`)}
         ${line("SOH Zahir", `${fmt(r.sohRaw)} ${u}`, r.inZahir ? "file Zahir" : "tidak ada di file → 0")}
         ${line("PO outstanding", `${fmt(r.onOrder || 0)} ${u}`, r.onOrderEdited ? "diisi manual" : "")}
         ${line("Posisi stok", `${fmt(r.pos)} ${u}`, "SOH + PO outstanding")}

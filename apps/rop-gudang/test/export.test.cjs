@@ -45,7 +45,8 @@ test("workbook: sheet, header, rumus inti, input & override manual", async () =>
   assert.equal(ws.getCell(`U${r}`).formula, `IF(R${r}>0,MAX(S${r},CEILING(R${r},IF(N(T${r})>0,T${r},1))),0)`);
   assert.equal(ws.getCell(`J${r}`).formula, "Ringkasan!$C$16"); // target DSI default dirujuk ke sel parameter global
   assert.equal(ws.getCell(`J5`).value, "Target DSI (hari)");
-  assert.equal(ws.getCell(`O${r}`).formula, `G${r}*MAX(J${r},H${r}+I${r})`);
+  assert.equal(ws.getCell(`O${r}`).formula, `G${r}*IF(N(J${r})=0,H${r}+I${r},MAX(H${r}+1,2*J${r}-H${r})+I${r})`);
+  assert.equal(ws.getCell(`AH5`).value, "Stok fisik maks");
   assert.equal(ws.getCell(`L${r}`).value, 50); // PO outstanding dari edit
   const k2 = rowOf(ws, "K002");
   assert.equal(ws.getCell(`U${k2}`).value, 600); // override = nilai, bukan rumus
@@ -68,7 +69,7 @@ test("workbook: sheet, header, rumus inti, input & override manual", async () =>
 
   const rs = wb2.getWorksheet("Ringkasan");
   const kr = (label) => { for (let i = 24; i < 60; i++) if (String(rs.getCell(`B${i}`).value || "").startsWith(label)) return i; return -1; };
-  assert.equal(rs.getCell("C16").value, 7);
+  assert.equal(rs.getCell("C16").value, 3);
   assert.equal(rs.getCell(`C${kr("Target DSI (hari)")}`).formula, "Ringkasan!$C$16");
   const ip = kr("Item perlu order");
   assert.match(rs.getCell(`C${ip}`).formula, /^COUNTIF\(Perhitungan!\$U\$6:\$U\$\d+,">0"\)$/);
@@ -117,7 +118,8 @@ test("rumus Excel dihitung ulang LibreOffice = hasil aplikasi", { skip: !hasLO &
     const n = (h) => Number(row[idx(h)] || 0);
     assert.equal(n("ROP"), r.rop || 0, `${kode} ROP`);
     assert.equal(n("Stok maksimum"), r.max || 0, `${kode} Stok maksimum`);
-    if (r.hasParam) assert.equal(n("Kelebihan di atas stok maks"), r.excess, `${kode} kelebihan`);
+    if (r.hasParam) assert.equal(n("Kelebihan di atas stok fisik maks"), r.excess, `${kode} kelebihan`);
+    if (r.usage > 0) { assert.equal(n("Stok fisik maks"), r.physMax, `${kode} stok fisik maks`); assert.ok(Math.abs(n("Rata-rata stok fisik (hari)") - r.avgDays) < 1e-9, `${kode} rata-rata`); }
     assert.equal(n("Saran PR"), r.saran, `${kode} Saran PR`);
     assert.equal(n("Final PR"), r.final, `${kode} Final PR`);
     assert.equal(Math.round(n("Nilai PR")), Math.round(r.nilaiPR), `${kode} Nilai PR`);
@@ -134,7 +136,8 @@ test("rumus Excel dihitung ulang LibreOffice = hasil aplikasi", { skip: !hasLO &
   assert.equal(Number(val("Stok habis (OOS)")), result.kpi.oos);
   assert.equal(Math.round(Number(val("Overstock (nilai stok)"))), result.kpi.overValue);
   assert.ok(Math.abs(Number(val("DSI gudang aktual")) - result.kpi.dsiActual) < 0.006, "DSI aktual " + val("DSI gudang aktual"));
-  assert.ok(Math.abs(Number(val("DSI gudang setelah PR")) - result.kpi.dsiAfterPR) < 0.006, "DSI setelah PR " + val("DSI gudang setelah PR"));
+  assert.ok(Math.abs(Number(val("DSI desain parameter")) - result.kpi.dsiDesign) < 0.006, "DSI desain " + val("DSI desain parameter"));
+  assert.ok(Math.abs(Number(val("DSI bila kelebihan")) - result.kpi.dsiNoExcess) < 0.006, "DSI tanpa kelebihan " + val("DSI bila kelebihan"));
   assert.equal(Math.round(Number(val("Kelebihan stok di atas target"))), result.kpi.excessValue);
   assert.equal(Number(val("Di atas target, barang bergerak")), result.kpi.excessCount);
   const recRows = ring.filter((x) => x[9] === "Cocok" || x[9] === "SELISIH");
