@@ -299,3 +299,6 @@ table.po-items { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
 }
 .st-above { background: #e6f0fb; color: #2b5ea7; }
 .kpi.green { --accent: var(--green); }
+.data td.num small.tag-oos, .data td.num small.tag-miss { display: block; font-size: 10.5px; font-weight: 700; line-height: 1.1; }
+.data td.num small.tag-oos { color: var(--red); }
+.data td.num small.tag-miss { color: var(--orange); }

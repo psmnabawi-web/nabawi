@@ -283,7 +283,8 @@
   function renderAlerts() {
     const z = state.zahir, r = state.result, out = [];
     const okN = z.recon.filter((x) => x.ok).length;
-    if (okN === z.recon.length && !z.unparsed.length) out.push(alertBox("ok", `<b>File Zahir terverifikasi.</b> ${okN} dari ${z.recon.length} subtotal di file cocok dengan jumlah baris produk. Nilai stok ${esc(gudangLabel(gudangObj()))}: <b>${fmtRp(gudangObj() ? gudangObj().value : 0)}</b>.`));
+    const gItems = z.items.filter((i) => i.gkey === state.gudangKey), withStock = gItems.filter((i) => i.qty > 0).length;
+    if (okN === z.recon.length && !z.unparsed.length) out.push(alertBox("ok", `<b>File Zahir terverifikasi.</b> ${okN} dari ${z.recon.length} subtotal di file cocok dengan jumlah baris produk. SOH terbaca: <b>${withStock}</b> item ada stok, ${gItems.length - withStock} item stok 0. Nilai stok ${esc(gudangLabel(gudangObj()))}: <b>${fmtRp(gudangObj() ? gudangObj().value : 0)}</b>.`));
     else out.push(alertBox("err", `<b>File Zahir tidak lengkap/berbeda.</b> Subtotal cocok ${okN}/${z.recon.length}${z.unparsed.length ? `, ${z.unparsed.length} baris tidak terbaca` : ""}. Download ulang dari Zahir dan jangan edit file sebelum upload. Rincian di tab Data issue.`));
     if (!r.masterFitsGudang) out.push(alertBox("warn", `<b>Master parameter tampaknya bukan untuk gudang ini.</b> Hanya ${r.kpi.masterMatched} dari ${r.kpi.masterActive} kode master ada di ${esc(gudangLabel(gudangObj()))}. Item master yang tidak ada di file tidak dihitung.`));
     const high = r.issues.filter((i) => i.severity === "Tinggi").length;
@@ -342,8 +343,8 @@
     { key: "nama", label: "Nama barang", cls: "name sticky", render: (r) => `<button type="button" data-detail="${esc(r.code)}">${esc(r.nama)}</button>${r.issues.length ? `<span class="issue-flag" title="${esc(r.issues.join("; "))}">!</span>` : ""}<small>${esc([r.brand, r.kategori].filter(Boolean).join(" · "))}</small>` },
     { key: "satuan", label: "Satuan", render: (r) => esc(r.satuan || r.satuanMaster) },
     NUM("usage", "Pakai/hari", { render: (r) => (r.usage == null ? "-" : fmt(r.usage)) }),
-    NUM("sohRaw", "SOH", { render: (r) => fmt(r.sohRaw) }),
-    NUM("dsi", "DSI", { render: (r) => (r.dsi == null ? "-" : fmt(r.dsi, 1)), tdCls: (r) => (r.dsi == null ? "" : r.dsi <= (r.lead || 0) ? "dsi-low" : r.dsi < settings().dsiSafety ? "dsi-mid" : "") }),
+    NUM("sohRaw", "SOH", { render: (r) => (!r.inZahir ? '0<small class="tag-miss">tidak ada di file</small>' : r.sohRaw <= 0 ? `${fmt(r.sohRaw)}<small class="tag-oos">habis</small>` : fmt(r.sohRaw)) }),
+    NUM("dsi", "DSI", { render: (r) => (r.dsi == null ? "-" : r.dsi === 0 ? '0<small class="tag-oos">habis</small>' : fmt(r.dsi, 1)), tdCls: (r) => (r.dsi == null ? "" : r.dsi <= (r.lead || 0) ? "dsi-low" : r.dsi < settings().dsiSafety ? "dsi-mid" : "") }),
     NUM("rop", "ROP", { render: (r) => (r.rop == null ? "-" : fmt(r.rop)) }),
     NUM("saran", "Saran PR", { render: (r) => fmt(r.saran) }),
     NUM("moq", "MOQ", { render: (r) => (r.moq ? fmt(r.moq) : "-") }),
