@@ -13,7 +13,7 @@ window.ROP_CONFIG = {
 
   // Master parameter ROP. Default: tab "PKU" di spreadsheet "Perhitungan Kebutuhan /ROP WH Pekanbaru".
   // Kolom dibaca berdasarkan nama header: Kode Barang, Nama, Satuan, Kategori, Penjualan 1 Hari, Buffer Stock (Hari),
-  // Lead Time (Hari), Minimum Order Versi Purchasing, Harga. Opsional: Target DSI (Hari), Kelipatan Order, PO Outstanding, Supplier.
+  // Lead Time (Hari), Minimum Order Versi Purchasing, Harga. Opsional: Target DSI (Hari), Kelipatan Order, Supplier.
   MASTER: {
     SHEET_URL: "",      // link spreadsheet atau ID-nya
     GID: "0",           // gid tab parameter (tab PKU = 0)
