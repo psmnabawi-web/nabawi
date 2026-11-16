@@ -1,0 +1,11 @@
+{
+  "name": "rop-gudang",
+  "private": true,
+  "description": "ROP Gudang: upload stok Zahir (Daftar Produk Per Gudang) -> rekomendasi pembelian berbasis ROP + export Excel berformula. Situs statis di public/, tanpa dependensi npm.",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/core.test.cjs test/export.test.cjs",
+    "test:e2e": "node test/e2e.cjs",
+    "serve": "node scripts/serve.cjs"
+  }
+}

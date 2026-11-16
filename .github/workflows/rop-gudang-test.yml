@@ -1,0 +1,25 @@
+name: ROP Gudang (tes)
+
+# Hanya menjalankan tes logika & export Excel. Tidak pernah deploy (deploy manual lewat apps/rop-gudang/deploy.sh).
+on:
+  push:
+    branches: ["claude/zealous-carson-bns1ge", "main"]
+    paths: ["apps/rop-gudang/**", ".github/workflows/rop-gudang-test.yml"]
+  pull_request:
+    paths: ["apps/rop-gudang/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tes logika ROP & export Excel
+        working-directory: apps/rop-gudang
+        run: npm test

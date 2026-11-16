@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>ROP Gudang</title>
+  <meta name="description" content="Rekomendasi pembelian gudang dari stok Zahir dan parameter ROP">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#14305A"/><path d="M7 22V12l9-5 9 5v10" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/><path d="M11 22v-6h10v6" fill="none" stroke="#F2B544" stroke-width="2.2" stroke-linejoin="round"/></svg>
+      <div>
+        <h1>ROP Gudang</h1>
+        <p id="subtitle">Rekomendasi pembelian dari stok Zahir</p>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="btnCopy" class="btn" type="button" disabled>Salin teks PR</button>
+      <button id="btnExport" class="btn primary" type="button" disabled>Export Excel</button>
+      <button id="btnSettings" class="btn icon" type="button" aria-label="Pengaturan" title="Pengaturan">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main>
+    <section class="steps">
+      <article class="card step" id="stepMaster">
+        <div class="step-head">
+          <span class="step-num">1</span>
+          <h2>Parameter ROP</h2>
+          <span id="masterChip" class="chip">Memuat…</span>
+        </div>
+        <p id="masterInfo" class="muted small"></p>
+        <div class="row-actions">
+          <button id="btnReloadMaster" class="btn small" type="button">Muat ulang dari Google Sheet</button>
+          <label class="btn small" for="fileMaster">Upload master</label>
+          <input type="file" id="fileMaster" accept=".xlsx,.xls,.csv,.txt" class="visually-hidden">
+          <button id="btnTemplate" class="btn small ghost" type="button">Unduh template master</button>
+        </div>
+      </article>
+
+      <article class="card step" id="stepUpload">
+        <div class="step-head">
+          <span class="step-num">2</span>
+          <h2>Upload stok Zahir</h2>
+          <span id="fileChip" class="chip muted">Belum ada file</span>
+        </div>
+        <label id="drop" class="drop" for="fileZahir">
+          <strong>Tarik file ke sini atau klik untuk memilih</strong>
+          <span>Laporan Zahir <em>Daftar Produk Per Gudang</em> (.xls hasil download, tanpa diedit). File diproses di browser ini saja, tidak dikirim ke server.</span>
+        </label>
+        <input type="file" id="fileZahir" accept=".xls,.xlsx,.csv,.txt,.htm,.html" class="visually-hidden">
+        <div id="fileInfo" class="file-info" hidden></div>
+      </article>
+    </section>
+
+    <section id="results" hidden>
+      <div class="card toolbar">
+        <label class="field">
+          <span>Gudang</span>
+          <select id="selGudang"></select>
+        </label>
+        <label class="field">
+          <span>Tanggal stok</span>
+          <input type="date" id="inpDate">
+        </label>
+        <label class="field grow">
+          <span>Disusun oleh</span>
+          <input type="text" id="inpBy" maxlength="60" placeholder="Nama PIC purchasing / SCM" autocomplete="name">
+        </label>
+        <div class="field">
+          <span>Siklus order</span>
+          <strong id="lblCycle" class="mono">0 hari</strong>
+        </div>
+      </div>
+
+      <div id="alerts" class="alerts"></div>
+      <div id="kpis" class="kpis"></div>
+
+      <div class="card table-card">
+        <div class="tabs" role="tablist" id="tabs">
+          <button role="tab" data-tab="pr" aria-selected="true">Rekomendasi PR <span class="count" id="cntPr">0</span></button>
+          <button role="tab" data-tab="all" aria-selected="false">Semua item <span class="count" id="cntAll">0</span></button>
+          <button role="tab" data-tab="over" aria-selected="false">Overstock &amp; tidak bergerak <span class="count" id="cntOver">0</span></button>
+          <button role="tab" data-tab="issue" aria-selected="false">Data issue <span class="count" id="cntIssue">0</span></button>
+        </div>
+        <div class="filters" id="filters">
+          <input type="search" id="q" placeholder="Cari kode / nama" aria-label="Cari kode atau nama">
+          <select id="fBrand" aria-label="Filter kategori"><option value="">Semua kategori</option></select>
+          <select id="fStatus" aria-label="Filter status"><option value="">Semua status</option></select>
+          <label class="check"><input type="checkbox" id="fEdited"> Hanya yang diubah</label>
+          <button id="btnResetEdits" class="btn small ghost" type="button">Reset perubahan</button>
+        </div>
+        <div class="table-wrap" id="tableWrap">
+          <table id="tbl"></table>
+        </div>
+        <div class="table-foot" id="tblFoot"></div>
+      </div>
+
+      <details class="card method">
+        <summary>Cara hitung &amp; arti status</summary>
+        <div class="method-body">
+          <table class="formula">
+            <tr><th>Safety stock</th><td>Pemakaian/hari × Buffer (hari)</td></tr>
+            <tr><th>ROP</th><td>Pemakaian/hari × (Buffer + Lead time) <span class="muted">· sama dengan “Total Safety” di sheet lama</span></td></tr>
+            <tr><th>Stok maksimum</th><td>ROP + Pemakaian/hari × Siklus order <span class="muted">· siklus 0 = hasil sama persis dengan sheet lama</span></td></tr>
+            <tr><th>Posisi stok</th><td>SOH Zahir + PO outstanding</td></tr>
+            <tr><th>Saran PR</th><td>Stok maksimum − Posisi stok, bila Posisi ≤ ROP</td></tr>
+            <tr><th>Final PR</th><td>MAX(MOQ, dibulatkan ke atas ke Kelipatan) · bisa diubah manual, tercatat di log</td></tr>
+            <tr><th>DSI</th><td>SOH ÷ Pemakaian/hari (hari)</td></tr>
+          </table>
+          <ul class="status-legend">
+            <li><span class="st st-oos">OOS</span> stok 0 padahal ada pemakaian</li>
+            <li><span class="st st-kritis">Kritis</span> DSI ≤ lead time: stok habis sebelum barang datang, percepat order</li>
+            <li><span class="st st-order">Order</span> posisi stok ≤ ROP</li>
+            <li><span class="st st-aman">Aman</span> di atas ROP</li>
+            <li><span class="st st-over">Overstock</span> DSI di atas batas overstock</li>
+            <li><span class="st st-dead">Tidak bergerak</span> ada stok, pemakaian 0</li>
+            <li><span class="st st-noparam">Tanpa parameter</span> kode tidak ada di master</li>
+          </ul>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <dialog id="dlgItem" class="dlg">
+    <form method="dialog" class="dlg-inner">
+      <div class="dlg-head"><h3 id="dlgItemTitle"></h3><button class="btn icon" value="close" aria-label="Tutup">✕</button></div>
+      <div id="dlgItemBody"></div>
+    </form>
+  </dialog>
+
+  <dialog id="dlgSettings" class="dlg">
+    <form method="dialog" class="dlg-inner" id="formSettings">
+      <div class="dlg-head"><h3>Pengaturan</h3><button class="btn icon" value="cancel" aria-label="Tutup">✕</button></div>
+      <fieldset>
+        <legend>Sumber parameter (Google Sheet)</legend>
+        <label class="field"><span>Link spreadsheet</span><input type="url" id="setSheet" placeholder="https://docs.google.com/spreadsheets/d/…/edit#gid=0"></label>
+        <div class="grid2">
+          <label class="field"><span>Nama tab</span><input type="text" id="setTab" placeholder="PKU"></label>
+          <label class="field"><span>gid tab</span><input type="text" id="setGid" inputmode="numeric" placeholder="0"></label>
+        </div>
+        <p class="muted small">Sheet harus dibagikan “Siapa saja yang memiliki link: <b>Pelihat</b>”. Disimpan hanya di browser ini; untuk semua pengguna isi lewat deploy.sh.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Perhitungan</legend>
+        <div class="grid2">
+          <label class="field"><span>Siklus order default (hari)</span><input type="number" id="setCycle" min="0" step="0.5"></label>
+          <label class="field"><span>Batas overstock (DSI, hari)</span><input type="number" id="setOver" min="1" step="1"></label>
+        </div>
+        <label class="check"><input type="checkbox" id="setRound"> Bulatkan Final PR satuan Gram/Ml ke atas ke kelipatan</label>
+        <label class="field narrow"><span>Kelipatan Gram/Ml</span><input type="number" id="setStep" min="1" step="1"></label>
+        <label class="field"><span>Harga untuk nilai PR</span>
+          <select id="setPrice">
+            <option value="master">Harga master (harga beli terakhir), cadangan Zahir</option>
+            <option value="zahir">Harga Zahir (HPP rata-rata), cadangan master</option>
+          </select>
+        </label>
+        <p class="muted small">Siklus order dipakai untuk item yang tidak punya kolom “Siklus Order (Hari)” di master. 0 = hasil sama dengan sheet lama (order hanya menutup sampai ROP).</p>
+      </fieldset>
+      <div class="dlg-foot">
+        <button class="btn ghost" value="cancel" type="submit">Batal</button>
+        <button class="btn primary" value="save" type="submit" id="btnSaveSettings">Simpan</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="config.js"></script>
+  <script src="rop-core.js"></script>
+  <script src="excel-export.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

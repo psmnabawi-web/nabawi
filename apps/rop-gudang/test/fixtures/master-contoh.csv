@@ -1,0 +1,14 @@
+,,,,,,,,,,,,13/11/2026,,,,,,,,,,,,,,"13.889.958","43.522.877"
+,No,KODE BARANG,Nama,Satuan,Kategori,Penjualan 1 Hari,"Buffer Stock
+(Hari)",Buffer Stok (Jlh),Lead Time (Hari),Lead Time ( Barang ),Total Safety,Sisa Stok (Qty),DSI Awal (Hari),PR,DSI after PR (Hari),.,Minimum Order Versi Purchasing,Final PR (Qty),DSI Akhir (Hari),.,Minimum Stok ≤ 3Hari,Safety Stok 4 s/d 6Hari,Maximum Stok ≥ 7Hari,.,Harga,Nilai PR
+,1,A001,Tepung Uji,Gram,Brand X,1.250,2,2.500,2,2.500,5.000,5.000,4,0,4,,10.000,,4,,,Safety 4 s/d 6Hari,,,"11,5",0
+,2,A002,Gula Uji,Gram,Brand X,100,1,100,1,100,200,0,0,200,2,,,,0,,Min Stok ≤3Hari,,,,16,0
+,3,A003,Telur Uji,Butir,Brand Y,80,2,160,3,240,400,300,4,100,5,,30,,4,,,Safety 4 s/d 6Hari,,,,0
+,4,A004,Minyak Uji,Liter,Brand Y,1,2,2,2,2,4,0,0,4,4,,5,,0,,Min Stok ≤3Hari,,,,21.000,0
+,5,A005,Coklat Mati,Gram,Brand X,0,2,0,2,0,0,1.000,,0,,,,,,,Min Stok ≤3Hari,,,,,0
+,6,11401,Kotak Uji,Kotak,Brand X,20,2,40,3,60,100,1.000,50,0,50,,100,,50,,,,Max Stok ≥7Hari,,,0
+,7,k 002,Plastik Uji,Pcs,Brand Y,100,1,100,2,200,300,200,2,100,3,,500,,2,,Min Stok ≤3Hari,,,,"95,5",0
+,8,K009,Barang Hilang,Pcs,Brand Y,10,1,10,1,10,20,0,0,20,2,,,,0,,Min Stok ≤3Hari,,,,1.000,0
+,9,a001 ,Tepung Duplikat,Gram,Brand X,999,1,999,1,999,1998,0,0,0,0,,,,0,,,,,,,0
+,10,,Baris Tanpa Kode,Pcs,Brand X,5,1,5,1,5,10,0,0,0,0,,,,0,,,,,,,0
+,,,,,,,,,,,,,,,,,,,,,,,,,,
