@@ -1,0 +1,79 @@
+name: Deploy ROP Gudang
+
+# apps/rop-gudang/public → situs Firebase Hosting TERPISAH di project sssg-dashboard-2026 (token SSSG_FIREBASE_TOKEN).
+# Situs SSSG (sssg-dashboard-2026, dashboard-inti-warna) tidak pernah disentuh: config deploy ditulis dengan "site" eksplisit
+# dan script menolak nama situs SSSG. Link Google Sheet parameter TIDAK ikut ter-deploy (dibagikan lewat link #sheet=...).
+# STATUS: hanya manual (workflow_dispatch). Pemicu push sengaja BELUM diaktifkan sampai pemilik project mengonfirmasi
+# bahwa app ini boleh ditaruh di project sssg-dashboard-2026. Untuk mengaktifkan deploy otomatis, tambahkan:
+#   push: { branches: ["claude/zealous-carson-bns1ge", "main"], paths: ["apps/rop-gudang/public/**", "apps/rop-gudang/firebase.json"] }
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-rop-gudang
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT: sssg-dashboard-2026
+      SITE_CANDIDATES: ${{ vars.ROP_SITE || 'rop-gudang-pku,rop-gudang-pekanbaru,rop-wh-pku' }}
+      PROTECTED: "sssg-dashboard-2026,dashboard-inti-warna"
+      FIREBASE_TOKEN: ${{ secrets.SSSG_FIREBASE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tes logika & export Excel
+        working-directory: apps/rop-gudang
+        run: npm test
+      - name: Pilih / buat situs Hosting
+        id: site
+        working-directory: apps/rop-gudang
+        run: |
+          if [ -z "$FIREBASE_TOKEN" ]; then echo "::error::Secret SSSG_FIREBASE_TOKEN kosong"; exit 1; fi
+          FB="npx -y firebase-tools@latest"
+          $FB hosting:sites:list --project "$PROJECT" --json > /tmp/sites.json
+          SITE=$(node -e '
+            const j=JSON.parse(require("fs").readFileSync("/tmp/sites.json","utf8"));
+            const r=j.result; const list=(Array.isArray(r)?r:(r&&r.sites)||[]).map(s=>String(s.name||"").split("/").pop());
+            const prot=process.env.PROTECTED.split(",");
+            const hit=process.env.SITE_CANDIDATES.split(",").map(s=>s.trim()).find(s=>list.includes(s)&&!prot.includes(s));
+            process.stdout.write(hit||"");')
+          if [ -z "$SITE" ]; then
+            for S in ${SITE_CANDIDATES//,/ }; do
+              case ",$PROTECTED," in *",$S,"*) continue ;; esac
+              if $FB hosting:sites:create "$S" --project "$PROJECT" --non-interactive; then SITE="$S"; break; fi
+              echo "Situs $S tidak bisa dibuat, coba nama berikutnya"
+            done
+          fi
+          if [ -z "$SITE" ]; then echo "::error::Tidak ada nama situs yang bisa dipakai. Isi variable ROP_SITE."; exit 1; fi
+          case ",$PROTECTED," in *",$SITE,"*) echo "::error::Menolak deploy ke situs SSSG ($SITE)"; exit 1 ;; esac
+          echo "Situs: $SITE"
+          echo "site=$SITE" >> "$GITHUB_OUTPUT"
+      - name: Deploy ke Firebase Hosting
+        working-directory: apps/rop-gudang
+        env:
+          SITE: ${{ steps.site.outputs.site }}
+        run: |
+          rm -f public/config.local.json
+          node -e '
+            const fs=require("fs"); const c=JSON.parse(fs.readFileSync("firebase.json","utf8"));
+            c.hosting.site=process.env.SITE; fs.writeFileSync("firebase.ci.json", JSON.stringify(c,null,2));'
+          npx -y firebase-tools@latest deploy --only hosting --config firebase.ci.json --project "$PROJECT" --non-interactive
+      - name: Verifikasi tayang
+        env:
+          SITE: ${{ steps.site.outputs.site }}
+        run: |
+          sleep 5
+          URL="https://$SITE.web.app"
+          curl -sSf -o /dev/null "$URL/" && echo "$URL halaman OK"
+          curl -sS "$URL/rop-core.js" | grep -q parseZahir && echo "$URL rop-core.js versi baru OK"
+          curl -sSI "$URL/" | grep -i "content-security-policy" >/dev/null && echo "CSP aktif"
+          echo "### ROP Gudang tayang: $URL" >> "$GITHUB_STEP_SUMMARY"
