@@ -40,7 +40,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     assert.match(kpi, /6 item/); assert.match(kpi, /Rp 754\.750/);
     assert.match(kpi, /DSI gudang · target 3 hari/); assert.match(kpi, /5,6 hari/); assert.match(kpi, /desain parameter: 3 hari/);
     assert.match(await page.textContent("#alerts"), /6 dari 6 subtotal/);
-    assert.equal(await page.inputValue("#selGudang"), "GUDANG PUSAT › GUDANG PUSAT");
+    assert.deepEqual(await page.$$eval("#gudangChecks input:checked", (els) => els.map((e) => e.value)), ["GUDANG PUSAT › GUDANG PUSAT"]);
     assert.equal(await page.textContent("#cntPr"), "6");
 
     // edit Final PR K002 500 → 600 (Tab pindah sel; fokus harus tetap di sel berikutnya)
@@ -142,10 +142,31 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await page.waitForFunction(() => /9 baris · subtotal 6\/6 cocok/.test(document.getElementById("fileChip").textContent));
     assert.match(await page.textContent("#kpis"), /6 item/);
 
-    // gudang Sales
-    await page.selectOption("#selGudang", "GUDANG PUSAT › Sales");
+    // gudang Sales saja → master tidak cocok
+    await page.check('#gudangChecks input[value="GUDANG PUSAT › Sales"]');
+    await page.uncheck('#gudangChecks input[value="GUDANG PUSAT › GUDANG PUSAT"]');
     assert.match(await page.textContent("#alerts"), /bukan untuk gudang ini/);
-    await page.selectOption("#selGudang", "GUDANG PUSAT › GUDANG PUSAT");
+    await page.check('#gudangChecks input[value="GUDANG PUSAT › GUDANG PUSAT"]');
+    await page.uncheck('#gudangChecks input[value="GUDANG PUSAT › Sales"]');
+    assert.match(await page.textContent("#kpis"), /6 item/);
+
+    // tambah file Produksi → stok dijumlah (GUDANG PUSAT + PRODUKSI), Sales tetap tidak dicentang
+    await page.setInputFiles("#fileZahirAdd", FX("zahir-produksi-contoh.xls"));
+    await page.waitForFunction(() => /2 file/.test(document.getElementById("fileChip").textContent));
+    assert.deepEqual(await page.$$eval("#gudangChecks input:checked", (els) => els.map((e) => e.value)), ["GUDANG PUSAT › GUDANG PUSAT", "Head Quarter › PRODUKSI"]);
+    assert.match(await page.textContent("#kpis"), /5 item/); assert.match(await page.textContent("#kpis"), /Rp 652\.083/);
+    assert.match(await page.textContent("#alerts"), /GUDANG PUSAT \+ PRODUKSI/);
+    await page.click('#tabs button[data-tab="all"]');
+    assert.match(await page.textContent("#tbl"), /0 \+ 300/); // rincian SOH A002 per gudang
+    await page.click('#tabs button[data-tab="pr"]');
+    await page.uncheck('#gudangChecks input[value="Head Quarter › PRODUKSI"]');
+    assert.match(await page.textContent("#kpis"), /6 item/);
+    await page.check('#gudangChecks input[value="Head Quarter › PRODUKSI"]');
+    // hapus file produksi lagi
+    page.once("dialog", (d) => d.accept());
+    await page.click('[data-remove-file="1"]');
+    await page.waitForFunction(() => /1 file/.test(document.getElementById("fileChip").textContent));
+    assert.match(await page.textContent("#kpis"), /6 item/);
 
     // pengaturan: target DSI 0 = perilaku sheet lama → A001 (tepat di ROP) tidak lagi order
     await page.click("#btnSettings");
@@ -175,6 +196,21 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await p2.click("#btnSettings"); await p2.click("#btnShareLink");
     assert.equal(await p2.evaluate(() => navigator.clipboard.readText()), base + "#sheet=TESTSHEET_abcdefghijklmnopqrstuvwxyz&gid=0&tab=PKU");
     await ctx2.close();
+
+    // satu file berisi dua laporan (SCM + Produksi), diupload sekali
+    const ctx4 = await browser.newContext();
+    await ctx4.route("https://docs.google.com/**", (route) => route.fulfill({ status: 200, contentType: "text/csv; charset=utf-8", body: fs.readFileSync(FX("master-contoh.csv"), "utf8") }));
+    await ctx4.addInitScript((s) => localStorage.setItem("rop.settings.v1", JSON.stringify({ sheetUrl: s })), SHEET);
+    const p4 = await ctx4.newPage();
+    p4.on("pageerror", (e) => problems.push("pageerror(p4): " + e.message));
+    await p4.goto(base); await p4.waitForSelector("#masterChip.ok");
+    await p4.setInputFiles("#fileZahir", FX("zahir-gabungan-contoh.xls"));
+    await p4.waitForSelector("#results:not([hidden])");
+    assert.match(await p4.textContent("#fileChip"), /12 baris · subtotal 10\/10 cocok/);
+    assert.match(await p4.textContent("#kpis"), /Rp 652\.083/);
+    await p4.reload(); await p4.waitForSelector("#results:not([hidden])");
+    assert.match(await p4.textContent("#kpis"), /Rp 652\.083/); // pilihan gudang & file tersimpan
+    await ctx4.close();
 
     // perangkat baru membuka alamat biasa: kotak tempel link di kartu Parameter → parameter termuat → hasil langsung tampil
     const ctx3 = await browser.newContext();

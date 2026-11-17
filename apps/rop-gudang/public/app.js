@@ -26,7 +26,7 @@
     local: {},
     settings: {},
     master: null, masterSource: "", masterLoadedAt: null, masterFromCache: false, masterError: "", masterWarn: "",
-    zahir: null, file: null, gudangKey: "",
+    parts: [], zahir: null, file: null, gudangKeys: [],
     edits: emptyEdits(),
     result: null,
     tab: "pr",
@@ -109,27 +109,31 @@
     return { bytes, kind, sheets };
   }
 
-  async function handleZahirFile(file) {
-    if (!file) return;
-    if (file.size > 25 * 1024 * 1024) return toast("File terlalu besar (maks 25 MB).", true);
+  // Satu atau beberapa file Zahir (mis. stok gudang SCM + stok Produksi). append = tambahkan ke file yang sudah ada.
+  async function handleZahirFiles(fileList, append) {
+    const files = Array.from(fileList || []).filter(Boolean);
+    if (!files.length) return;
     $("fileChip").className = "chip"; $("fileChip").textContent = "Membaca…";
     try {
-      const { bytes, kind, sheets } = await readSheets(file);
-      let best = null;
-      for (const sh of sheets) {
-        const z = Core.parseZahir(sh.rows);
-        if (!best || z.items.length > best.items.length) best = z;
+      const parts = append ? state.parts.slice() : [];
+      let added = 0;
+      for (const file of files) {
+        if (file.size > 25 * 1024 * 1024) throw new Error(`${file.name}: file terlalu besar (maks 25 MB).`);
+        const { bytes, kind, sheets } = await readSheets(file);
+        let best = null;
+        for (const sh of sheets) { const z = Core.parseZahir(sh.rows); if (!best || z.items.length > best.items.length) best = z; }
+        if (!best || !best.items.length) throw new Error(`${file.name}: tidak ada baris produk. Pastikan file adalah laporan Zahir "Daftar Produk Per Gudang" (kolom Kode Produk, Nama Produk, Jumlah, ...).`);
+        const hash = await Core.sha256Hex(bytes);
+        if (parts.some((p) => p.file.hash === hash)) { toast(`${file.name} sudah ada, dilewati.`); continue; }
+        best.source = file.name;
+        best.items.forEach((it) => (it.source = file.name));
+        parts.push({ file: { name: file.name, size: file.size, kind, hash, loadedAt: Date.now() }, z: best });
+        added++;
       }
-      if (!best || !best.items.length) throw new Error('Tidak ada baris produk. Pastikan file adalah laporan Zahir "Daftar Produk Per Gudang" (kolom Kode Produk, Nama Produk, Jumlah, ...).');
-      const hash = await Core.sha256Hex(bytes);
-      state.zahir = best;
-      state.file = { name: file.name, size: file.size, kind, hash, loadedAt: Date.now() };
-      state.edits = Object.assign(emptyEdits(), LS.get(KEY.edits(hash), {}));
-      if (!state.edits.stockDate) state.edits.stockDate = today();
-      pickGudang();
-      if (!LS.set(KEY.stock, { file: state.file, zahir: state.zahir, gudangKey: state.gudangKey })) console.warn("Cache file tidak tersimpan (localStorage penuh/diblokir).");
-      recompute();
-      toast(`File terbaca: ${best.items.length} baris produk, ${best.gudangs.length} gudang.`);
+      if (!added) { renderAll(); return; }
+      await setParts(parts, append ? state.edits : null);
+      const z = state.zahir;
+      toast(`${parts.length} file terbaca: ${z.items.length} baris produk, ${z.gudangs.length} gudang. Dihitung: ${selLabel()}.`);
     } catch (e) {
       console.error(e);
       $("fileChip").className = "chip err"; $("fileChip").textContent = "Gagal dibaca";
@@ -137,12 +141,42 @@
     }
   }
 
-  function pickGudang() {
+  async function setParts(parts, carryEdits) {
+    const prevKeys = new Set(state.zahir ? state.zahir.gudangs.map((g) => g.key) : []);
+    state.parts = parts;
+    if (!parts.length) { state.zahir = null; state.file = null; state.gudangKeys = []; LS.del(KEY.stock); recompute(); return; }
+    state.zahir = Core.mergeZahir(parts.map((p) => p.z));
+    const hash = parts.length === 1 ? parts[0].file.hash : await Core.sha256Hex(new TextEncoder().encode(parts.map((p) => p.file.hash).join("|")));
+    state.file = {
+      name: parts.map((p) => p.file.name).join(" + "), size: parts.reduce((a, p) => a + p.file.size, 0),
+      kind: Array.from(new Set(parts.map((p) => p.file.kind))).join("/"), hash, loadedAt: Math.max(...parts.map((p) => p.file.loadedAt)), count: parts.length,
+    };
+    const saved = LS.get(KEY.edits(hash), null);
+    state.edits = Object.assign(emptyEdits(), saved || (carryEdits ? JSON.parse(JSON.stringify(carryEdits)) : {}));
+    if (!state.edits.stockDate) state.edits.stockDate = today();
+    pickGudangs(prevKeys);
+    saveStockCache();
+    recompute();
+  }
+  function saveStockCache() {
+    if (!LS.set(KEY.stock, { v: 2, parts: state.parts, gudangKeys: state.gudangKeys })) console.warn("Cache file tidak tersimpan (localStorage penuh/diblokir).");
+  }
+
+  // Gudang yang dijumlah: default dari config (SCM PKU + Produksi PKU). Bila tidak ada yang cocok: gudang terbesar
+  // + gudang bernama "Produksi". Gudang baru yang muncul saat menambah file ikut dicentang bila termasuk default.
+  function pickGudangs(prevKeys) {
     const gs = state.zahir ? state.zahir.gudangs : [];
-    if (gs.some((g) => g.key === state.gudangKey)) return;
-    const want = Core.normHeader(C.DEFAULT_GUDANG || "");
-    const hit = gs.find((g) => Core.normHeader(g.name) === want) || gs.slice().sort((a, b) => b.items - a.items)[0];
-    state.gudangKey = hit ? hit.key : "";
+    const exist = new Set(gs.map((g) => g.key));
+    const want = (C.DEFAULT_GUDANGS || [C.DEFAULT_GUDANG]).filter(Boolean).map(Core.normHeader);
+    let defaults = gs.filter((g) => want.includes(Core.normHeader(g.name)));
+    if (!defaults.length && gs.length) {
+      const big = gs.slice().sort((a, b) => b.items - a.items)[0];
+      defaults = [big].concat(gs.filter((g) => g !== big && /PRODUKSI/i.test(g.name)));
+    }
+    let keys = (state.gudangKeys || []).filter((k) => exist.has(k));
+    if (!keys.length) keys = defaults.map((g) => g.key);
+    else for (const g of defaults) if (!(prevKeys && prevKeys.has(g.key)) && !keys.includes(g.key)) keys.push(g.key);
+    state.gudangKeys = keys;
   }
 
   // ---------------- master parameter ----------------
@@ -218,14 +252,16 @@
   // ---------------- hitung ----------------
   function recompute() {
     if (state.zahir && state.master) {
-      const stockItems = state.zahir.items.filter((i) => i.gkey === state.gudangKey);
+      const stockItems = Core.aggregateStock(state.zahir.items, state.gudangKeys);
       state.result = Core.compute({ stockItems, master: state.master, settings: settings(), edits: state.edits });
     } else state.result = null;
     renderAll();
   }
   function saveEdits() { if (state.file) LS.set(KEY.edits(state.file.hash), state.edits); }
-  const gudangObj = () => (state.zahir ? state.zahir.gudangs.find((g) => g.key === state.gudangKey) : null);
+  const selGudangs = () => (state.zahir ? state.zahir.gudangs.filter((g) => state.gudangKeys.includes(g.key)) : []);
   const gudangLabel = (g) => (g ? g.name + (g.induk && g.induk !== g.name ? ` (${g.induk})` : "") : "");
+  const selLabel = () => selGudangs().map((g) => g.name).join(" + ");
+  const selValue = () => selGudangs().reduce((a, g) => a + (g.value || 0), 0);
 
   // ---------------- render ----------------
   function renderAll() {
@@ -260,18 +296,18 @@
     const z = state.zahir, f = state.file;
     const okN = z.recon.filter((r) => r.ok).length;
     chip.className = "chip " + (okN === z.recon.length && !z.unparsed.length ? "ok" : "warn");
-    chip.textContent = `${fmt(z.items.length)} baris · subtotal ${okN}/${z.recon.length} cocok`;
+    chip.textContent = `${state.parts.length} file · ${fmt(z.items.length)} baris · subtotal ${okN}/${z.recon.length} cocok`;
     $("subtitle").textContent = [z.meta.company, z.meta.title ? z.meta.title.toLowerCase().replace(/(^|\s)\S/g, (m) => m.toUpperCase()) : ""].filter(Boolean).join(" · ") || "Rekomendasi pembelian dari stok Zahir";
     box.hidden = false;
-    box.innerHTML = [
-      ["File", f.name], ["Ukuran", `${fmt(Math.round(f.size / 1024))} KB · ${f.kind}`], ["Dibaca", new Date(f.loadedAt).toLocaleString("id-ID")],
-      ["Gudang di file", z.gudangs.map((g) => `${gudangLabel(g)} (${g.items})`).join(", ")], ["SHA-256", f.hash.slice(0, 16) + "…"],
-    ].map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join("");
+    box.innerHTML = `<div class="files-list">${state.parts.map((p, i) => {
+      const gs = Array.from(new Set(p.z.items.map((it) => it.gudang)));
+      return `<div class="file-row"><div><b>${esc(p.file.name)}</b><span>Gudang: ${esc(gs.join(", "))} · ${fmt(p.z.items.length)} baris · ${fmt(Math.round(p.file.size / 1024))} KB · ${esc(new Date(p.file.loadedAt).toLocaleString("id-ID"))}</span></div><button type="button" class="btn small ghost" data-remove-file="${i}" aria-label="Hapus file ${esc(p.file.name)}">Hapus</button></div>`;
+    }).join("")}</div>
+      <div class="file-actions"><label class="btn small" for="fileZahirAdd">+ Tambah file (mis. stok Produksi)</label><span class="muted small">SHA-256 ${esc(f.hash.slice(0, 16))}…</span></div>`;
   }
 
   function renderToolbar() {
-    const sel = $("selGudang");
-    sel.innerHTML = state.zahir.gudangs.map((g) => `<option value="${esc(g.key)}"${g.key === state.gudangKey ? " selected" : ""}>${esc(gudangLabel(g))} · ${fmt(g.items)} item</option>`).join("");
+    $("gudangChecks").innerHTML = state.zahir.gudangs.map((g) => `<label class="gchk"><input type="checkbox" value="${esc(g.key)}"${state.gudangKeys.includes(g.key) ? " checked" : ""}> ${esc(gudangLabel(g))} <small>${fmt(g.items)} item</small></label>`).join("");
     $("inpDate").value = state.edits.stockDate || "";
     $("inpBy").value = state.settings.preparedBy || "";
     const s = settings();
@@ -283,10 +319,10 @@
   function renderAlerts() {
     const z = state.zahir, r = state.result, out = [];
     const okN = z.recon.filter((x) => x.ok).length;
-    const gItems = z.items.filter((i) => i.gkey === state.gudangKey), withStock = gItems.filter((i) => i.qty > 0).length;
-    if (okN === z.recon.length && !z.unparsed.length) out.push(alertBox("ok", `<b>File Zahir terverifikasi.</b> ${okN} dari ${z.recon.length} subtotal di file cocok dengan jumlah baris produk. SOH terbaca: <b>${withStock}</b> item ada stok, ${gItems.length - withStock} item stok 0. Nilai stok ${esc(gudangLabel(gudangObj()))}: <b>${fmtRp(gudangObj() ? gudangObj().value : 0)}</b>.`));
+    const zr = r.rows.filter((x) => x.inZahir), withStock = zr.filter((x) => x.sohRaw > 0).length, multi = zr.filter((x) => x.sohBy && x.sohBy.length > 1).length;
+    if (okN === z.recon.length && !z.unparsed.length) out.push(alertBox("ok", `<b>File Zahir terverifikasi.</b> ${okN} dari ${z.recon.length} subtotal di file cocok dengan jumlah baris produk. Stok dihitung = <b>${esc(selLabel())}</b>${state.gudangKeys.length > 1 ? ` (dijumlah per kode; ${multi} item ada di lebih dari satu gudang)` : ""}. SOH terbaca: <b>${withStock}</b> item ada stok, ${zr.length - withStock} item stok 0. Nilai stok: <b>${fmtRp(selValue())}</b>.`));
     else out.push(alertBox("err", `<b>File Zahir tidak lengkap/berbeda.</b> Subtotal cocok ${okN}/${z.recon.length}${z.unparsed.length ? `, ${z.unparsed.length} baris tidak terbaca` : ""}. Download ulang dari Zahir dan jangan edit file sebelum upload. Rincian di tab Data issue.`));
-    if (!r.masterFitsGudang) out.push(alertBox("warn", `<b>Master parameter tampaknya bukan untuk gudang ini.</b> Hanya ${r.kpi.masterMatched} dari ${r.kpi.masterActive} kode master ada di ${esc(gudangLabel(gudangObj()))}. Item master yang tidak ada di file tidak dihitung.`));
+    if (!r.masterFitsGudang) out.push(alertBox("warn", `<b>Master parameter tampaknya bukan untuk gudang ini.</b> Hanya ${r.kpi.masterMatched} dari ${r.kpi.masterActive} kode master ada di ${esc(selLabel())}. Item master yang tidak ada di file tidak dihitung.`));
     const high = r.issues.filter((i) => i.severity === "Tinggi").length;
     if (high) out.push(alertBox("warn", `<b>${high} data issue prioritas tinggi.</b> ${r.kpi.noParamStock ? `${r.kpi.noParamStock} barang ada stoknya (${fmtRp(r.kpi.noParamValue)}) tetapi tidak punya parameter, jadi tidak pernah direkomendasikan. ` : ""}<a href="#" data-goto="issue">Lihat tab Data issue</a>.`));
     $("alerts").innerHTML = out.join("");
@@ -343,7 +379,11 @@
     { key: "nama", label: "Nama barang", cls: "name sticky", render: (r) => `<button type="button" data-detail="${esc(r.code)}">${esc(r.nama)}</button>${r.issues.length ? `<span class="issue-flag" title="${esc(r.issues.join("; "))}">!</span>` : ""}<small>${esc([r.brand, r.kategori].filter(Boolean).join(" · "))}</small>` },
     { key: "satuan", label: "Satuan", render: (r) => esc(r.satuan || r.satuanMaster) },
     NUM("usage", "Pakai/hari", { render: (r) => (r.usage == null ? "-" : fmt(r.usage)) }),
-    NUM("sohRaw", "SOH", { render: (r) => (!r.inZahir ? '0<small class="tag-miss">tidak ada di file</small>' : r.sohRaw <= 0 ? `${fmt(r.sohRaw)}<small class="tag-oos">habis</small>` : fmt(r.sohRaw)) }),
+    NUM("sohRaw", "SOH", { render: (r) => {
+      const base = !r.inZahir ? '0<small class="tag-miss">tidak ada di file</small>' : r.sohRaw <= 0 ? `${fmt(r.sohRaw)}<small class="tag-oos">habis</small>` : fmt(r.sohRaw);
+      const multi = r.sohBy && r.sohBy.length > 1 ? `<small class="tag-multi" title="${esc(r.sohBy.map((x) => `${x.gudang}: ${fmt(x.qty)}`).join(" · "))}">${esc(r.sohBy.map((x) => fmt(x.qty)).join(" + "))}</small>` : "";
+      return base + multi;
+    } }),
     NUM("dsi", "DSI", { render: (r) => (r.dsi == null ? "-" : r.dsi === 0 ? '0<small class="tag-oos">habis</small>' : fmt(r.dsi, 1)), tdCls: (r) => (r.dsi == null ? "" : r.dsi <= (r.lead || 0) ? "dsi-low" : r.dsi < settings().dsiSafety ? "dsi-mid" : "") }),
     NUM("rop", "ROP", { render: (r) => (r.rop == null ? "-" : fmt(r.rop)) }),
     NUM("saran", "Saran PR", { render: (r) => fmt(r.saran) }),
@@ -454,7 +494,7 @@
         ${line("Stok fisik maksimum", `${fmt(r.physMax)} ${u}`, r.target > 0 ? `${fmt(d)} × MAX(${fmt(r.buffer)} + 1, 2 × ${fmt(r.target)} − ${fmt(r.buffer)}) · stok sesaat setelah barang datang` : "target 0: buffer + 1 hari")}
         ${line("Stok maksimum (dasar PR)", `${fmt(r.max)} ${u}`, r.target > 0 ? `stok fisik maks + ${fmt(d)} × lead time ${fmt(r.lead)}` : "target 0 = ROP (sheet lama)", true)}
         ${line("Rata-rata stok fisik", r.avgDays == null ? "-" : `${fmt(r.avgDays, 1)} hari`, r.cycleDays == null ? "" : `bergerak ${fmt(r.buffer)}–${fmt(r.physDays)} hari · order tiap ±${fmt(r.cycleDays, 1)} hari`)}
-        ${line("SOH Zahir", `${fmt(r.sohRaw)} ${u}`, r.inZahir ? "file Zahir" : "tidak ada di file → 0")}
+        ${line("SOH Zahir", `${fmt(r.sohRaw)} ${u}`, !r.inZahir ? "tidak ada di file → 0" : r.sohBy && r.sohBy.length > 1 ? r.sohBy.map((x) => `${esc(x.gudang)} ${fmt(x.qty)}`).join(" + ") : `file Zahir · ${esc(r.gudang)}`, r.sohBy && r.sohBy.length > 1)}
         ${line("DSI", r.dsi == null ? "-" : `${fmt(r.dsi, 1)} hari`, `SOH ÷ pemakaian · ${esc(r.band)}`)}
         ${line("Saran PR", `${fmt(r.saran)} ${u}`, r.saran > 0 ? `${fmt(r.max)} − ${fmt(r.soh)} (SOH ≤ ROP)` : "SOH di atas ROP / pemakaian 0", true)}
         ${line("MOQ · kelipatan", `${fmt(r.moq || 0)} · ${fmt(r.kelipatan)}`, r.kelipatanFromMaster ? "kelipatan dari master" : r.kelipatan > 1 ? "pembulatan otomatis Gram/Ml" : "")}
@@ -502,9 +542,8 @@
 
   // ---------------- export ----------------
   function exportMeta() {
-    const g = gudangObj();
     return {
-      gudangLabel: gudangLabel(g), company: state.zahir.meta.company, stockDate: idDate(state.edits.stockDate), preparedBy: state.settings.preparedBy || "",
+      gudangLabel: selLabel(), gudangKeys: state.gudangKeys.slice(), company: state.zahir.meta.company, stockDate: idDate(state.edits.stockDate), preparedBy: state.settings.preparedBy || "",
       generatedAt: Date.now(), fileName: state.file.name, fileHash: state.file.hash, masterSource: state.masterSource, masterLoadedAt: state.masterLoadedAt,
     };
   }
@@ -561,7 +600,7 @@
     $("poBy").value = s.by && (s.by !== "supplier" || sup) ? s.by : sup ? "supplier" : "kategori";
     $("poPrice").checked = s.price !== false;
     $("poConvert").checked = s.convert !== false;
-    $("poNote").value = s.note != null ? s.note : `Barang dikirim ke gudang ${gudangLabel(gudangObj())}. Mohon konfirmasi ketersediaan, harga, dan tanggal kirim sebelum pengiriman.`;
+    $("poNote").value = s.note != null ? s.note : `Barang dikirim ke gudang ${selLabel()}. Mohon konfirmasi ketersediaan, harga, dan tanggal kirim sebelum pengiriman.`;
     $("poSign1").value = state.settings.preparedBy || ""; $("poSign2").value = s.sign2 || ""; $("poSign3").value = s.sign3 || "";
     const d = today();
     $("poDate").value = d; $("poDue").value = "";
@@ -593,7 +632,7 @@
 
   function poHtml(g, no, opt) {
     const company = state.zahir.meta.company || "";
-    const gud = gudangLabel(gudangObj());
+    const gud = selLabel();
     const due = opt.due || addDays(opt.date, Math.ceil(g.maxLead || 0));
     const supplier = opt.by === "supplier" && !g.missingSupplier ? g.key : "";
     const lines = g.items.map((r) => ({ r, L: Core.poLine(r, opt.convert) }));
@@ -677,12 +716,20 @@
 
   // ---------------- event ----------------
   function bind() {
-    $("fileZahir").addEventListener("change", (e) => { handleZahirFile(e.target.files[0]); e.target.value = ""; });
+    $("fileZahir").addEventListener("change", (e) => { handleZahirFiles(e.target.files, false); e.target.value = ""; });
+    $("fileZahirAdd").addEventListener("change", (e) => { handleZahirFiles(e.target.files, true); e.target.value = ""; });
+    $("fileInfo").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-remove-file]");
+      if (!b) return;
+      const i = Number(b.dataset.removeFile), p = state.parts[i];
+      if (!p || !confirm(`Hapus ${p.file.name} dari perhitungan?`)) return;
+      setParts(state.parts.filter((_, k) => k !== i), state.edits);
+    });
     $("fileMaster").addEventListener("change", (e) => { handleMasterFile(e.target.files[0]); e.target.value = ""; });
     const drop = $("drop");
     ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
     ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
-    drop.addEventListener("drop", (e) => { const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) handleZahirFile(f); });
+    drop.addEventListener("drop", (e) => { const fl = e.dataTransfer && e.dataTransfer.files; if (fl && fl.length) handleZahirFiles(fl, false); });
     window.addEventListener("dragover", (e) => e.preventDefault());
     window.addEventListener("drop", (e) => e.preventDefault());
 
@@ -701,9 +748,11 @@
     $("stepMaster").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.id === "inpSheetQuick") { e.preventDefault(); saveQuickSheet(); } });
     $("dlgSettings").addEventListener("close", () => { if ($("dlgSettings").returnValue === "save") saveSettings(); });
 
-    $("selGudang").addEventListener("change", (e) => {
-      state.gudangKey = e.target.value;
-      LS.set(KEY.stock, { file: state.file, zahir: state.zahir, gudangKey: state.gudangKey });
+    $("gudangChecks").addEventListener("change", () => {
+      const keys = Array.from($("gudangChecks").querySelectorAll("input:checked")).map((el) => el.value);
+      if (!keys.length) { toast("Pilih minimal satu gudang.", true); renderToolbar(); return; }
+      state.gudangKeys = keys;
+      saveStockCache();
       recompute();
     });
     $("inpDate").addEventListener("change", (e) => { state.edits.stockDate = e.target.value; saveEdits(); });
@@ -798,10 +847,14 @@
     } catch (e) { /* tidak ada config lokal */ }
     bind();
     const cached = LS.get(KEY.stock, null);
-    if (cached && cached.zahir && cached.file) {
-      state.zahir = cached.zahir; state.file = cached.file; state.gudangKey = cached.gudangKey || "";
-      state.edits = Object.assign(emptyEdits(), LS.get(KEY.edits(cached.file.hash), {}));
-      pickGudang();
+    if (cached && Array.isArray(cached.parts) && cached.parts.length) {
+      state.gudangKeys = cached.gudangKeys || [];
+      state.zahir = Core.mergeZahir(cached.parts.map((p) => p.z)); // gudang lama dianggap sudah dipilih pengguna
+      await setParts(cached.parts, null);
+    } else if (cached && cached.zahir && cached.file) { // format cache versi 1 (satu file)
+      state.gudangKeys = cached.gudangKey ? [cached.gudangKey] : [];
+      state.zahir = cached.zahir;
+      await setParts([{ file: cached.file, z: cached.zahir }], null);
     }
     renderAll();
     await loadMasterFromSheet(false);
@@ -811,5 +864,5 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 
   // Untuk tes & debugging di console
-  window.ROPApp = { state, recompute, handleZahirFile, handleMasterFile, loadMasterFromSheet };
+  window.ROPApp = { state, recompute, handleZahirFiles, handleMasterFile, loadMasterFromSheet };
 })();

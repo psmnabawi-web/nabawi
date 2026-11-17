@@ -8,8 +8,10 @@
 window.ROP_CONFIG = {
   APP_NAME: "ROP Gudang",
 
-  // Gudang yang dipilih otomatis setelah upload (nama gudang di file Zahir).
-  DEFAULT_GUDANG: "SCM PKU",
+  // Gudang yang otomatis dicentang & DIJUMLAH stoknya (nama gudang di file Zahir). Persediaan SCM = gudang + produksi.
+  // Gudang lain di file (mis. "Sales") tetap bisa dicentang manual di aplikasi.
+  DEFAULT_GUDANGS: ["SCM PKU", "Produksi PKU"],
+  DEFAULT_GUDANG: "SCM PKU", // cadangan untuk versi lama
 
   // Master parameter ROP. Default: tab "PKU" di spreadsheet "Perhitungan Kebutuhan /ROP WH Pekanbaru".
   // Kolom dibaca berdasarkan nama header: Kode Barang, Nama, Satuan, Kategori, Penjualan 1 Hari, Buffer Stock (Hari),

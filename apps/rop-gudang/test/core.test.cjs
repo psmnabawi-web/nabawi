@@ -268,3 +268,63 @@ test("Supplier di master, pengelompokan PO, dan konversi Gram→Kg", () => {
   assert.equal(C.poNumber("PO/20261116/", 7), "PO/20261116/007");
 });
 
+test("satu file berisi dua laporan (SCM + Produksi) & baris Total dobel", () => {
+  const z = parseZ(fs.readFileSync(FX("zahir-gabungan-contoh.xls")));
+  assert.equal(z.reports, 2);
+  assert.equal(z.items.length, 12);
+  assert.deepEqual(z.gudangs.map((g) => [g.key, g.items]), [["GUDANG PUSAT › GUDANG PUSAT", 8], ["GUDANG PUSAT › Sales", 1], ["Head Quarter › PRODUKSI", 3]]);
+  assert.equal(z.recon.length, 10);
+  assert.ok(z.recon.every((r) => r.ok), JSON.stringify(z.recon.filter((r) => !r.ok)));
+  assert.equal(z.unparsed.length, 0);
+  assert.equal(z.warnings.length, 2); // "Total PRODUKSI" & "Total Head Quarter" yang dobel diabaikan
+  assert.ok(z.warnings.every((w) => /tidak punya grup terbuka/.test(w)));
+  const p = z.items.find((i) => i.gkey === "Head Quarter › PRODUKSI" && i.code === "A002");
+  assert.equal(p.qty, 300); assert.equal(p.induk, "Head Quarter"); assert.equal(p.kategori, "Bahan Baku");
+  assert.ok(p.row > 30); // nomor baris asli di file gabungan
+  assert.equal(z.meta.company, "PT. Contoh Usaha");
+});
+
+test("dua file digabung; gudang yang sama dari dua file tidak dihitung dobel", () => {
+  const a = parseZ(zahirBytes), b = parseZ(fs.readFileSync(FX("zahir-produksi-contoh.xls")));
+  a.source = "gudang.xls"; b.source = "produksi.xls";
+  const m2 = C.mergeZahir([a, b]);
+  assert.equal(m2.items.length, 12); assert.equal(m2.gudangs.length, 3); assert.equal(m2.recon.length, 10);
+  const twice = C.mergeZahir([a, parseZ(zahirBytes)]);
+  assert.equal(twice.items.length, 9);
+  assert.equal(twice.warnings.length, 2);
+  assert.match(twice.warnings[0], /lebih dari satu file/);
+});
+
+test("stok SCM + Produksi dijumlah per kode (SOH, harga tertimbang, rincian per gudang)", () => {
+  const z = parseZ(fs.readFileSync(FX("zahir-gabungan-contoh.xls")));
+  const st = C.aggregateStock(z.items, ["GUDANG PUSAT › GUDANG PUSAT", "Head Quarter › PRODUKSI"]);
+  assert.equal(st.length, 8); // 3 kode Produksi (A002, A003, K002) sudah ada di gudang → dijumlah, bukan baris baru
+  const a2 = st.find((x) => x.code === "A002");
+  assert.equal(a2.qty, 300); assert.equal(a2.gudang, "GUDANG PUSAT + PRODUKSI"); assert.equal(a2.harga, 16);
+  assert.deepEqual(a2.sohBy.map((x) => [x.gudang, x.qty]), [["GUDANG PUSAT", 0], ["PRODUKSI", 300]]);
+  const a3 = st.find((x) => x.code === "A003");
+  assert.equal(a3.qty, 360); assert.equal(a3.total, 546000); assert.ok(Math.abs(a3.harga - 1516.666667) < 1e-6);
+  assert.equal(st.find((x) => x.code === "K002").qty, 250); // Sales (10) tidak dicentang
+  const r = C.compute({ stockItems: st, master: master() });
+  const A2 = byCode(r, "A002");
+  assert.equal(A2.sohRaw, 300); assert.equal(A2.status, "Aman"); assert.equal(A2.final, 0); // sebelumnya OOS & PR 1.000 g
+  assert.equal(byCode(r, "A003").final, 200);
+  const K2 = byCode(r, "K002");
+  assert.equal(K2.sohRaw, 250); assert.equal(K2.status, "Order"); assert.equal(K2.final, 500);
+  assert.equal(r.kpi.prCount, 5); assert.equal(r.kpi.prValue, 652083);
+  // hanya gudang → sama dengan sebelumnya
+  const only = C.compute({ stockItems: C.aggregateStock(z.items, ["GUDANG PUSAT › GUDANG PUSAT"]), master: master() });
+  assert.equal(only.kpi.prValue, 754750);
+});
+
+test("satuan beda antar gudang ditandai", () => {
+  const items = [
+    { gkey: "W", gudang: "W", code: "X1", kode: "X1", nama: "Gula", qty: 1000, satuan: "Gram", harga: 15, total: 15000, kategori: "K" },
+    { gkey: "P", gudang: "P", code: "X1", kode: "X1", nama: "Gula", qty: 2, satuan: "Kg", harga: 15000, total: 30000, kategori: "K" },
+  ];
+  const st = C.aggregateStock(items, ["W", "P"]);
+  assert.equal(st[0].unitConflict, true);
+  const m = C.parseMaster([["Kode Barang", "Satuan", "Penjualan 1 Hari", "Buffer Stock (Hari)", "Lead Time (Hari)"], ["X1", "Gram", "100", "1", "1"]]);
+  const r = C.compute({ stockItems: st, master: m });
+  assert.ok(byCode(r, "X1").issues.includes("Satuan beda antar gudang"));
+});

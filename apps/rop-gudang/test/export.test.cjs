@@ -17,9 +17,9 @@ const z = C.parseZahir(C.textToRows(C.decodeText(fs.readFileSync(FX("zahir-conto
 const m = C.parseMaster(C.textToRows(fs.readFileSync(FX("master-contoh.csv"), "utf8")), { localeHint: "id" });
 const MAIN = "GUDANG PUSAT › GUDANG PUSAT";
 const edits = { final: { K002: 600 }, note: { K002: "naik karena promo" } };
-const result = C.compute({ stockItems: z.items.filter((i) => i.gkey === MAIN), master: m, edits });
+const result = C.compute({ stockItems: C.aggregateStock(z.items, [MAIN]), master: m, edits });
 const log = [{ t: Date.UTC(2026, 10, 16, 3), code: "K002", kode: "K002", nama: "Plastik Uji", field: "Final PR", from: 500, to: 600, system: 500, by: "Tes" }];
-const meta = { gudangLabel: "GUDANG PUSAT", company: "PT. Contoh Usaha", stockDate: "16/11/2026", preparedBy: "Tes", generatedAt: Date.UTC(2026, 10, 16, 3), fileName: "zahir-contoh.xls", fileHash: "abc123", masterSource: "fixture", masterLoadedAt: Date.UTC(2026, 10, 16, 2) };
+const meta = { gudangLabel: "GUDANG PUSAT", company: "PT. Contoh Usaha", stockDate: "16/11/2026", preparedBy: "Tes", generatedAt: Date.UTC(2026, 10, 16, 3), fileName: "zahir-contoh.xls", fileHash: "abc123", gudangKeys: [MAIN], masterSource: "fixture", masterLoadedAt: Date.UTC(2026, 10, 16, 2) };
 const build = () => X.buildWorkbook(ExcelJS, { result, zahir: z, meta, log, prioritySort: C.prioritySort });
 const OUT = path.join(__dirname, "out");
 fs.mkdirSync(OUT, { recursive: true });
@@ -46,7 +46,9 @@ test("workbook: sheet, header, rumus inti, input & override manual", async () =>
   assert.equal(ws.getCell(`J${r}`).formula, "Ringkasan!$C$16"); // target DSI default dirujuk ke sel parameter global
   assert.equal(ws.getCell(`J5`).value, "Target DSI (hari)");
   assert.equal(ws.getCell(`N${r}`).formula, `G${r}*IF(N(J${r})=0,H${r}+I${r},MAX(H${r}+1,2*J${r}-H${r})+I${r})`); // Stok maksimum
-  assert.equal(ws.getCell(`AF5`).value, "Stok fisik maks");
+  assert.equal(ws.getCell(`AG5`).value, "Stok fisik maks");
+  assert.equal(ws.getCell(`AD5`).value, "Rincian SOH per gudang");
+  assert.match(ws.getCell(`K${r}`).formula, /^SUMIFS\('Stok Zahir'!\$G\$5:\$G\$\d+,'Stok Zahir'!\$M\$5:\$M\$\d+,"A003",'Stok Zahir'!\$L\$5:\$L\$\d+,"Ya"\)$/);
   const headers = []; ws.getRow(5).eachCell((c) => headers.push(String(c.value)));
   assert.ok(!headers.some((h) => /outstanding|posisi/i.test(h)), "kolom PO outstanding/posisi sudah dihapus");
   const k2 = rowOf(ws, "K002");
@@ -118,6 +120,7 @@ test("rumus Excel dihitung ulang LibreOffice = hasil aplikasi", { skip: !hasLO &
     const r = result.rows.find((x) => x.kode === kode);
     assert.ok(r, "kode " + kode);
     const n = (h) => Number(row[idx(h)] || 0);
+    assert.equal(n("SOH Zahir"), r.sohRaw, `${kode} SOH`);
     assert.equal(n("ROP"), r.rop || 0, `${kode} ROP`);
     assert.equal(n("Stok maksimum"), r.max || 0, `${kode} Stok maksimum`);
     if (r.hasParam) assert.equal(n("Kelebihan di atas stok fisik maks"), r.excess, `${kode} kelebihan`);
@@ -149,5 +152,34 @@ test("rumus Excel dihitung ulang LibreOffice = hasil aplikasi", { skip: !hasLO &
   const prTotal = prs.find((x) => x[3] === "TOTAL");
   assert.equal(Math.round(Number(prTotal[13])), result.kpi.prValue);
   assert.equal(prs[4][12] !== undefined, true);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test("SOH gabungan SCM + Produksi dihitung ulang LibreOffice dari sheet Stok Zahir", { skip: !hasLO && "LibreOffice tidak terpasang" }, async () => {
+  const zg = C.parseZahir(C.textToRows(C.decodeText(fs.readFileSync(FX("zahir-gabungan-contoh.xls")))));
+  const keys = [MAIN, "Head Quarter › PRODUKSI"];
+  const res = C.compute({ stockItems: C.aggregateStock(zg.items, keys), master: m });
+  const wb = X.buildWorkbook(ExcelJS, { result: res, zahir: zg, meta: { ...meta, gudangLabel: "GUDANG PUSAT + PRODUKSI", gudangKeys: keys }, log: [], prioritySort: C.prioritySort });
+  const zs = wb.getWorksheet("Stok Zahir");
+  const dihitung = []; for (let i = 5; i < 5 + zg.items.length; i++) dihitung.push(zs.getCell(`L${i}`).value);
+  assert.equal(dihitung.filter((x) => x === "Ya").length, 11); // 8 gudang + 3 produksi; Sales = Tidak
+  wb.eachSheet((ws) => ws.eachRow((row) => row.eachCell((cell) => { const v = cell.value; if (v && typeof v === "object" && v.formula) cell.value = { formula: v.formula }; })));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rop-lo2-"));
+  const src = path.join(dir, "gab.xlsx");
+  fs.writeFileSync(src, Buffer.from(await wb.xlsx.writeBuffer()));
+  execFileSync("soffice", [`-env:UserInstallation=file://${dir}/profile`, "--headless", "--convert-to", 'csv:Text - txt - csv (StarCalc):44,34,76,1,,1033,false,true,false,false,false,-1', "--outdir", dir, src], { stdio: "pipe", timeout: 120000 });
+  const calc = C.textToRows(fs.readFileSync(path.join(dir, "gab-Perhitungan.csv"), "utf8"));
+  const H = calc[4], ix = (h) => H.indexOf(h);
+  let n = 0;
+  for (const row of calc.slice(5)) {
+    if (!row[1]) continue;
+    const r = res.rows.find((x) => x.kode === row[1]);
+    assert.equal(Number(row[ix("SOH Zahir")] || 0), r.sohRaw, `${row[1]} SOH`);
+    assert.equal(Number(row[ix("Final PR")] || 0), r.final, `${row[1]} Final PR`);
+    assert.equal(row[ix("Status")], r.status, `${row[1]} Status`);
+    n++;
+  }
+  assert.equal(n, res.rows.length);
+  assert.equal(Number(calc.slice(5).find((x) => x[1] === "A002")[ix("SOH Zahir")]), 300);
   fs.rmSync(dir, { recursive: true, force: true });
 });

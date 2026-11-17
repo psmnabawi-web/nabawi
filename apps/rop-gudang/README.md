@@ -10,14 +10,24 @@ File Zahir diproses di browser pengguna dan **tidak dikirim ke server mana pun**
 
 | Langkah | Yang dilakukan | Waktu |
 |---|---|---|
-| 1 | Zahir → laporan **Daftar Produk Per Gudang** → download (Excel/.xls). Jangan diedit. | 1 menit |
-| 2 | Buka aplikasi → tarik file ke kotak **Upload stok Zahir**. | 10 detik |
+| 1 | Zahir → laporan **Daftar Produk Per Gudang** → download untuk gudang **SCM PKU** dan **Head Quarter / Produksi PKU** (2 file, atau 1 file berisi keduanya). Jangan diedit. | 2 menit |
+| 2 | Buka aplikasi → pilih **kedua file sekaligus** di kotak **Upload stok Zahir** (atau upload satu, lalu **+ Tambah file**). Stok dijumlah per kode. | 10 detik |
 | 3 | Cek bar hijau **File Zahir terverifikasi** (semua subtotal cocok). Bila merah: download ulang. | — |
 | 4 | Nolkan **Final PR** untuk barang yang sudah dipesan tetapi belum datang (aplikasi tidak menghitung PO outstanding). | 2–5 menit |
 | 5 | Review tab **Rekomendasi PR** dari atas (OOS → Kritis → Order). Ubah **Final PR** bila perlu + isi catatan. | 10–15 menit |
 | 6 | **Export Excel** (arsip & dasar PO) dan/atau **Salin teks PR** (kirim ke WhatsApp purchasing). | 1 menit |
 
 Perubahan manual tersimpan di browser per file (dikunci SHA-256 file), tercatat di sheet **Log Perubahan**, dan bisa dibatalkan dengan **Reset perubahan**.
+
+## Stok dari beberapa gudang (SCM + Produksi)
+
+Persediaan SCM = stok **gudang SCM PKU + gudang Produksi PKU**. Aplikasi menjumlah SOH per kode dari semua gudang yang dicentang.
+
+- **Upload**: beberapa file sekaligus, atau **+ Tambah file** setelah file pertama. Satu file yang berisi beberapa laporan "Daftar Produk Per Gudang" bersambung (seperti tab "Stok Zahir") juga dibaca; baris Total dobel/basi di akhir laporan diabaikan dan dicatat di Data issue.
+- **Gudang dihitung**: kotak centang di atas tabel. Default `DEFAULT_GUDANGS` di `config.js` (SCM PKU + Produksi PKU); gudang lain (mis. Sales) bisa dicentang manual. Pilihan tersimpan di browser.
+- **Harga** gabungan = rata-rata tertimbang (total nilai ÷ total qty).
+- **Pengaman**: gudang yang sama dari dua file tidak dijumlah dua kali (dipakai file terakhir); satuan yang beda antar gudang untuk kode yang sama ditandai *Satuan beda antar gudang*.
+- **Jejak**: rincian SOH per gudang di layar (angka kecil di bawah SOH, dan rincian item) dan di Excel (kolom *Rincian SOH per gudang*). SOH di sheet Perhitungan berupa rumus `SUMIFS` ke sheet *Stok Zahir* untuk baris yang kolom *Dihitung* = Ya.
 
 ## Cara hitung
 

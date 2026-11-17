@@ -1,0 +1,49 @@
+PT. Contoh Usaha
+DAFTAR PRODUK PER GUDANG
+						
+						
+						
+GUDANG PUSAT
+Kode Produk	Nama Produk	Jumlah	Satuan Ukur	Mata Uang	Harga Satuan	Total
+GUDANG PUSAT
+Bahan Baku
+A001	Tepung Uji	5000	Gram	IDR	10.00	50,000.00
+A002	Gula Uji	0	Gram	IDR	15.50	0.00
+A003	Telur Uji	300	Butir	IDR	1,500.00	450,000.00
+A004	Minyak Uji	-2	Liter	IDR	20,000.00	-40,000.00
+A005	Coklat Mati	1000	Gram	IDR	20.00	20,000.00
+Total Bahan Baku		6298			21,545.50	480,000.00
+Kemasan
+11401	Kotak Uji	1000	Pcs	IDR	500.00	500,000.00
+K002	Plastik Uji	200	Pcs	IDR	100.00	20,000.00
+K003	Stiker Tanpa Param	50	Pcs	IDR	200.00	10,000.00
+Total Kemasan		1250			800.00	530,000.00
+Total GUDANG PUSAT		7548			22,345.50	1,010,000.00
+
+Sales
+Kemasan
+K002	Plastik Uji	10	Pcs	IDR	100.00	1,000.00
+Total Kemasan		10			100.00	1,000.00
+Total Sales		10			100.00	1,000.00
+Total GUDANG PUSAT		7558			22,445.50	1,011,000.00
+
+PT. Contoh Usaha
+DAFTAR PRODUK PER GUDANG
+						
+						
+Head Quarter
+Kode Produk	Nama Produk	Jumlah	Satuan Ukur	Mata Uang	Harga Satuan	Total
+PRODUKSI
+Bahan Baku
+A002	Gula Uji	300	Gram	IDR	16.00	4,800.00
+A003	Telur Uji	60	Butir	IDR	1,600.00	96,000.00
+Total Bahan Baku		360			1,616.00	100,800.00
+Kemasan
+K002	Plastik Uji	50	Pcs	IDR	100.00	5,000.00
+Total Kemasan		50			100.00	5,000.00
+Total PRODUKSI		410			1,716.00	105,800.00
+
+Total Head Quarter		410			1,716.00	105,800.00
+Total PRODUKSI		410			1,716.00	105,800.00
+
+Total Head Quarter		410			1,716.00	105,800.00

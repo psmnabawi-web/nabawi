@@ -53,19 +53,20 @@
         </div>
         <label id="drop" class="drop" for="fileZahir">
           <strong>Tarik file ke sini atau klik untuk memilih</strong>
-          <span>Laporan Zahir <em>Daftar Produk Per Gudang</em> (.xls hasil download, tanpa diedit). File diproses di browser ini saja, tidak dikirim ke server.</span>
+          <span>Laporan Zahir <em>Daftar Produk Per Gudang</em> (.xls hasil download, tanpa diedit). Bisa pilih beberapa file sekaligus, mis. stok gudang SCM + stok Produksi; stoknya dijumlah. File diproses di browser ini saja, tidak dikirim ke server.</span>
         </label>
-        <input type="file" id="fileZahir" accept=".xls,.xlsx,.csv,.txt,.htm,.html" class="visually-hidden">
+        <input type="file" id="fileZahir" accept=".xls,.xlsx,.csv,.txt,.htm,.html" class="visually-hidden" multiple>
+        <input type="file" id="fileZahirAdd" accept=".xls,.xlsx,.csv,.txt,.htm,.html" class="visually-hidden" multiple>
         <div id="fileInfo" class="file-info" hidden></div>
       </article>
     </section>
 
     <section id="results" hidden>
       <div class="card toolbar">
-        <label class="field">
-          <span>Gudang</span>
-          <select id="selGudang"></select>
-        </label>
+        <div class="field grow">
+          <span>Stok dihitung dari gudang (dijumlah)</span>
+          <div id="gudangChecks" class="gudang-checks"></div>
+        </div>
         <label class="field">
           <span>Tanggal stok</span>
           <input type="date" id="inpDate">

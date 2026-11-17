@@ -77,6 +77,11 @@
     // Sel parameter global di Ringkasan (dirujuk rumus Perhitungan)
     const GL = { target: "$C$16", over: "$C$17", dsiMin: "$C$18", dsiSafe: "$C$19" };
     const R = (a) => `Ringkasan!${a}`;
+    // Sheet "Stok Zahir": baris mulai 5. Kolom G = Jumlah, L = Dihitung (Ya/Tidak), M = Kode (normal).
+    // SOH di Perhitungan = SUMIFS dari sheet ini untuk gudang yang dicentang → bisa ditelusuri ke file asli.
+    const gsel = Array.isArray(meta.gudangKeys) && meta.gudangKeys.length ? new Set(meta.gudangKeys) : null;
+    const ZS0 = 5, ZSL = ZS0 + Math.max(zahir.items.length, 1) - 1;
+    const ZR = (c) => `'Stok Zahir'!$${c}$${ZS0}:$${c}$${ZSL}`;
 
     // ---------------- Perhitungan ----------------
     // Kolom didefinisikan per kunci; huruf kolom dihitung otomatis (rumus tidak rusak bila kolom ditambah/dihapus).
@@ -86,7 +91,7 @@
       ["soh", "SOH Zahir", 11], ["ss", "Safety stock", 11], ["rop", "ROP", 11], ["max", "Stok maksimum", 11], ["dsi", "DSI (hari)", 9],
       ["saran", "Saran PR", 11], ["moq", "MOQ", 10], ["kel", "Kelipatan", 10], ["final", "Final PR", 11], ["dsiAfter", "DSI setelah PR", 10],
       ["harga", "Harga", 12], ["nilaiPR", "Nilai PR", 14], ["nilaiSOH", "Nilai SOH", 14], ["status", "Status", 14], ["band", "Band DSI (sheet lama)", 15],
-      ["hargaSrc", "Sumber harga", 10], ["note", "Catatan", 24], ["issue", "Data issue", 34], ["supplier", "Supplier", 20],
+      ["hargaSrc", "Sumber harga", 10], ["note", "Catatan", 24], ["issue", "Data issue", 34], ["supplier", "Supplier", 20], ["sohBy", "Rincian SOH per gudang", 30],
       ["excess", "Kelebihan di atas stok fisik maks", 14], ["excessVal", "Nilai kelebihan", 15], ["phys", "Stok fisik maks", 13],
       ["avg", "Rata-rata stok fisik (hari)", 12], ["cyc", "Order tiap ± (hari)", 11],
     ];
@@ -110,7 +115,9 @@
         v("usage", r.usage); v("buffer", r.buffer); v("lead", r.lead);
         v("target", r.targetFromMaster ? r.target : { formula: R(GL.target), result: r.target });
       }
-      v("soh", r.sohRaw);
+      if (gsel && r.inZahir) v("soh", { formula: `SUMIFS(${ZR("G")},${ZR("M")},"${esc(r.code)}",${ZR("L")},"Ya")`, result: r.sohRaw });
+      else v("soh", r.sohRaw);
+      v("sohBy", (r.sohBy || []).map((x) => `${x.gudang}: ${x.qty}`).join(" · "));
       v("ss", { formula: `${G}*${H}`, result: r.ss || 0 });
       v("rop", { formula: `${G}*(${H}+${I})`, result: r.rop || 0 });
       v("max", { formula: `${G}*IF(N(${J})=0,${H}+${I},MAX(${H}+1,2*${J}-${H})+${I})`, result: r.max || 0 });
@@ -197,17 +204,18 @@
     wsPR.pageSetup = { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 };
 
     // ---------------- Stok Zahir ----------------
-    title(wsZ, "Stok Zahir (hasil baca file, semua gudang)", `File: ${meta.fileName || "-"} · SHA-256 ${meta.fileHash || "-"}`);
-    const HZ = ["Jalur grup", "Induk", "Gudang", "Kategori", "Kode", "Nama", "Jumlah", "Satuan", "Mata uang", "Harga satuan", "Total", "Baris file"];
+    title(wsZ, "Stok Zahir (hasil baca file, semua gudang · kolom Dihitung = ikut dijumlah ke SOH)", `File: ${meta.fileName || "-"} · SHA-256 ${meta.fileHash || "-"}`);
+    const HZ = ["Jalur grup", "Induk", "Gudang", "Kategori", "Kode", "Nama", "Jumlah", "Satuan", "Mata uang", "Harga satuan", "Total", "Dihitung", "Kode (normal)", "File", "Baris file"];
     const hz = wsZ.getRow(4); HZ.forEach((h, i) => (hz.getCell(i + 1).value = h)); styleHeader(hz, 1, HZ.length);
     const Z0 = 5;
     zahir.items.forEach((it, i) => {
       const row = wsZ.getRow(Z0 + i);
-      [it.pathStr, it.induk, it.gudang, it.kategori, it.kode, it.nama, it.qty, it.satuan, it.mataUang, it.harga, it.total, it.row].forEach((val, c) => (row.getCell(c + 1).value = val));
+      [it.pathStr, it.induk, it.gudang, it.kategori, it.kode, it.nama, it.qty, it.satuan, it.mataUang, it.harga, it.total, !gsel || gsel.has(it.gkey) ? "Ya" : "Tidak", it.code, it.source || meta.fileName || "", it.row].forEach((val, c) => (row.getCell(c + 1).value = val));
       row.getCell(7).numFmt = fmtQty(it.qty); row.getCell(10).numFmt = "#,##0.00"; row.getCell(11).numFmt = "#,##0.00";
     });
     const zLast = Z0 + Math.max(zahir.items.length, 1) - 1;
-    [44, 12, 14, 26, 12, 36, 12, 9, 9, 13, 16, 9].forEach((w, i) => (wsZ.getColumn(i + 1).width = w));
+    [44, 12, 14, 26, 12, 36, 12, 9, 9, 13, 16, 9, 12, 30, 9].forEach((w, i) => (wsZ.getColumn(i + 1).width = w));
+    if (zahir.items.length) wsZ.addConditionalFormatting({ ref: `L${Z0}:L${zLast}`, rules: [{ type: "expression", priority: 1, formulae: [`$L${Z0}="Ya"`], style: { fill: { type: "pattern", pattern: "solid", bgColor: { argb: "FFDDF1E3" } } } }] });
     wsZ.views = [{ state: "frozen", ySplit: 4 }];
     wsZ.autoFilter = { from: { row: 4, column: 1 }, to: { row: zLast, column: HZ.length } };
 
@@ -216,7 +224,7 @@
     const kv = (r, k, val, fmt) => { wsR.getCell(`B${r}`).value = k; wsR.getCell(`C${r}`).value = val; wsR.getCell(`B${r}`).font = { color: { argb: MUTED } }; if (fmt) wsR.getCell(`C${r}`).numFmt = fmt; };
     const section = (r, text) => { const c = wsR.getCell(`B${r}`); c.value = text; c.font = { bold: true, color: { argb: NAVY }, size: 11 }; wsR.getCell(`B${r}`).border = { bottom: { style: "thin", color: { argb: NAVY } } }; };
     section(4, "Informasi");
-    kv(5, "Gudang", meta.gudangLabel || "");
+    kv(5, "Gudang dihitung (stok dijumlah)", meta.gudangLabel || "");
     kv(6, "Tanggal stok", meta.stockDate || "");
     kv(7, "Disusun oleh", meta.preparedBy || "");
     kv(8, "Dibuat", meta.generatedAt ? new Date(meta.generatedAt).toLocaleString("id-ID") : "");

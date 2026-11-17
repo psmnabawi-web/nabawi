@@ -184,8 +184,9 @@
     return map.kode != null && map.qty != null ? map : null;
   }
 
-  function parseZahir(rows, opts) {
+  function parseZahirSegment(rows, opts, offset) {
     opts = opts || {};
+    offset = offset || 0;
     const cellsText = [];
     for (const r of rows) for (const c of r) if (typeof c === "string") cellsText.push(c);
     const locale = opts.locale || detectLocale(cellsText.slice(0, 3000), "en");
@@ -207,7 +208,7 @@
       const nonEmpty = r.filter((c) => !isBlank(c)).length;
       const first = normText(r[0]);
       if (nonEmpty === 1 && first) {
-        const g = { name: first, key: normHeader(first), afterHeader: headerSeen, closed: false, row: rowIdx + 1, qtyFile: null, valFile: null, children: 0 };
+        const g = { name: first, key: normHeader(first), afterHeader: headerSeen, closed: false, row: offset + rowIdx + 1, qtyFile: null, valFile: null, children: 0 };
         groups.push(g); stack.push(g);
         return;
       }
@@ -219,20 +220,23 @@
         if (idx >= 0) {
           const g = stack[idx];
           const c = col || { qty: 2, total: 6 };
-          g.closed = true; g.closeRow = rowIdx + 1;
+          g.closed = true; g.closeRow = offset + rowIdx + 1;
           g.qtyFile = num(r[c.qty]); g.valFile = c.total != null ? num(r[c.total]) : null;
           for (let i = stack.length - 1; i > idx; i--) if (!stack[i].closed) warnings.push(`Grup "${stack[i].name}" (baris ${stack[i].row}) tidak punya baris Total.`);
           stack.length = idx;
           return;
         }
+        // Baris "Total X" tanpa grup terbuka (mis. total dobel di akhir laporan): bukan produk, abaikan.
+        warnings.push(`Baris "${first}" (baris ${offset + rowIdx + 1}) tidak punya grup terbuka; diabaikan.`);
+        return;
       }
       const c = col || { kode: 0, nama: 1, qty: 2, satuan: 3, mataUang: 4, harga: 5, total: 6 };
       const kode = normText(r[c.kode]);
       const nama = c.nama != null ? normText(r[c.nama]) : "";
       const qty = num(r[c.qty]);
-      if (!kode || qty == null) { unparsed.push({ row: rowIdx + 1, text: r.map(normText).join(" | ") }); return; }
+      if (!kode || qty == null) { unparsed.push({ row: offset + rowIdx + 1, text: r.map(normText).join(" | ") }); return; }
       items.push({
-        row: rowIdx + 1, groups: stack.slice(), kode, code: normCode(kode), nama, qty,
+        row: offset + rowIdx + 1, groups: stack.slice(), kode, code: normCode(kode), nama, qty,
         satuan: c.satuan != null ? normText(r[c.satuan]) : "",
         mataUang: c.mataUang != null ? normText(r[c.mataUang]) : "",
         harga: c.harga != null ? num(r[c.harga]) || 0 : 0,
@@ -299,6 +303,98 @@
       items, recon, warnings, unparsed, duplicates: dups,
       gudangs: Array.from(gudangMap.values()).map((g) => ({ ...g, value: Math.round(g.value * 100) / 100 })),
     };
+  }
+
+  // Satu file bisa berisi lebih dari satu laporan "Daftar Produk Per Gudang" yang ditempel berurutan
+  // (mis. laporan SCM PKU lalu laporan Head Quarter/Produksi PKU). Pisahkan per judul laporan, baca masing-masing.
+  function splitReports(rows) {
+    const nonEmpty = (r) => (r || []).filter((c) => !isBlank(c)).length;
+    const isTitle = (r) => nonEmpty(r) === 1 && /^DAFTAR PRODUK/i.test(normText(r[0]));
+    const titles = [];
+    rows.forEach((r, i) => { if (isTitle(r)) titles.push(i); });
+    if (titles.length <= 1) return [{ start: 0, rows }];
+    const starts = titles.map((t, k) => {
+      let j = t - 1;
+      while (j >= 0 && nonEmpty(rows[j]) === 0) j--;
+      const prevTitle = k > 0 ? titles[k - 1] : -1;
+      return j > prevTitle && nonEmpty(rows[j]) === 1 && !/^total\s/i.test(normText(rows[j][0])) ? j : t; // baris nama perusahaan ikut segmen
+    });
+    starts[0] = 0;
+    return starts.map((st, k) => ({ start: st, rows: rows.slice(st, k + 1 < starts.length ? starts[k + 1] : rows.length) }));
+  }
+
+  // Gabungkan beberapa hasil baca (beberapa laporan / beberapa file). Bila gudang yang sama muncul di lebih dari satu
+  // bagian, hanya bagian TERAKHIR yang dipakai (mencegah stok dihitung dobel karena file yang sama di-upload dua kali).
+  function mergeZahir(parts) {
+    parts = parts.filter(Boolean);
+    if (parts.length === 1) return parts[0];
+    const taken = new Set(), keep = [], warnings = [];
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i], own = new Set(p.items.map((it) => it.gkey));
+      for (const g of own) if (taken.has(g)) warnings.push(`Gudang "${g}" ada di lebih dari satu file/laporan; yang dipakai bagian terakhir (${p.source || "file " + (i + 1)} diabaikan untuk gudang ini).`);
+      keep[i] = p.items.filter((it) => !taken.has(it.gkey));
+      for (const g of own) taken.add(g);
+    }
+    const items = [].concat(...keep);
+    const gudangMap = new Map();
+    for (const it of items) {
+      let gd = gudangMap.get(it.gkey);
+      if (!gd) { gd = { key: it.gkey, name: it.gudang, induk: it.induk, items: 0, qty: 0, value: 0, source: it.source || "" }; gudangMap.set(it.gkey, gd); }
+      gd.items++; gd.qty += it.qty; gd.value += it.total;
+    }
+    const seen = new Map(), dups = [];
+    for (const it of items) { const k = it.gkey + "|" + it.code; if (seen.has(k)) dups.push({ gkey: it.gkey, kode: it.kode, nama: it.nama, rows: [seen.get(k).row, it.row] }); else seen.set(k, it); }
+    return {
+      meta: parts[0].meta,
+      items,
+      recon: [].concat(...parts.map((p) => p.recon.map((r) => ({ ...r, source: p.source || r.source || "" })))),
+      warnings: [].concat(...parts.map((p) => p.warnings), warnings),
+      unparsed: [].concat(...parts.map((p) => p.unparsed)),
+      duplicates: dups,
+      gudangs: Array.from(gudangMap.values()).map((g) => ({ ...g, value: Math.round(g.value * 100) / 100 })),
+      reports: parts.reduce((a, p) => a + (p.reports || 1), 0),
+    };
+  }
+
+  function parseZahir(rows, opts) {
+    const segs = splitReports(rows);
+    const parts = segs.map((sg, i) => {
+      const z = parseZahirSegment(sg.rows, opts, sg.start);
+      z.source = segs.length > 1 ? `laporan ${i + 1}` : "";
+      return z;
+    });
+    const z = mergeZahir(parts);
+    z.reports = segs.length;
+    return z;
+  }
+
+  // Stok yang dihitung = jumlah semua gudang terpilih per kode (mis. SCM PKU + Produksi PKU).
+  // Harga = rata-rata tertimbang nilai (total ÷ qty); rincian per gudang disimpan di sohBy.
+  function aggregateStock(items, gkeys) {
+    const set = new Set(gkeys || []);
+    const map = new Map();
+    for (const it of items) {
+      if (!set.has(it.gkey)) continue;
+      let a = map.get(it.code);
+      if (!a) { a = { code: it.code, kode: it.kode, nama: it.nama, satuan: it.satuan, kategori: it.kategori, qty: 0, total: 0, row: it.row, sohBy: [], gudangList: [] }; map.set(it.code, a); }
+      a.qty = round6(a.qty + it.qty);
+      a.total += it.total || 0;
+      a.sohBy.push({ gkey: it.gkey, gudang: it.gudang, qty: it.qty, satuan: it.satuan, harga: it.harga });
+      if (!a.gudangList.includes(it.gudang)) a.gudangList.push(it.gudang);
+      if (!a.kategori && it.kategori) a.kategori = it.kategori;
+    }
+    const out = [];
+    for (const a of map.values()) {
+      const units = Array.from(new Set(a.sohBy.map((x) => (x.satuan || "").toUpperCase()).filter(Boolean)));
+      a.unitConflict = units.length > 1;
+      // satu gudang: pakai Harga Satuan Zahir apa adanya; beberapa gudang: rata-rata tertimbang nilai
+      a.harga = a.sohBy.length === 1 ? (a.sohBy[0].harga || 0) : a.qty > 0 && a.total > 0 ? round6(a.total / a.qty) : Math.max(0, ...a.sohBy.map((x) => x.harga || 0));
+      a.total = Math.round(a.total * 100) / 100;
+      a.gudang = a.gudangList.join(" + ");
+      delete a.gudangList;
+      out.push(a);
+    }
+    return out;
   }
 
   // ---------- master parameter ----------
@@ -429,7 +525,7 @@
         code, kode: st ? st.kode : m.kode, nama: st ? st.nama : m.nama,
         satuan: st ? st.satuan : m.satuan, satuanMaster: m ? m.satuan : "",
         brand: m ? m.brand : "", supplier: m ? m.supplier || "" : "", kategori: st ? st.kategori : "", gudang: st ? st.gudang : "",
-        inZahir: !!st, hasParam: !!m, aktif: m ? m.aktif !== false : true,
+        inZahir: !!st, hasParam: !!m, aktif: m ? m.aktif !== false : true, sohBy: st && st.sohBy ? st.sohBy : [],
         sohRaw: st ? st.qty : 0, hargaZahir: st ? st.harga : 0, hargaMaster: m && m.harga > 0 ? m.harga : 0,
         issues: [],
       };
@@ -493,6 +589,7 @@
       if (m && !st) add("Kode master tidak ada di file Zahir", `Dihitung dengan stok 0${row.final > 0 ? `, Final PR ${fmtNum(row.final)}` : ""}. Cek penulisan kode.`, row.final > 0 ? "Tinggi" : "Sedang");
       if (m && st && row.satuanMaster && row.satuan && row.satuanMaster.toUpperCase() !== row.satuan.toUpperCase()) add("Satuan beda", `Zahir: ${row.satuan} · Master: ${row.satuanMaster}. Pemakaian/hari harus dalam satuan Zahir.`, "Tinggi");
       if (row.sohRaw < 0) add("Stok negatif di Zahir", `Stok ${fmtNum(row.sohRaw)} dihitung 0.`, "Tinggi");
+      if (st && st.unitConflict) add("Satuan beda antar gudang", st.sohBy.map((x) => `${x.gudang}: ${fmtNum(x.qty)} ${x.satuan}`).join(" · ") + ". Jumlah stok tidak valid sampai satuan disamakan di Zahir.", "Tinggi");
       if (m && row.final > 0 && !(row.harga > 0)) add("Harga kosong", "Nilai PR tidak terhitung.", "Sedang");
       if (m && d > 0 && row.target > 0 && row.buffer + 0.5 > row.target) add("Target DSI tidak tercapai", `Buffer ${fmtNum(row.buffer)} hari: rata-rata stok fisik minimal ±${fmtNum(row.buffer + 0.5)} hari, di atas target ${fmtNum(row.target)} hari. Turunkan buffer atau tetapkan target khusus item ini.`, "Rendah");
       rows.push(row);
@@ -615,7 +712,7 @@
 
   return {
     normCode, normText, normHeader, parseNum, detectLocale, sniff, decodeText, textToRows, markupToRows,
-    parseZahir, parseMaster, compute, summarize, prioritySort, prText, ceilStep, dsiBand, sha256Hex, fmtNum, fmtRp, poGroups, poLine, poNumber,
+    parseZahir, mergeZahir, splitReports, aggregateStock, parseMaster, compute, summarize, prioritySort, prText, ceilStep, dsiBand, sha256Hex, fmtNum, fmtRp, poGroups, poLine, poNumber,
     MASTER_FIELDS, DEFAULT_SETTINGS, STATUS,
   };
 });
