@@ -19,6 +19,17 @@ File Zahir diproses di browser pengguna dan **tidak dikirim ke server mana pun**
 
 Perubahan manual tersimpan di browser per file (dikunci SHA-256 file), tercatat di sheet **Log Perubahan**, dan bisa dibatalkan dengan **Reset perubahan**.
 
+## MOQ (minimum order purchasing)
+
+MOQ yang terlalu besar membuat PR melebihi kebutuhan dan DSI tidak bisa turun ke target. Aturannya:
+
+- **Kebutuhan** = Saran PR dibulatkan ke kemasan. Ini angka yang seharusnya dibeli dan selalu ditampilkan di samping Final PR.
+- **Batas kelebihan MOQ** (Pengaturan, default **2 hari pemakaian**): MOQ diikuti hanya bila menambah ≤ batas. Lebih dari itu, Final PR = Kebutuhan dan item ditandai **MOQ ditahan** (purchasing negosiasi MOQ/kemasan, cari supplier lain, atau isi Final PR manual bila memang harus ikut MOQ).
+- **0** = selalu sesuai kebutuhan (MOQ hanya info). **999** = selalu ikut MOQ (perilaku lama).
+- Kolom **MOQ (hari pemakaian)** menunjukkan seberapa besar MOQ dibanding pemakaian; Data issue *MOQ melebihi kebutuhan* memberi usulan **MOQ wajar = 1 siklus order** (pemakaian × hari antar order, dibulatkan kemasan).
+- **Lebih dari kebutuhan** (qty & Rp) = Final PR − Kebutuhan, termasuk karena edit manual. KPI dan Excel menampilkan nilai kebutuhan riil, kelebihan, dan jumlah MOQ ditahan.
+- Hasil sama persis dengan sheet lama: **Target DSI 0 + Batas MOQ 999**.
+
 ## Stok dari beberapa gudang (SCM + Produksi)
 
 Persediaan SCM = stok **gudang SCM PKU + gudang Produksi PKU**. Aplikasi menjumlah SOH per kode dari semua gudang yang dicentang.
@@ -40,7 +51,8 @@ Pemicu order sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (Total Safety = R
 | Stok fisik maksimum | Pemakaian/hari × MAX(Buffer + 1, 2 × Target DSI − Buffer) · stok sesaat setelah barang datang |
 | Stok maksimum (dasar PR) | Stok fisik maksimum + Pemakaian/hari × Lead time |
 | Saran PR | Stok maksimum − SOH Zahir (negatif dihitung 0), bila SOH ≤ ROP; selain itu 0 |
-| Final PR | MAX(MOQ, CEILING(Saran PR, Kelipatan)) |
+| Kebutuhan | CEILING(Saran PR, Kelipatan) · angka yang seharusnya dibeli |
+| Final PR | MAX(MOQ, Kebutuhan) bila tambahan karena MOQ ≤ Batas MOQ × Pemakaian/hari; selain itu = Kebutuhan ("MOQ ditahan") |
 | DSI | SOH ÷ Pemakaian/hari |
 | DSI gudang | Nilai stok ÷ nilai pemakaian per hari (semua item berparameter; sama dengan kolom DSI sheet lama) |
 | Kelebihan | SOH − Stok fisik maksimum (barang bergerak) · seluruh SOH (barang tidak bergerak) |

@@ -13,7 +13,9 @@
  *   Stok maksimum (posisi, dasar PR)         = Stok fisik maksimum + Pemakaian × Lead time
  *                   Target 0 = sama persis dengan sheet lama (stok maksimum = ROP)
  *   Saran PR      = Stok maksimum − SOH, bila SOH ≤ ROP (dan < Stok maksimum); selain itu 0
- *   Final PR      = 0 bila Saran 0; selain itu MAX(MOQ, CEILING(Saran, kelipatan))
+ *   Kebutuhan     = CEILING(Saran PR, kelipatan)  ← angka yang seharusnya dibeli
+ *   Final PR      = MAX(MOQ, Kebutuhan) bila kelebihan karena MOQ ≤ Batas MOQ (hari) × Pemakaian/hari;
+ *                   selain itu Kebutuhan dan ditandai "MOQ ditahan" (purchasing negosiasi / putuskan manual)
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
@@ -468,7 +470,7 @@
   }
 
   // ---------- perhitungan ROP ----------
-  const DEFAULT_SETTINGS = { targetDsi: 3, overstockDays: 30, roundGramMl: true, roundStep: 1000, priceSource: "master", dsiMin: 3.5, dsiSafety: 6.5 };
+  const DEFAULT_SETTINGS = { targetDsi: 3, moqTolDays: 2, overstockDays: 30, roundGramMl: true, roundStep: 1000, priceSource: "master", dsiMin: 3.5, dsiSafety: 6.5 };
   const STATUS = {
     OOS: { label: "OOS", rank: 0, desc: "Stok habis padahal ada pemakaian" },
     KRITIS: { label: "Kritis", rank: 1, desc: "Stok tidak cukup sampai barang datang (DSI ≤ lead time)" },
@@ -559,7 +561,15 @@
         row.dsi = d > 0 ? round6(soh / d) : null;
         const need = d > 0 && row.pos <= row.rop && row.pos < row.max;
         row.saran = need ? round6(row.max - row.pos) : 0;
-        row.finalAuto = row.saran > 0 ? Math.max(row.moq || 0, ceilStep(row.saran, row.kelipatan)) : 0;
+        // Kebutuhan = Saran dibulatkan ke kemasan. MOQ diikuti hanya bila kelebihannya ≤ batas (hari pemakaian).
+        row.need = row.saran > 0 ? ceilStep(row.saran, row.kelipatan) : 0;
+        const withMoq = Math.max(row.moq || 0, row.need);
+        row.moqExtraIfFollow = round6(withMoq - row.need);
+        row.moqHeld = row.need > 0 && row.moqExtraIfFollow > round6(s.moqTolDays * d);
+        row.moqFollowed = row.need > 0 && row.moqExtraIfFollow > 0 && !row.moqHeld;
+        row.moqRule = row.moqHeld ? "MOQ ditahan" : row.moqFollowed ? "MOQ diikuti" : "";
+        row.finalAuto = row.need > 0 ? (row.moqHeld ? row.need : withMoq) : 0;
+        row.moqDays = d > 0 && row.moq > 0 ? round6(row.moq / d) : null;
         row.final = eFinal[code] != null ? eFinal[code] : row.finalAuto;
         row.finalEdited = eFinal[code] != null && eFinal[code] !== row.finalAuto;
         row.dsiAfter = d > 0 ? round6((row.pos + row.final) / d) : null;
@@ -575,9 +585,12 @@
         row.band = dsiBand(row.dsi, s);
         row.excess = d > 0 ? (row.target > 0 ? Math.max(0, round6(soh - row.physMax)) : 0) : soh; // kelebihan di atas stok fisik maksimum (target)
       } else {
-        Object.assign(row, { ss: null, rop: null, max: null, pos: soh, dsi: null, saran: 0, finalAuto: 0, final: eFinal[code] != null ? eFinal[code] : 0, finalEdited: eFinal[code] != null, dsiAfter: null, status: STATUS.NOPARAM.label, rank: STATUS.NOPARAM.rank, band: "" });
+        Object.assign(row, { ss: null, rop: null, max: null, pos: soh, dsi: null, saran: 0, need: 0, moqExtraIfFollow: 0, moqHeld: false, moqFollowed: false, moqRule: "", moqDays: null, finalAuto: 0, final: eFinal[code] != null ? eFinal[code] : 0, finalEdited: eFinal[code] != null, dsiAfter: null, status: STATUS.NOPARAM.label, rank: STATUS.NOPARAM.rank, band: "" });
       }
       row.nilaiPR = Math.round(row.final * (row.harga || 0) * 100) / 100;
+      row.overNeed = Math.max(0, round6(row.final - (row.need || 0)));            // PR di atas kebutuhan (MOQ atau edit manual)
+      row.overNeedValue = Math.round(row.overNeed * (row.harga || 0) * 100) / 100;
+      row.moqSuggest = row.usage > 0 && row.hasParam ? ceilStep(row.usage * Math.max(row.cycleDays || 1, 1), row.kelipatan || 1) : null; // MOQ wajar = 1 siklus order
       row.nilaiSOH = Math.round(soh * (row.harga || 0) * 100) / 100;
       row.excess = row.excess || 0;
       row.excessValue = Math.round(row.excess * (row.harga || 0) * 100) / 100;
@@ -591,6 +604,7 @@
       if (row.sohRaw < 0) add("Stok negatif di Zahir", `Stok ${fmtNum(row.sohRaw)} dihitung 0.`, "Tinggi");
       if (st && st.unitConflict) add("Satuan beda antar gudang", st.sohBy.map((x) => `${x.gudang}: ${fmtNum(x.qty)} ${x.satuan}`).join(" · ") + ". Jumlah stok tidak valid sampai satuan disamakan di Zahir.", "Tinggi");
       if (m && row.final > 0 && !(row.harga > 0)) add("Harga kosong", "Nilai PR tidak terhitung.", "Sedang");
+      if (row.moqHeld) add("MOQ melebihi kebutuhan", `MOQ ${fmtNum(row.moq)} ${row.satuan} = ${fmtNum(row.moqDays, 1)} hari pemakaian; kebutuhan ${fmtNum(row.need)}. Bila ikut MOQ lebih ${fmtNum(row.moqExtraIfFollow)} (${fmtRp(row.moqExtraIfFollow * (row.harga || 0))}). PR diisi sesuai kebutuhan. MOQ wajar ±${fmtNum(row.moqSuggest)} (1 siklus order).`, "Sedang");
       if (m && d > 0 && row.target > 0 && row.buffer + 0.5 > row.target) add("Target DSI tidak tercapai", `Buffer ${fmtNum(row.buffer)} hari: rata-rata stok fisik minimal ±${fmtNum(row.buffer + 0.5)} hari, di atas target ${fmtNum(row.target)} hari. Turunkan buffer atau tetapkan target khusus item ini.`, "Rendah");
       rows.push(row);
     }
@@ -602,7 +616,8 @@
 
   function summarize(rows, s) {
     const k = { items: rows.length, withParam: 0, prCount: 0, prValue: 0, oos: 0, kritis: 0, order: 0, above: 0, over: 0, overValue: 0, dead: 0, deadValue: 0, noParamStock: 0, noParamValue: 0, stockValue: 0, byBrand: {}, edited: 0,
-      excessCount: 0, excessValue: 0, paramStockValue: 0, usageValue: 0, afterValue: 0, designValue: 0, targetDsi: s.targetDsi };
+      excessCount: 0, excessValue: 0, paramStockValue: 0, usageValue: 0, afterValue: 0, designValue: 0, targetDsi: s.targetDsi,
+      needValue: 0, overNeedCount: 0, overNeedValue: 0, moqHeldCount: 0, moqHeldValue: 0, moqFollowedCount: 0 };
     for (const r of rows) {
       if (r.hasParam) k.withParam++;
       k.stockValue += r.nilaiSOH;
@@ -615,6 +630,10 @@
       if (!r.hasParam && r.sohRaw > 0) { k.noParamStock++; k.noParamValue += Math.max(0, r.sohRaw) * (r.hargaZahir || 0); }
       if (r.finalEdited) k.edited++;
       if (r.status === "Di atas target") k.above++;
+      if (r.final > 0) k.needValue += (r.need || 0) * (r.harga || 0);
+      if (r.overNeed > 0) { k.overNeedCount++; k.overNeedValue += r.overNeedValue; }
+      if (r.moqHeld) { k.moqHeldCount++; k.moqHeldValue += (r.moqExtraIfFollow || 0) * (r.harga || 0); }
+      if (r.moqFollowed) k.moqFollowedCount++;
       if (r.hasParam) {
         // DSI gudang (berbobot nilai) = nilai stok ÷ nilai pemakaian per hari; sama dengan kolom DSI di sheet lama (Value SOH ÷ Value Penjualan)
         k.paramStockValue += r.nilaiSOH;
@@ -629,7 +648,7 @@
     // DSI desain = rata-rata stok fisik bila semua item diorder sesuai rumus; DSI tanpa kelebihan = aktual dikurangi kelebihan & barang tidak bergerak
     k.dsiDesign = k.usageValue > 0 ? Math.round((k.designValue / k.usageValue) * 100) / 100 : null;
     k.dsiNoExcess = k.usageValue > 0 ? Math.round(((k.paramStockValue - k.excessValue - k.deadValue) / k.usageValue) * 100) / 100 : null;
-    for (const f of ["prValue", "overValue", "deadValue", "noParamValue", "stockValue", "excessValue", "paramStockValue", "usageValue", "afterValue", "designValue"]) k[f] = Math.round(k[f]);
+    for (const f of ["prValue", "overValue", "deadValue", "noParamValue", "stockValue", "excessValue", "paramStockValue", "usageValue", "afterValue", "designValue", "needValue", "overNeedValue", "moqHeldValue"]) k[f] = Math.round(k[f]);
     return k;
   }
 
@@ -663,7 +682,7 @@
       const g = list.filter((r) => r.status === st);
       if (!g.length) continue;
       lines.push("", `*${title} (${g.length})*`);
-      for (const r of g) lines.push(`${++no}. ${r.nama} (${r.kode}): ${fmtNum(r.final)} ${r.satuan}${r.harga > 0 ? ` · ${fmtRp(r.nilaiPR)}` : ""}${r.note ? ` · ${r.note}` : ""}`);
+      for (const r of g) lines.push(`${++no}. ${r.nama} (${r.kode}): ${fmtNum(r.final)} ${r.satuan}${r.harga > 0 ? ` · ${fmtRp(r.nilaiPR)}` : ""}${r.moqHeld && r.final < r.moq ? ` · di bawah MOQ ${fmtNum(r.moq)}` : ""}${r.note ? ` · ${r.note}` : ""}`);
     }
     const rest = list.filter((r) => !["OOS", "Kritis", "Order"].includes(r.status));
     if (rest.length) {

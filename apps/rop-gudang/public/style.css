@@ -315,3 +315,8 @@ table.po-items { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
 .gchk small { color: var(--muted); }
 .gchk:has(input:checked) { border-color: var(--navy); background: var(--soft); }
 .data td.num small.tag-multi { display: block; font-size: 10.5px; color: var(--muted); font-weight: 600; line-height: 1.1; white-space: nowrap; }
+
+/* MOQ */
+.data td.num small.tag-sub { display: block; font-size: 10.5px; color: var(--muted); font-weight: 600; line-height: 1.1; white-space: nowrap; }
+.data td.num small.tag-held { display: block; font-size: 10.5px; color: var(--orange); font-weight: 700; line-height: 1.1; white-space: nowrap; cursor: help; }
+.data td.over-need { color: var(--orange); font-weight: 700; }

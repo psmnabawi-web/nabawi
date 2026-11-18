@@ -37,27 +37,29 @@ test("workbook: sheet, header, rumus inti, input & override manual", async () =>
   fs.writeFileSync(path.join(OUT, "export-contoh.xlsx"), Buffer.from(buf));
   assert.deepEqual(wb2.worksheets.map((w) => w.name), ["Ringkasan", "PR", "Perhitungan", "Data Issue", "Stok Zahir", "Log Perubahan"]);
   const ws = wb2.getWorksheet("Perhitungan");
-  assert.equal(ws.getCell("B5").value, "Kode"); assert.equal(ws.getCell("X5").value, "Status"); assert.equal(ws.getCell("AC5").value, "Supplier");
+  assert.equal(ws.getCell("B5").value, "Kode"); assert.equal(ws.getCell("AA5").value, "Status"); assert.equal(ws.getCell("AF5").value, "Supplier");
   const r = rowOf(ws, "A003");
   assert.ok(r > 5);
   assert.equal(ws.getCell(`M${r}`).formula, `G${r}*(H${r}+I${r})`); // ROP
   assert.equal(ws.getCell(`P${r}`).formula, `IF(AND(N(G${r})>0,MAX(K${r},0)<=M${r},MAX(K${r},0)<N${r}),N${r}-MAX(K${r},0),0)`); // Saran PR
-  assert.equal(ws.getCell(`S${r}`).formula, `IF(P${r}>0,MAX(Q${r},CEILING(P${r},IF(N(R${r})>0,R${r},1))),0)`); // Final PR
+  assert.equal(ws.getCell(`Q${r}`).formula, `IF(P${r}>0,CEILING(P${r},IF(N(T${r})>0,T${r},1)),0)`); // Kebutuhan
+  assert.equal(ws.getCell(`U${r}`).formula, `IF(Q${r}>0,IF(MAX(N(R${r}),Q${r})-Q${r}<=Ringkasan!$C$20*N(G${r}),MAX(N(R${r}),Q${r}),Q${r}),0)`); // Final PR
+  assert.equal(ws.getCell("Q5").value, "Kebutuhan (dibulatkan kemasan)"); assert.equal(ws.getCell("AM5").value, "Aturan MOQ");
   assert.equal(ws.getCell(`J${r}`).formula, "Ringkasan!$C$16"); // target DSI default dirujuk ke sel parameter global
   assert.equal(ws.getCell(`J5`).value, "Target DSI (hari)");
   assert.equal(ws.getCell(`N${r}`).formula, `G${r}*IF(N(J${r})=0,H${r}+I${r},MAX(H${r}+1,2*J${r}-H${r})+I${r})`); // Stok maksimum
-  assert.equal(ws.getCell(`AG5`).value, "Stok fisik maks");
-  assert.equal(ws.getCell(`AD5`).value, "Rincian SOH per gudang");
+  assert.equal(ws.getCell(`AJ5`).value, "Stok fisik maks");
+  assert.equal(ws.getCell(`AG5`).value, "Rincian SOH per gudang");
   assert.match(ws.getCell(`K${r}`).formula, /^SUMIFS\('Stok Zahir'!\$G\$5:\$G\$\d+,'Stok Zahir'!\$M\$5:\$M\$\d+,"A003",'Stok Zahir'!\$L\$5:\$L\$\d+,"Ya"\)$/);
   const headers = []; ws.getRow(5).eachCell((c) => headers.push(String(c.value)));
   assert.ok(!headers.some((h) => /outstanding|posisi/i.test(h)), "kolom PO outstanding/posisi sudah dihapus");
   const k2 = rowOf(ws, "K002");
-  assert.equal(ws.getCell(`S${k2}`).value, 600); // override = nilai, bukan rumus
-  assert.match(ws.getCell(`S${k2}`).note.texts ? ws.getCell(`S${k2}`).note.texts.map((t) => t.text).join("") : String(ws.getCell(`S${k2}`).note), /Rekomendasi sistem: 500/);
-  assert.equal(ws.getCell(`AA${k2}`).value, "naik karena promo");
+  assert.equal(ws.getCell(`U${k2}`).value, 600); // override = nilai, bukan rumus
+  assert.match(ws.getCell(`U${k2}`).note.texts ? ws.getCell(`U${k2}`).note.texts.map((t) => t.text).join("") : String(ws.getCell(`U${k2}`).note), /Rekomendasi sistem: 500/);
+  assert.equal(ws.getCell(`AD${k2}`).value, "naik karena promo");
   const k3 = rowOf(ws, "K003");
   assert.equal(ws.getCell(`G${k3}`).value, null); // tanpa parameter → input kosong
-  assert.equal(ws.getCell(`X${k3}`).result, "Tanpa parameter");
+  assert.equal(ws.getCell(`AA${k3}`).result, "Tanpa parameter");
   assert.ok(ws.views[0].state === "frozen");
   const dv = ws.getCell(`G${r}`).dataValidation || {};
   assert.equal(dv.type, "decimal"); assert.equal(dv.operator, "greaterThanOrEqual");
@@ -68,15 +70,17 @@ test("workbook: sheet, header, rumus inti, input & override manual", async () =>
   assert.deepEqual(prCodes, ["A004", "K009", "A002", "K002", "A003", "A001"]);
   assert.equal(pr.getCell(`D${5 + result.kpi.prCount}`).value, "TOTAL");
   assert.equal(pr.getCell("L4").value, "Final PR");
-  assert.match(pr.getCell("L5").formula, /^IFERROR\(INDEX\(Perhitungan!\$S\$6:\$S\$\d+,\$Q5\),""\)$/);
-  assert.match(pr.getCell("Q5").formula, /^MATCH\(\$C5,Perhitungan!\$B\$6:\$B\$\d+,0\)$/);
+  assert.match(pr.getCell("L5").formula, /^IFERROR\(INDEX\(Perhitungan!\$U\$6:\$U\$\d+,\$S5\),""\)$/);
+  assert.match(pr.getCell("S5").formula, /^MATCH\(\$C5,Perhitungan!\$B\$6:\$B\$\d+,0\)$/);
+  assert.equal(pr.getCell("J4").value, "Kebutuhan"); assert.equal(pr.getCell("M4").value, "Lebih dari kebutuhan");
 
   const rs = wb2.getWorksheet("Ringkasan");
   const kr = (label) => { for (let i = 24; i < 60; i++) if (String(rs.getCell(`B${i}`).value || "").startsWith(label)) return i; return -1; };
   assert.equal(rs.getCell("C16").value, 3);
   assert.equal(rs.getCell(`C${kr("Target DSI (hari)")}`).formula, "Ringkasan!$C$16");
   const ip = kr("Item perlu order");
-  assert.match(rs.getCell(`C${ip}`).formula, /^COUNTIF\(Perhitungan!\$S\$6:\$S\$\d+,">0"\)$/);
+  assert.match(rs.getCell(`C${ip}`).formula, /^COUNTIF\(Perhitungan!\$U\$6:\$U\$\d+,">0"\)$/);
+  assert.equal(rs.getCell("C20").value, 2); // batas kelebihan MOQ (hari)
   assert.equal(rs.getCell(`C${ip}`).result, result.kpi.prCount);
   assert.equal(rs.getCell(`C${kr("Nilai PR")}`).result, result.kpi.prValue);
   assert.equal(rs.getCell(`C${kr("DSI gudang aktual")}`).result, result.kpi.dsiActual);
@@ -121,6 +125,9 @@ test("rumus Excel dihitung ulang LibreOffice = hasil aplikasi", { skip: !hasLO &
     assert.ok(r, "kode " + kode);
     const n = (h) => Number(row[idx(h)] || 0);
     assert.equal(n("SOH Zahir"), r.sohRaw, `${kode} SOH`);
+    assert.equal(n("Kebutuhan (dibulatkan kemasan)"), r.need || 0, `${kode} Kebutuhan`);
+    assert.equal(n("Lebih dari kebutuhan"), r.overNeed || 0, `${kode} Lebih`);
+    assert.equal(row[idx("Aturan MOQ")] || "", r.moqRule || "", `${kode} Aturan MOQ`);
     assert.equal(n("ROP"), r.rop || 0, `${kode} ROP`);
     assert.equal(n("Stok maksimum"), r.max || 0, `${kode} Stok maksimum`);
     if (r.hasParam) assert.equal(n("Kelebihan di atas stok fisik maks"), r.excess, `${kode} kelebihan`);
@@ -140,6 +147,9 @@ test("rumus Excel dihitung ulang LibreOffice = hasil aplikasi", { skip: !hasLO &
   assert.equal(Math.round(Number(val("Nilai PR"))), result.kpi.prValue);
   assert.equal(Number(val("Stok habis (OOS)")), result.kpi.oos);
   assert.equal(Math.round(Number(val("Overstock (nilai stok)"))), result.kpi.overValue);
+  assert.equal(Math.round(Number(val("Kebutuhan riil"))), result.kpi.needValue);
+  assert.equal(Math.round(Number(val("PR lebih dari kebutuhan"))), result.kpi.overNeedValue);
+  assert.equal(Number(val("MOQ ditahan")), result.kpi.moqHeldCount);
   assert.ok(Math.abs(Number(val("DSI gudang aktual")) - result.kpi.dsiActual) < 0.006, "DSI aktual " + val("DSI gudang aktual"));
   assert.ok(Math.abs(Number(val("DSI desain parameter")) - result.kpi.dsiDesign) < 0.006, "DSI desain " + val("DSI desain parameter"));
   assert.ok(Math.abs(Number(val("DSI bila kelebihan")) - result.kpi.dsiNoExcess) < 0.006, "DSI tanpa kelebihan " + val("DSI bila kelebihan"));
@@ -150,7 +160,7 @@ test("rumus Excel dihitung ulang LibreOffice = hasil aplikasi", { skip: !hasLO &
   assert.ok(recRows.every((x) => x[9] === "Cocok"), JSON.stringify(recRows));
   const prs = csv("PR");
   const prTotal = prs.find((x) => x[3] === "TOTAL");
-  assert.equal(Math.round(Number(prTotal[13])), result.kpi.prValue);
+  assert.equal(Math.round(Number(prTotal[14])), result.kpi.prValue);
   assert.equal(prs[4][12] !== undefined, true);
   fs.rmSync(dir, { recursive: true, force: true });
 });

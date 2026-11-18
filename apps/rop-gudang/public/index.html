@@ -114,7 +114,8 @@
             <tr><th>Stok fisik maks</th><td>Pemakaian/hari × MAX(Buffer + 1, 2 × Target − Buffer) <span class="muted">· stok bergerak antara buffer dan angka ini, rata-ratanya = target</span></td></tr>
             <tr><th>Stok maksimum</th><td>Stok fisik maks + Pemakaian/hari × Lead time <span class="muted">· dasar Saran PR; target 0 = ROP (sama persis dengan sheet lama)</span></td></tr>
             <tr><th>Saran PR</th><td>Stok maksimum − SOH Zahir, bila SOH ≤ ROP</td></tr>
-            <tr><th>Final PR</th><td>MAX(MOQ, dibulatkan ke atas ke Kelipatan) · bisa diubah manual, tercatat di log</td></tr>
+            <tr><th>Kebutuhan</th><td>Saran PR dibulatkan ke atas ke kelipatan kemasan <span class="muted">· angka yang seharusnya dibeli</span></td></tr>
+            <tr><th>Final PR</th><td>MOQ diikuti hanya bila menambah ≤ batas MOQ (default 2 hari pemakaian); selebihnya = Kebutuhan dan ditandai “MOQ ditahan” · bisa diubah manual, tercatat di log</td></tr>
             <tr><th>DSI</th><td>SOH ÷ Pemakaian/hari (hari)</td></tr>
             <tr><th>DSI gudang</th><td>Nilai stok ÷ nilai pemakaian per hari (semua item berparameter) <span class="muted">· sama dengan kolom DSI sheet lama</span></td></tr>
           </table>
@@ -158,6 +159,7 @@
         <div class="grid2">
           <label class="field"><span>Target DSI (hari)</span><input type="number" id="setTarget" min="0" step="0.5"></label>
           <label class="field"><span>Batas overstock (DSI, hari)</span><input type="number" id="setOver" min="1" step="1"></label>
+          <label class="field"><span>Batas kelebihan MOQ (hari pemakaian)</span><input type="number" id="setMoqTol" min="0" step="0.5"></label>
         </div>
         <label class="check"><input type="checkbox" id="setRound"> Bulatkan Final PR satuan Gram/Ml ke atas ke kelipatan</label>
         <label class="field narrow"><span>Kelipatan Gram/Ml</span><input type="number" id="setStep" min="1" step="1"></label>

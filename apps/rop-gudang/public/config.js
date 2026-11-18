@@ -26,6 +26,7 @@ window.ROP_CONFIG = {
   // Nilai awal pengaturan (bisa diubah di menu Pengaturan; tersimpan per browser).
   DEFAULTS: {
     targetDsi: 3,        // target DSI (hari) = rata-rata stok fisik; stok fisik maks = pemakaian × MAX(buffer + 1, 2 × target − buffer). 0 = sheet lama
+    moqTolDays: 2,       // MOQ diikuti bila menambah ≤ sekian hari pemakaian; lebih dari itu PR = kebutuhan ("MOQ ditahan"). 0 = abaikan MOQ, 999 = selalu ikut MOQ
     overstockDays: 30,   // DSI di atas ini = Overstock
     roundGramMl: true,   // Final PR satuan Gram/Ml dibulatkan ke atas ke kelipatan roundStep (bila Kelipatan di master kosong)
     roundStep: 1000,

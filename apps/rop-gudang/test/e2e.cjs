@@ -37,7 +37,8 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await page.setInputFiles("#fileZahir", FX("zahir-contoh.xls"));
     await page.waitForSelector("#results:not([hidden])");
     const kpi = await page.textContent("#kpis");
-    assert.match(kpi, /6 item/); assert.match(kpi, /Rp 754\.750/);
+    assert.match(kpi, /6 item/); assert.match(kpi, /Rp 674\.250/); assert.match(kpi, /1 MOQ ditahan \(hemat Rp 80\.500\)/);
+    assert.match(await page.textContent("#tbl"), /MOQ ditahan/);
     assert.match(kpi, /DSI gudang · target 3 hari/); assert.match(kpi, /5,6 hari/); assert.match(kpi, /desain parameter: 3 hari/);
     assert.match(await page.textContent("#alerts"), /6 dari 6 subtotal/);
     assert.deepEqual(await page.$$eval("#gudangChecks input:checked", (els) => els.map((e) => e.value)), ["GUDANG PUSAT › GUDANG PUSAT"]);
@@ -46,7 +47,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     // edit Final PR K002 500 → 600 (Tab pindah sel; fokus harus tetap di sel berikutnya)
     const fin = page.locator('input[data-code="K002"][data-field="final"]');
     await fin.fill("600"); await fin.press("Tab");
-    await page.waitForFunction(() => document.getElementById("kpis").textContent.includes("Rp 764.300"));
+    await page.waitForFunction(() => document.getElementById("kpis").textContent.includes("Rp 683.800"));
     assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.dataset.code), "K002");
     assert.ok(await page.locator('input[data-code="K002"][data-field="final"].edited').count());
     // PO outstanding sudah dihapus: tidak ada kolom, input, maupun pengingat
@@ -79,7 +80,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await page.waitForSelector("#dlgPO[open]");
     assert.equal(await page.inputValue("#poBy"), "supplier");
     assert.equal(await page.locator("#poGroups input[type=checkbox]").count(), 4);
-    assert.equal(await page.textContent("#poSummary"), "4 PO · 6 item · Rp 764.300");
+    assert.equal(await page.textContent("#poSummary"), "4 PO · 6 item · Rp 683.800");
     const ymd = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`; });
     assert.equal(await page.inputValue("#poPrefix"), `PO/${ymd}/`);
     assert.equal(await page.inputValue("#poSeq"), "1");
@@ -89,7 +90,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     assert.equal(await page.locator("#printArea .po").count(), 4);
     const po1 = await page.textContent("#printArea .po:nth-child(1)");
     assert.match(po1, new RegExp(`PO/${ymd}/001`)); assert.match(po1, /CV Tepung Jaya/); assert.match(po1, /Gula Uji/); assert.match(po1, /Gula Uji\s*1\s*Kg/); assert.match(po1, /Rp 16\.000/); assert.match(po1, /Manager SCM/);
-    assert.match(po1, /Tepung Uji\s*10\s*Kg/);
+    assert.match(po1, /Tepung Uji\s*3\s*Kg/); // MOQ 10 Kg ditahan, PR = kebutuhan 3 Kg
     const po4 = await page.textContent("#printArea .po:nth-child(4)");
     assert.match(po4, new RegExp(`PO/${ymd}/004`)); assert.match(po4, /Minyak Uji/); assert.match(po4, /Barang Hilang/);
     await page.emulateMedia({ media: "print" });
@@ -114,7 +115,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     const wb = new ExcelJS.Workbook(); await wb.xlsx.load(fs.readFileSync(xlsx));
     const ws = wb.getWorksheet("Perhitungan");
     let k2 = -1; for (let r = 6; r <= ws.rowCount; r++) if (ws.getCell(`B${r}`).value === "K002") k2 = r;
-    assert.equal(ws.getCell(`S${k2}`).value, 600); assert.equal(ws.getCell("S5").value, "Final PR");
+    assert.equal(ws.getCell(`U${k2}`).value, 600); assert.equal(ws.getCell("U5").value, "Final PR");
     const log = wb.getWorksheet("Log Perubahan");
     const logRows = []; log.eachRow((row) => logRows.push(row.getCell(4).value));
     assert.ok(logRows.includes("Cetak PO"), "log Cetak PO");
@@ -154,7 +155,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await page.setInputFiles("#fileZahirAdd", FX("zahir-produksi-contoh.xls"));
     await page.waitForFunction(() => /2 file/.test(document.getElementById("fileChip").textContent));
     assert.deepEqual(await page.$$eval("#gudangChecks input:checked", (els) => els.map((e) => e.value)), ["GUDANG PUSAT › GUDANG PUSAT", "Head Quarter › PRODUKSI"]);
-    assert.match(await page.textContent("#kpis"), /5 item/); assert.match(await page.textContent("#kpis"), /Rp 652\.083/);
+    assert.match(await page.textContent("#kpis"), /5 item/); assert.match(await page.textContent("#kpis"), /Rp 571\.583/);
     assert.match(await page.textContent("#alerts"), /GUDANG PUSAT \+ PRODUKSI/);
     await page.click('#tabs button[data-tab="all"]');
     assert.match(await page.textContent("#tbl"), /0 \+ 300/); // rincian SOH A002 per gudang
@@ -172,6 +173,8 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await page.click("#btnSettings");
     assert.equal(await page.inputValue("#setTarget"), "3");
     await page.fill("#setTarget", "0");
+    assert.equal(await page.inputValue("#setMoqTol"), "2");
+    await page.fill("#setMoqTol", "999"); // target 0 + selalu ikut MOQ = sheet lama
     await page.click("#btnSaveSettings");
     await page.waitForFunction(() => document.getElementById("cntPr").textContent === "5");
     assert.match(await page.textContent("#kpis"), /Rp 338\.750/);
@@ -207,9 +210,9 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await p4.setInputFiles("#fileZahir", FX("zahir-gabungan-contoh.xls"));
     await p4.waitForSelector("#results:not([hidden])");
     assert.match(await p4.textContent("#fileChip"), /12 baris · subtotal 10\/10 cocok/);
-    assert.match(await p4.textContent("#kpis"), /Rp 652\.083/);
+    assert.match(await p4.textContent("#kpis"), /Rp 571\.583/);
     await p4.reload(); await p4.waitForSelector("#results:not([hidden])");
-    assert.match(await p4.textContent("#kpis"), /Rp 652\.083/); // pilihan gudang & file tersimpan
+    assert.match(await p4.textContent("#kpis"), /Rp 571\.583/); // pilihan gudang & file tersimpan
     await ctx4.close();
 
     // perangkat baru membuka alamat biasa: kotak tempel link di kartu Parameter → parameter termuat → hasil langsung tampil

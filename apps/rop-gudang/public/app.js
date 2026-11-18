@@ -336,7 +336,7 @@
     const cards = [
       { cls: dsiCls, label: `DSI gudang · target ${fmt(t)} hari`, value: k.dsiActual == null ? "-" : `${fmt(k.dsiActual, 1)} hari`, sub: `Tanpa kelebihan & barang mati: ${k.dsiNoExcess == null ? "-" : fmt(k.dsiNoExcess, 1)} hari · desain parameter: ${k.dsiDesign == null ? "-" : fmt(k.dsiDesign, 1)} hari` },
       { cls: "gold", label: "Perlu order", value: fmt(k.prCount) + " item", sub: `OOS ${k.oos} · Kritis ${k.kritis} · Order ${k.order}` },
-      { cls: "", label: "Nilai PR", value: fmtRp(k.prValue), sub: brands || "—" },
+      { cls: "", label: "Nilai PR", value: fmtRp(k.prValue), sub: `Kebutuhan riil ${fmtRp(k.needValue)}${k.overNeedValue ? ` · lebih dari kebutuhan ${fmtRp(k.overNeedValue)}` : ""}${k.moqHeldCount ? ` · ${k.moqHeldCount} MOQ ditahan (hemat ${fmtRp(k.moqHeldValue)})` : ""}` },
       { cls: "blue", label: `Kelebihan di atas target`, value: fmtRp(k.excessValue), sub: `${k.excessCount} item bergerak melebihi stok maks · ${k.over} item DSI > ${fmt(settings().overstockDays)} hari` },
       { cls: "grey", label: "Tidak bergerak", value: fmtRp(k.deadValue), sub: `${k.dead} item · pemakaian 0` },
       { cls: "violet", label: "Tanpa parameter", value: fmtRp(k.noParamValue), sub: `${k.noParamStock} item ada stok · tidak dihitung` },
@@ -350,7 +350,9 @@
     const fb = $("fBrand"), cur = state.filters.brand;
     fb.innerHTML = `<option value="">Semua kategori</option>` + brands.map((b) => `<option${b === cur ? " selected" : ""}>${esc(b)}</option>`).join("");
     const sts = Object.values(Core.STATUS).map((s) => s.label);
-    $("fStatus").innerHTML = `<option value="">Semua status</option>` + sts.map((s) => `<option${s === state.filters.status ? " selected" : ""}>${esc(s)}</option>`).join("");
+    const extra = [["__moqHeld", "— MOQ ditahan"], ["__over", "— PR lebih dari kebutuhan"]];
+    $("fStatus").innerHTML = `<option value="">Semua status</option>` + sts.map((s) => `<option${s === state.filters.status ? " selected" : ""}>${esc(s)}</option>`).join("")
+      + extra.map(([v, l]) => `<option value="${v}"${v === state.filters.status ? " selected" : ""}>${esc(l)}</option>`).join("");
     const isIssue = state.tab === "issue";
     ["fBrand", "fStatus"].forEach((id) => ($(id).hidden = isIssue));
     $("fEdited").parentElement.hidden = isIssue;
@@ -368,7 +370,8 @@
   function applyFilters(list) {
     const f = state.filters, q = f.q.trim().toLowerCase();
     return list.filter((r) => (!q || r.kode.toLowerCase().includes(q) || (r.nama || "").toLowerCase().includes(q))
-      && (!f.brand || r.brand === f.brand) && (!f.status || r.status === f.status)
+      && (!f.brand || r.brand === f.brand)
+      && (!f.status || (f.status === "__moqHeld" ? r.moqHeld : f.status === "__over" ? r.overNeed > 0 : r.status === f.status))
       && (!f.edited || r.finalEdited || r.note));
   }
 
@@ -386,9 +389,10 @@
     } }),
     NUM("dsi", "DSI", { render: (r) => (r.dsi == null ? "-" : r.dsi === 0 ? '0<small class="tag-oos">habis</small>' : fmt(r.dsi, 1)), tdCls: (r) => (r.dsi == null ? "" : r.dsi <= (r.lead || 0) ? "dsi-low" : r.dsi < settings().dsiSafety ? "dsi-mid" : "") }),
     NUM("rop", "ROP", { render: (r) => (r.rop == null ? "-" : fmt(r.rop)) }),
-    NUM("saran", "Saran PR", { render: (r) => fmt(r.saran) }),
-    NUM("moq", "MOQ", { render: (r) => (r.moq ? fmt(r.moq) : "-") }),
+    NUM("need", "Kebutuhan", { render: (r) => fmt(r.need || 0), tdCls: () => "strong" }),
+    NUM("moq", "MOQ", { render: (r) => (r.moq ? `${fmt(r.moq)}${r.moqDays != null ? `<small class="tag-sub">${fmt(r.moqDays, 1)} hari</small>` : ""}` : "-") }),
     NUM("final", "Final PR", { input: "final" }),
+    NUM("overNeed", "Lebih dr kebutuhan", { render: (r) => (r.overNeed > 0 ? `+${fmt(r.overNeed)}<small class="tag-sub">${fmtRp(r.overNeedValue)}</small>` : r.moqHeld ? `0<small class="tag-held" title="MOQ ${esc(fmt(r.moq))} tidak diikuti: menambah ${esc(fmt(r.moqExtraIfFollow))} (${esc(fmt(r.moqExtraIfFollow / (r.usage || 1), 1))} hari)">MOQ ditahan</small>` : "-"), tdCls: (r) => (r.overNeed > 0 ? "over-need" : "") }),
     NUM("dsiAfter", "DSI stlh PR", { render: (r) => (r.dsiAfter == null ? "-" : fmt(r.dsiAfter, 1)) }),
     NUM("nilaiPR", "Nilai PR", { render: (r) => (r.nilaiPR ? fmtRp(r.nilaiPR) : "-"), tdCls: () => "strong" }),
     { key: "note", label: "Catatan", input: "note" },
@@ -411,6 +415,7 @@
     "Kode ganda di file Zahir": "Cek master produk Zahir.",
     "Harga kosong": "Isi harga terakhir.",
     "Target DSI tidak tercapai": "Perpendek lead time/buffer, atau tetapkan target khusus item ini.",
+    "MOQ melebihi kebutuhan": "Negosiasi MOQ/kemasan lebih kecil atau cari supplier lain; isi Final PR manual bila harus ikut MOQ.",
   };
   function issueList() {
     const z = state.zahir, list = state.result.issues.slice();
@@ -497,8 +502,10 @@
         ${line("SOH Zahir", `${fmt(r.sohRaw)} ${u}`, !r.inZahir ? "tidak ada di file → 0" : r.sohBy && r.sohBy.length > 1 ? r.sohBy.map((x) => `${esc(x.gudang)} ${fmt(x.qty)}`).join(" + ") : `file Zahir · ${esc(r.gudang)}`, r.sohBy && r.sohBy.length > 1)}
         ${line("DSI", r.dsi == null ? "-" : `${fmt(r.dsi, 1)} hari`, `SOH ÷ pemakaian · ${esc(r.band)}`)}
         ${line("Saran PR", `${fmt(r.saran)} ${u}`, r.saran > 0 ? `${fmt(r.max)} − ${fmt(r.soh)} (SOH ≤ ROP)` : "SOH di atas ROP / pemakaian 0", true)}
-        ${line("MOQ · kelipatan", `${fmt(r.moq || 0)} · ${fmt(r.kelipatan)}`, r.kelipatanFromMaster ? "kelipatan dari master" : r.kelipatan > 1 ? "pembulatan otomatis Gram/Ml" : "")}
-        ${line("Final PR", `${fmt(r.final)} ${u}`, r.finalEdited ? `diubah manual · sistem ${fmt(r.finalAuto)}` : "MAX(MOQ, CEILING(Saran, kelipatan))", true)}
+        ${line("Kebutuhan", `${fmt(r.need || 0)} ${u}`, `Saran dibulatkan ke kelipatan ${fmt(r.kelipatan)}${r.kelipatanFromMaster ? " (master)" : r.kelipatan > 1 ? " (otomatis Gram/Ml)" : ""}`, true)}
+        ${line("MOQ", r.moq ? `${fmt(r.moq)} ${u}` : "-", r.moqDays != null ? `= ${fmt(r.moqDays, 1)} hari pemakaian · MOQ wajar ±${fmt(r.moqSuggest)} (1 siklus order)` : "")}
+        ${line("Aturan MOQ", r.moqRule || "-", r.moqHeld ? `ikut MOQ menambah ${fmt(r.moqExtraIfFollow)} ${u} (${fmt(r.moqExtraIfFollow / (r.usage || 1), 1)} hari) > batas ${fmt(settings().moqTolDays)} hari → PR = kebutuhan` : r.moqFollowed ? `menambah ${fmt(r.moqExtraIfFollow)} ${u} ≤ batas ${fmt(settings().moqTolDays)} hari` : "")}
+        ${line("Final PR", `${fmt(r.final)} ${u}`, r.finalEdited ? `diubah manual · sistem ${fmt(r.finalAuto)}` : r.overNeed > 0 ? `lebih ${fmt(r.overNeed)} dari kebutuhan` : "sama dengan kebutuhan", true)}
         ${line("DSI setelah PR", r.dsiAfter == null ? "-" : `${fmt(r.dsiAfter, 1)} hari`, "(SOH + Final PR) ÷ pemakaian")}
         ${line("Harga", fmtRp(r.harga), r.hargaSrc ? `sumber ${esc(r.hargaSrc)}${r.hargaZahir && r.hargaMaster ? ` · Zahir ${fmtRp(r.hargaZahir)} · master ${fmtRp(r.hargaMaster)}` : ""}` : "tidak ada")}
         ${line("Nilai PR", fmtRp(r.nilaiPR), "Final PR × harga", true)}
@@ -696,7 +703,7 @@
     $("setSheet").placeholder = sc.raw && !state.settings.sheetUrl ? "Dari konfigurasi situs (kosongkan untuk tetap memakai itu)" : "https://docs.google.com/spreadsheets/d/…/edit#gid=0";
     $("setTab").value = state.settings.tab || ""; $("setTab").placeholder = sc.tab;
     $("setGid").value = state.settings.gid || ""; $("setGid").placeholder = sc.gid;
-    $("setTarget").value = s.targetDsi; $("setOver").value = s.overstockDays;
+    $("setTarget").value = s.targetDsi; $("setOver").value = s.overstockDays; $("setMoqTol").value = s.moqTolDays;
     $("setRound").checked = !!s.roundGramMl; $("setStep").value = s.roundStep; $("setPrice").value = s.priceSource;
     $("dlgSettings").showModal();
   }
@@ -706,7 +713,7 @@
     const d = Object.assign({}, Core.DEFAULT_SETTINGS, C.DEFAULTS || {});
     Object.assign(state.settings, {
       sheetUrl: $("setSheet").value.trim(), tab: $("setTab").value.trim(), gid: $("setGid").value.trim(),
-      targetDsi: num("setTarget", d.targetDsi, 0), overstockDays: num("setOver", d.overstockDays, 1),
+      targetDsi: num("setTarget", d.targetDsi, 0), overstockDays: num("setOver", d.overstockDays, 1), moqTolDays: num("setMoqTol", d.moqTolDays, 0),
       roundGramMl: $("setRound").checked, roundStep: num("setStep", d.roundStep, 1), priceSource: $("setPrice").value === "zahir" ? "zahir" : "master",
     });
     LS.set(KEY.settings, state.settings);
