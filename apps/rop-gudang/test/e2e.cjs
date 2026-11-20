@@ -23,7 +23,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: base.replace(/\/$/, "") });
     await ctx.route("https://docs.google.com/**", (route) => { sheetHits++; route.fulfill({ status: 200, contentType: "text/csv; charset=utf-8", body: fs.readFileSync(FX("master-contoh.csv"), "utf8") }); });
     await ctx.addInitScript(() => { window.print = () => { window.__printed = (window.__printed || 0) + 1; }; });
-    await ctx.addInitScript((s) => { if (!localStorage.getItem("rop.settings.v1")) localStorage.setItem("rop.settings.v1", JSON.stringify({ sheetUrl: s, preparedBy: "Tes E2E" })); }, SHEET);
+    await ctx.addInitScript((s) => { if (!localStorage.getItem("rop.settings.v1")) localStorage.setItem("rop.settings.v1", JSON.stringify({ sheetUrl: s, preparedBy: "Tes E2E", targetDsi: 3, roundGramMl: true })); }, SHEET);
     const page = await ctx.newPage();
     page.on("pageerror", (e) => problems.push("pageerror: " + e.message));
     page.on("console", (m) => { if (m.type() === "error" && !/config\.local\.json|status of 404/.test(m.text())) problems.push("console: " + m.text()); });
@@ -37,17 +37,21 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await page.setInputFiles("#fileZahir", FX("zahir-contoh.xls"));
     await page.waitForSelector("#results:not([hidden])");
     const kpi = await page.textContent("#kpis");
-    assert.match(kpi, /6 item/); assert.match(kpi, /Rp 674\.250/); assert.match(kpi, /1 MOQ ditahan \(hemat Rp 80\.500\)/);
+    // default: Kebutuhan = Pemakaian × (Buffer + Lead time) − SOH (sesuai master)
+    assert.match(kpi, /5 item/); assert.match(kpi, /Rp 287\.750/); assert.match(kpi, /1 MOQ ditahan \(hemat Rp 38\.200\)/);
+    assert.match(await page.evaluate(() => localStorage.getItem("rop.settings.v1")), /"orderBasis":"master"/);
+    assert.doesNotMatch(await page.evaluate(() => localStorage.getItem("rop.settings.v1")), /roundGramMl/);
     assert.match(await page.textContent("#tbl"), /MOQ ditahan/);
-    assert.match(kpi, /DSI gudang · target 3 hari/); assert.match(kpi, /5,6 hari/); assert.match(kpi, /desain parameter: 3 hari/);
+    assert.match(kpi, /DSI gudang · target 3 hari/); assert.match(kpi, /5,6 hari/); assert.match(kpi, /desain parameter: 2,4 hari/);
+    assert.match(await page.textContent("#tbl thead"), /ROP \(Buf\+LT\)/);
     assert.match(await page.textContent("#alerts"), /6 dari 6 subtotal/);
     assert.deepEqual(await page.$$eval("#gudangChecks input:checked", (els) => els.map((e) => e.value)), ["GUDANG PUSAT › GUDANG PUSAT"]);
-    assert.equal(await page.textContent("#cntPr"), "6");
+    assert.equal(await page.textContent("#cntPr"), "5");
 
-    // edit Final PR K002 500 → 600 (Tab pindah sel; fokus harus tetap di sel berikutnya)
+    // edit Final PR K002 100 → 600 (Tab pindah sel; fokus harus tetap di sel berikutnya)
     const fin = page.locator('input[data-code="K002"][data-field="final"]');
     await fin.fill("600"); await fin.press("Tab");
-    await page.waitForFunction(() => document.getElementById("kpis").textContent.includes("Rp 683.800"));
+    await page.waitForFunction(() => document.getElementById("kpis").textContent.includes("Rp 335.500"));
     assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.dataset.code), "K002");
     assert.ok(await page.locator('input[data-code="K002"][data-field="final"].edited').count());
     // PO outstanding sudah dihapus: tidak ada kolom, input, maupun pengingat
@@ -60,6 +64,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await page.waitForSelector("#dlgItem[open]");
     const det = await page.textContent("#dlgItemBody");
     assert.match(det, /ROP/); assert.match(det, /100 × \(1 \+ 1\)/);
+    assert.match(det, /Kebutuhan\s*200 Gram\s*200 − 0/); assert.match(det, /Final PR\s*200 Gram/);
     await page.keyboard.press("Escape");
 
     // tab lain
@@ -80,7 +85,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await page.waitForSelector("#dlgPO[open]");
     assert.equal(await page.inputValue("#poBy"), "supplier");
     assert.equal(await page.locator("#poGroups input[type=checkbox]").count(), 4);
-    assert.equal(await page.textContent("#poSummary"), "4 PO · 6 item · Rp 683.800");
+    assert.equal(await page.textContent("#poSummary"), "4 PO · 5 item · Rp 335.500");
     const ymd = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`; });
     assert.equal(await page.inputValue("#poPrefix"), `PO/${ymd}/`);
     assert.equal(await page.inputValue("#poSeq"), "1");
@@ -89,8 +94,8 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await page.waitForFunction(() => window.__printed === 1);
     assert.equal(await page.locator("#printArea .po").count(), 4);
     const po1 = await page.textContent("#printArea .po:nth-child(1)");
-    assert.match(po1, new RegExp(`PO/${ymd}/001`)); assert.match(po1, /CV Tepung Jaya/); assert.match(po1, /Gula Uji/); assert.match(po1, /Gula Uji\s*1\s*Kg/); assert.match(po1, /Rp 16\.000/); assert.match(po1, /Manager SCM/);
-    assert.match(po1, /Tepung Uji\s*3\s*Kg/); // MOQ 10 Kg ditahan, PR = kebutuhan 3 Kg
+    assert.match(po1, new RegExp(`PO/${ymd}/001`)); assert.match(po1, /CV Tepung Jaya/); assert.match(po1, /Gula Uji/); assert.match(po1, /Gula Uji\s*0,2\s*Kg/); assert.match(po1, /Rp 3\.200/); assert.match(po1, /Manager SCM/);
+    assert.doesNotMatch(po1, /Tepung Uji/); // SOH = ROP → kebutuhan 0
     const po4 = await page.textContent("#printArea .po:nth-child(4)");
     assert.match(po4, new RegExp(`PO/${ymd}/004`)); assert.match(po4, /Minyak Uji/); assert.match(po4, /Barang Hilang/);
     await page.emulateMedia({ media: "print" });
@@ -141,7 +146,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     const zx = path.join(OUT, "zahir-contoh.xlsx"); fs.writeFileSync(zx, Buffer.from(await zwb.xlsx.writeBuffer()));
     await page.setInputFiles("#fileZahir", zx);
     await page.waitForFunction(() => /9 baris · subtotal 6\/6 cocok/.test(document.getElementById("fileChip").textContent));
-    assert.match(await page.textContent("#kpis"), /6 item/);
+    assert.match(await page.textContent("#kpis"), /5 item/);
 
     // gudang Sales saja → master tidak cocok
     await page.check('#gudangChecks input[value="GUDANG PUSAT › Sales"]');
@@ -149,35 +154,43 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     assert.match(await page.textContent("#alerts"), /bukan untuk gudang ini/);
     await page.check('#gudangChecks input[value="GUDANG PUSAT › GUDANG PUSAT"]');
     await page.uncheck('#gudangChecks input[value="GUDANG PUSAT › Sales"]');
-    assert.match(await page.textContent("#kpis"), /6 item/);
+    assert.match(await page.textContent("#kpis"), /5 item/);
 
     // tambah file Produksi → stok dijumlah (GUDANG PUSAT + PRODUKSI), Sales tetap tidak dicentang
     await page.setInputFiles("#fileZahirAdd", FX("zahir-produksi-contoh.xls"));
     await page.waitForFunction(() => /2 file/.test(document.getElementById("fileChip").textContent));
     assert.deepEqual(await page.$$eval("#gudangChecks input:checked", (els) => els.map((e) => e.value)), ["GUDANG PUSAT › GUDANG PUSAT", "Head Quarter › PRODUKSI"]);
-    assert.match(await page.textContent("#kpis"), /5 item/); assert.match(await page.textContent("#kpis"), /Rp 571\.583/);
+    assert.match(await page.textContent("#kpis"), /4 item/); assert.match(await page.textContent("#kpis"), /Rp 190\.442/);
     assert.match(await page.textContent("#alerts"), /GUDANG PUSAT \+ PRODUKSI/);
     await page.click('#tabs button[data-tab="all"]');
     assert.match(await page.textContent("#tbl"), /0 \+ 300/); // rincian SOH A002 per gudang
     await page.click('#tabs button[data-tab="pr"]');
     await page.uncheck('#gudangChecks input[value="Head Quarter › PRODUKSI"]');
-    assert.match(await page.textContent("#kpis"), /6 item/);
+    assert.match(await page.textContent("#kpis"), /5 item/);
     await page.check('#gudangChecks input[value="Head Quarter › PRODUKSI"]');
     // hapus file produksi lagi
     page.once("dialog", (d) => d.accept());
     await page.click('[data-remove-file="1"]');
     await page.waitForFunction(() => /1 file/.test(document.getElementById("fileChip").textContent));
-    assert.match(await page.textContent("#kpis"), /6 item/);
+    assert.match(await page.textContent("#kpis"), /5 item/);
 
-    // pengaturan: target DSI 0 = perilaku sheet lama → A001 (tepat di ROP) tidak lagi order
+    // pengaturan: Dasar qty order = Target DSI (order lebih besar) → A001 ikut order; lalu kembali ke Buffer + Lead time
     await page.click("#btnSettings");
+    assert.equal(await page.inputValue("#setBasis"), "master");
     assert.equal(await page.inputValue("#setTarget"), "3");
+    assert.equal(await page.isChecked("#setRound"), false);
+    await page.selectOption("#setBasis", "target"); await page.check("#setRound");
+    await page.click("#btnSaveSettings");
+    await page.waitForFunction(() => document.getElementById("cntPr").textContent === "6");
+    assert.match(await page.textContent("#kpis"), /Rp 674\.250/); assert.match(await page.textContent("#kpis"), /desain parameter: 3 hari/);
+    await page.click("#btnSettings");
+    await page.selectOption("#setBasis", "master"); await page.uncheck("#setRound");
     await page.fill("#setTarget", "0");
     assert.equal(await page.inputValue("#setMoqTol"), "2");
     await page.fill("#setMoqTol", "999"); // target 0 + selalu ikut MOQ = sheet lama
     await page.click("#btnSaveSettings");
     await page.waitForFunction(() => document.getElementById("cntPr").textContent === "5");
-    assert.match(await page.textContent("#kpis"), /Rp 338\.750/);
+    assert.match(await page.textContent("#kpis"), /Rp 325\.950/);
 
     // mobile: tidak ada scroll horizontal halaman
     await page.setViewportSize({ width: 390, height: 844 });
@@ -210,9 +223,9 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await p4.setInputFiles("#fileZahir", FX("zahir-gabungan-contoh.xls"));
     await p4.waitForSelector("#results:not([hidden])");
     assert.match(await p4.textContent("#fileChip"), /12 baris · subtotal 10\/10 cocok/);
-    assert.match(await p4.textContent("#kpis"), /Rp 571\.583/);
+    assert.match(await p4.textContent("#kpis"), /Rp 190\.442/);
     await p4.reload(); await p4.waitForSelector("#results:not([hidden])");
-    assert.match(await p4.textContent("#kpis"), /Rp 571\.583/); // pilihan gudang & file tersimpan
+    assert.match(await p4.textContent("#kpis"), /Rp 190\.442/); // pilihan gudang & file tersimpan
     await ctx4.close();
 
     // perangkat baru membuka alamat biasa: kotak tempel link di kartu Parameter → parameter termuat → hasil langsung tampil
@@ -229,7 +242,7 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await p3.click("#btnSheetQuick");
     await p3.waitForSelector("#masterChip.ok");
     await p3.waitForSelector("#results:not([hidden])");
-    assert.match(await p3.textContent("#kpis"), /6 item/);
+    assert.match(await p3.textContent("#kpis"), /5 item/);
     await ctx3.close();
 
     assert.deepEqual(problems, [], problems.join("\n"));

@@ -17,6 +17,8 @@ const run = (settings, edits) => {
   return C.compute({ stockItems: z.items.filter((i) => i.gkey === MAIN), master: master(), settings, edits });
 };
 const byCode = (res, code) => res.rows.find((r) => r.code === code);
+// Mode lama "Dasar qty order = Target DSI" (+ pembulatan Gram/Ml otomatis) tetap diuji lewat setelan ini
+const TGT = { orderBasis: "target", roundGramMl: true };
 
 test("parseNum: format EN (Zahir) dan ID (Google Sheet)", () => {
   assert.equal(C.parseNum("1,504.17", "en"), 1504.17);
@@ -113,7 +115,7 @@ test("parseMaster: label header gabungan ala gviz tetap terbaca", () => {
 });
 
 test("compute (target DSI 0 = sheet lama): ROP, Saran PR, Final PR, status, nilai + pembulatan", () => {
-  const r = run({ targetDsi: 0, moqTolDays: 999 }); // target 0 + selalu ikut MOQ = sheet lama
+  const r = run({ targetDsi: 0, moqTolDays: 999, roundGramMl: true }); // target 0 + selalu ikut MOQ = sheet lama
   assert.equal(r.masterFitsGudang, true);
   assert.equal(r.rows.length, 9); // 8 baris Zahir + K009 (ada di master, tidak ada di file)
   const a1 = byCode(r, "A001");
@@ -149,13 +151,43 @@ test("compute: tanpa pembulatan = Final PR sama dengan PR sheet lama (dengan MOQ
   assert.equal(r.kpi.prValue, 338750 - 16000 + 3200);
 });
 
-test("compute (default target DSI 3 = rata-rata stok fisik 3 hari)", () => {
+test("compute default: Kebutuhan = Pemakaian × (Buffer + Lead time) − SOH (sesuai master), Target DSI 3 untuk KPI", () => {
   const r = run();
-  assert.equal(r.settings.targetDsi, 3);
+  assert.equal(r.settings.orderBasis, "master"); assert.equal(r.settings.targetDsi, 3); assert.equal(r.settings.roundGramMl, false);
+  for (const x of r.rows.filter((y) => y.hasParam && y.usage > 0)) {
+    const exp = x.soh <= x.rop ? x.usage * (x.buffer + x.lead) - x.soh : 0;
+    assert.equal(x.need, exp, x.code); assert.equal(x.max, x.rop, x.code); assert.equal(x.orderBasis, "master");
+  }
+  const a1 = byCode(r, "A001"); // SOH 5.000 = ROP → kebutuhan 0
+  assert.equal(a1.need, 0); assert.equal(a1.final, 0); assert.equal(a1.physMax, 3750); assert.equal(a1.status, "Di atas target"); assert.equal(a1.excess, 1250);
+  const a2 = byCode(r, "A002"); // 100 × (1 + 1) − 0, tanpa pembulatan 1.000 g
+  assert.equal(a2.need, 200); assert.equal(a2.needPack, 200); assert.equal(a2.final, 200);
+  const a3 = byCode(r, "A003"); // 80 × (2 + 3) − 300
+  assert.equal(a3.need, 100); assert.equal(a3.final, 100); assert.equal(a3.status, "Order"); assert.equal(a3.avgDays, 2.5); assert.equal(a3.cycleDays, 1);
+  const a4 = byCode(r, "A004"); // kebutuhan 4 Liter, MOQ 5 menambah 1 hari ≤ 2 → diikuti
+  assert.equal(a4.need, 4); assert.equal(a4.final, 5); assert.equal(a4.moqRule, "MOQ diikuti"); assert.equal(a4.overNeed, 1);
+  const k2 = byCode(r, "K002"); // kebutuhan 100, MOQ 500 menambah 4 hari > 2 → ditahan
+  assert.equal(k2.need, 100); assert.equal(k2.final, 100); assert.equal(k2.moqRule, "MOQ ditahan");
+  assert.equal(byCode(r, "K009").final, 20);
+  const k = r.kpi;
+  assert.equal(k.prCount, 5); assert.equal(k.prValue, 287750);
+  assert.equal(k.needValue, 266750); assert.equal(k.overNeedValue, 21000); assert.equal(k.moqHeldCount, 1); assert.equal(k.moqHeldValue, 38200);
+  assert.equal(k.dsiActual, 5.61); assert.equal(k.dsiDesign, 2.39);
+  // Kelipatan Order master tetap dipakai untuk Final PR
+  const rows = [["Kode Barang", "Nama", "Satuan", "Penjualan 1 Hari", "Buffer Stock (Hari)", "Lead Time (Hari)", "Minimum Order", "Kelipatan Order", "Harga"],
+    ["G1", "Gula", "Gram", "15925", "2", "5", "50000", "50000", "18"]];
+  const g = C.compute({ stockItems: [{ code: "G1", kode: "G1", nama: "Gula", qty: 51960, satuan: "Gram", harga: 18.6, kategori: "BB", gudang: "W" }], master: C.parseMaster(rows) });
+  const g1 = byCode(g, "G1");
+  assert.equal(g1.rop, 111475); assert.equal(g1.max, 111475); assert.equal(g1.need, 59515); assert.equal(g1.needPack, 100000); assert.equal(g1.final, 100000); assert.equal(g1.overNeed, 40485);
+});
+
+test("compute (Dasar qty order = Target DSI 3 = rata-rata stok fisik 3 hari)", () => {
+  const r = run(TGT);
+  assert.equal(r.settings.targetDsi, 3); assert.equal(r.settings.orderBasis, "target");
   const a1 = byCode(r, "A001"); // buffer 2, LT 2 → stok fisik 2–4 hari, rata-rata 3, order tiap ±2 hari
   assert.equal(a1.rop, 5000); assert.equal(a1.physMax, 5000); assert.equal(a1.max, 7500); assert.equal(a1.avgDays, 3); assert.equal(a1.cycleDays, 2);
   assert.equal(a1.saran, 2500); assert.equal(a1.status, "Order");
-  assert.equal(a1.need, 3000); // CEILING(2.500; 1.000)
+  assert.equal(a1.need, 2500); assert.equal(a1.needPack, 3000); // CEILING(2.500; 1.000)
   assert.equal(a1.moqDays, 8); assert.equal(a1.moqExtraIfFollow, 7000);
   assert.equal(a1.moqRule, "MOQ ditahan"); assert.equal(a1.final, 3000); // ikut MOQ menambah 7.000 g = 5,6 hari > batas 2 hari
   assert.ok(a1.issues.includes("MOQ melebihi kebutuhan"));
@@ -169,7 +201,7 @@ test("compute (default target DSI 3 = rata-rata stok fisik 3 hari)", () => {
   assert.equal(byCode(r, "A005").excess, 1000);
   const k = r.kpi;
   assert.equal(k.prCount, 6); assert.equal(k.prValue, 674250);
-  assert.equal(k.needValue, 674250); assert.equal(k.overNeedValue, 0); assert.equal(k.moqHeldCount, 1); assert.equal(k.moqHeldValue, 80500);
+  assert.equal(k.needValue, 662100); assert.equal(k.overNeedValue, 12150); assert.equal(k.moqHeldCount, 1); assert.equal(k.moqHeldValue, 80500); // lebih: pembulatan 1.000 g A001 & A002
   assert.equal(k.oos, 3); assert.equal(k.kritis, 1); assert.equal(k.order, 2);
   // DSI gudang = nilai stok ÷ nilai pemakaian per hari = 1.046.600 ÷ 186.525
   assert.equal(k.paramStockValue, 1046600); assert.equal(k.usageValue, 186525);
@@ -187,7 +219,7 @@ test("compute: status Di atas target, target per item, dan target tidak tercapai
   const m = C.parseMaster(rows);
   assert.equal(m.ok, true, m.error); assert.equal(m.hasColumn.target, true);
   const stock = [["X1", 150], ["X2", 100], ["X3", 25]].map(([c, q]) => ({ code: c, kode: c, nama: c, qty: q, satuan: "Pcs", harga: 0, kategori: "K", gudang: "W" }));
-  const r = C.compute({ stockItems: stock, master: m });
+  const r = C.compute({ stockItems: stock, master: m, settings: TGT });
   const x1 = byCode(r, "X1");
   assert.equal(x1.physMax, 40); assert.equal(x1.max, 60); assert.equal(x1.dsi, 15); assert.equal(x1.status, "Di atas target"); assert.equal(x1.excess, 110); assert.equal(x1.excessValue, 11000);
   const x2 = byCode(r, "X2");
@@ -195,10 +227,14 @@ test("compute: status Di atas target, target per item, dan target tidak tercapai
   const x3 = byCode(r, "X3");
   assert.equal(x3.targetFromMaster, true); assert.equal(x3.target, 5); assert.equal(x3.physMax, 90); assert.equal(x3.max, 100); assert.equal(x3.avgDays, 5); assert.equal(x3.status, "Aman");
   assert.equal(r.kpi.above, 1); assert.equal(r.kpi.excessValue, 11000);
+  // default (Buffer + Lead time): batas stok fisik = pemakaian × MAX(buffer + 1, target)
+  const d = C.compute({ stockItems: stock, master: m });
+  assert.equal(byCode(d, "X1").physMax, 30); assert.equal(byCode(d, "X1").max, 40); assert.equal(byCode(d, "X1").excess, 120); assert.equal(byCode(d, "X1").status, "Di atas target");
+  assert.equal(byCode(d, "X3").physMax, 50); assert.equal(byCode(d, "X3").max, 20); assert.equal(byCode(d, "X3").status, "Aman");
 });
 
 test("compute: edit manual Final PR (PO outstanding tidak dipakai lagi)", () => {
-  const r = run({}, { final: { K002: 600 }, onOrder: { A003: 150 } }); // onOrder lama di browser diabaikan
+  const r = run(TGT, { final: { K002: 600 }, onOrder: { A003: 150 } }); // onOrder lama di browser diabaikan
   const k2 = byCode(r, "K002");
   assert.equal(k2.final, 600); assert.equal(k2.finalEdited, true); assert.equal(k2.finalAuto, 500); assert.equal(k2.nilaiPR, 57300);
   const a3 = byCode(r, "A003");
@@ -206,7 +242,7 @@ test("compute: edit manual Final PR (PO outstanding tidak dipakai lagi)", () => 
   assert.equal(a3.onOrder, undefined);
   assert.equal(r.kpi.edited, 1);
   // edit yang sama dengan rekomendasi tidak dihitung "diubah"
-  assert.equal(byCode(run({}, { final: { K002: 500 } }), "K002").finalEdited, false);
+  assert.equal(byCode(run(TGT, { final: { K002: 500 } }), "K002").finalEdited, false);
 });
 
 test("compute: kelipatan dari master & kolom target per item", () => {
@@ -217,7 +253,7 @@ test("compute: kelipatan dari master & kolom target per item", () => {
   const m = C.parseMaster(rows);
   assert.equal(m.ok, true, m.error);
   const stock = [{ code: "G1", kode: "G1", nama: "Gula", qty: 51960, satuan: "Gram", harga: 18.6, kategori: "BB", gudang: "W" }, { code: "G2", kode: "G2", nama: "Garam", qty: 100, satuan: "Gram", harga: 10, kategori: "BB", gudang: "W" }];
-  const r = C.compute({ stockItems: stock, master: m });
+  const r = C.compute({ stockItems: stock, master: m, settings: TGT });
   const g1 = byCode(r, "G1");
   assert.equal(g1.rop, 111475); assert.equal(g1.max, 143325); assert.equal(g1.saran, 91365); assert.equal(g1.final, 100000); assert.equal(g1.kelipatanFromMaster, true);
   const g2 = byCode(r, "G2");
@@ -233,7 +269,7 @@ test("compute: gudang lain (Sales) tidak ditambah item master yang tidak ada di 
 });
 
 test("prioritySort & prText", () => {
-  const r = run();
+  const r = run(TGT);
   const pr = r.rows.filter((x) => x.final > 0).sort(C.prioritySort).map((x) => x.code);
   assert.deepEqual(pr.slice(0, 3).sort(), ["A002", "A004", "K009"]);
   assert.deepEqual(pr.slice(3), ["K002", "A003", "A001"]); // Kritis, lalu Order dengan DSI terkecil
@@ -255,7 +291,7 @@ test("ceilStep & dsiBand", () => {
 });
 
 test("Supplier di master, pengelompokan PO, dan konversi Gram→Kg", () => {
-  const r = run();
+  const r = run(TGT);
   assert.equal(byCode(r, "A002").supplier, "CV Tepung Jaya");
   assert.equal(byCode(r, "K009").supplier, "");
   const g = C.poGroups(r.rows, "supplier");
@@ -310,7 +346,7 @@ test("stok SCM + Produksi dijumlah per kode (SOH, harga tertimbang, rincian per 
   const a3 = st.find((x) => x.code === "A003");
   assert.equal(a3.qty, 360); assert.equal(a3.total, 546000); assert.ok(Math.abs(a3.harga - 1516.666667) < 1e-6);
   assert.equal(st.find((x) => x.code === "K002").qty, 250); // Sales (10) tidak dicentang
-  const r = C.compute({ stockItems: st, master: master() });
+  const r = C.compute({ stockItems: st, master: master(), settings: TGT });
   const A2 = byCode(r, "A002");
   assert.equal(A2.sohRaw, 300); assert.equal(A2.status, "Aman"); assert.equal(A2.final, 0); // sebelumnya OOS & PR 1.000 g
   assert.equal(byCode(r, "A003").final, 200);
@@ -318,8 +354,11 @@ test("stok SCM + Produksi dijumlah per kode (SOH, harga tertimbang, rincian per 
   assert.equal(K2.sohRaw, 250); assert.equal(K2.status, "Order"); assert.equal(K2.final, 500);
   assert.equal(r.kpi.prCount, 5); assert.equal(r.kpi.prValue, 571583);
   // hanya gudang → sama dengan sebelumnya
-  const only = C.compute({ stockItems: C.aggregateStock(z.items, ["GUDANG PUSAT › GUDANG PUSAT"]), master: master() });
+  const only = C.compute({ stockItems: C.aggregateStock(z.items, ["GUDANG PUSAT › GUDANG PUSAT"]), master: master(), settings: TGT });
   assert.equal(only.kpi.prValue, 674250);
+  // default (Buffer + Lead time): A003 80 × 5 − 360 = 40, K002 100 × 3 − 250 = 50
+  const dm = C.compute({ stockItems: st, master: master() });
+  assert.equal(byCode(dm, "A003").final, 40); assert.equal(byCode(dm, "K002").final, 50); assert.equal(dm.kpi.prValue, 190442);
 });
 
 test("satuan beda antar gudang ditandai", () => {
@@ -335,17 +374,17 @@ test("satuan beda antar gudang ditandai", () => {
 });
 
 test("batas kelebihan MOQ: 0 = sesuai kebutuhan, 999 = selalu ikut MOQ, kecil = diikuti", () => {
-  const always = run({ moqTolDays: 999 });
+  const always = run({ ...TGT, moqTolDays: 999 });
   assert.equal(byCode(always, "A001").final, 10000); assert.equal(byCode(always, "A001").moqRule, "MOQ diikuti");
-  assert.equal(byCode(always, "A001").overNeed, 7000); assert.equal(always.kpi.prValue, 754750); assert.equal(always.kpi.overNeedValue, 80500);
-  const never = run({ moqTolDays: 0 });
+  assert.equal(byCode(always, "A001").overNeed, 7500); assert.equal(always.kpi.prValue, 754750); assert.equal(always.kpi.overNeedValue, 92650);
+  const never = run({ ...TGT, moqTolDays: 0 });
   assert.equal(byCode(never, "A001").final, 3000); assert.equal(byCode(never, "A004").final, 6); // A004: MOQ 5 < kebutuhan 6
   // legacy: target 0 → A004 kebutuhan 4, MOQ 5: tambah 1 Liter = 1 hari ≤ 2 → diikuti; K002 kebutuhan 100, MOQ 500: tambah 4 hari → ditahan
   const legacy = run({ targetDsi: 0 });
   assert.equal(byCode(legacy, "A004").final, 5); assert.equal(byCode(legacy, "A004").moqRule, "MOQ diikuti");
   assert.equal(byCode(legacy, "K002").final, 100); assert.equal(byCode(legacy, "K002").moqRule, "MOQ ditahan");
   // edit manual di atas kebutuhan ikut terhitung "lebih dari kebutuhan"
-  const ed = run({}, { final: { A003: 400 } });
-  assert.equal(byCode(ed, "A003").overNeed, 140); assert.equal(ed.kpi.overNeedCount, 1);
-  assert.equal(byCode(run(), "A001").moqSuggest, 3000); // MOQ wajar = 1 siklus order (2 hari × 1.250) dibulatkan 1.000
+  const ed = run(TGT, { final: { A003: 400 } });
+  assert.equal(byCode(ed, "A003").overNeed, 140); assert.equal(ed.kpi.overNeedCount, 3); // + pembulatan 1.000 g A001 & A002
+  assert.equal(byCode(run(TGT), "A001").moqSuggest, 3000); // MOQ wajar = 1 siklus order (2 hari × 1.250) dibulatkan 1.000
 });

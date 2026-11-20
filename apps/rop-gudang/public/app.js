@@ -337,7 +337,7 @@
       { cls: dsiCls, label: `DSI gudang · target ${fmt(t)} hari`, value: k.dsiActual == null ? "-" : `${fmt(k.dsiActual, 1)} hari`, sub: `Tanpa kelebihan & barang mati: ${k.dsiNoExcess == null ? "-" : fmt(k.dsiNoExcess, 1)} hari · desain parameter: ${k.dsiDesign == null ? "-" : fmt(k.dsiDesign, 1)} hari` },
       { cls: "gold", label: "Perlu order", value: fmt(k.prCount) + " item", sub: `OOS ${k.oos} · Kritis ${k.kritis} · Order ${k.order}` },
       { cls: "", label: "Nilai PR", value: fmtRp(k.prValue), sub: `Kebutuhan riil ${fmtRp(k.needValue)}${k.overNeedValue ? ` · lebih dari kebutuhan ${fmtRp(k.overNeedValue)}` : ""}${k.moqHeldCount ? ` · ${k.moqHeldCount} MOQ ditahan (hemat ${fmtRp(k.moqHeldValue)})` : ""}` },
-      { cls: "blue", label: `Kelebihan di atas target`, value: fmtRp(k.excessValue), sub: `${k.excessCount} item bergerak melebihi stok maks · ${k.over} item DSI > ${fmt(settings().overstockDays)} hari` },
+      { cls: "blue", label: `Kelebihan di atas target`, value: fmtRp(k.excessValue), sub: `${k.excessCount} item bergerak melebihi batas target · ${k.over} item DSI > ${fmt(settings().overstockDays)} hari` },
       { cls: "grey", label: "Tidak bergerak", value: fmtRp(k.deadValue), sub: `${k.dead} item · pemakaian 0` },
       { cls: "violet", label: "Tanpa parameter", value: fmtRp(k.noParamValue), sub: `${k.noParamStock} item ada stok · tidak dihitung` },
     ];
@@ -388,7 +388,7 @@
       return base + multi;
     } }),
     NUM("dsi", "DSI", { render: (r) => (r.dsi == null ? "-" : r.dsi === 0 ? '0<small class="tag-oos">habis</small>' : fmt(r.dsi, 1)), tdCls: (r) => (r.dsi == null ? "" : r.dsi <= (r.lead || 0) ? "dsi-low" : r.dsi < settings().dsiSafety ? "dsi-mid" : "") }),
-    NUM("rop", "ROP", { render: (r) => (r.rop == null ? "-" : fmt(r.rop)) }),
+    NUM("rop", "ROP (Buf+LT)", { render: (r) => (r.rop == null ? "-" : fmt(r.rop)) }),
     NUM("need", "Kebutuhan", { render: (r) => fmt(r.need || 0), tdCls: () => "strong" }),
     NUM("moq", "MOQ", { render: (r) => (r.moq ? `${fmt(r.moq)}${r.moqDays != null ? `<small class="tag-sub">${fmt(r.moqDays, 1)} hari</small>` : ""}` : "-") }),
     NUM("final", "Final PR", { input: "final" }),
@@ -496,13 +496,12 @@
         ${line("Target DSI", `${fmt(r.target)} hari`, r.targetFromMaster ? "master" : "default pengaturan")}
         ${line("Safety stock", `${fmt(r.ss)} ${u}`, `${fmt(d)} × ${fmt(r.buffer)}`)}
         ${line("ROP", `${fmt(r.rop)} ${u}`, `${fmt(d)} × (${fmt(r.buffer)} + ${fmt(r.lead)})`, true)}
-        ${line("Stok fisik maksimum", `${fmt(r.physMax)} ${u}`, r.target > 0 ? `${fmt(d)} × MAX(${fmt(r.buffer)} + 1, 2 × ${fmt(r.target)} − ${fmt(r.buffer)}) · stok sesaat setelah barang datang` : "target 0: buffer + 1 hari")}
-        ${line("Stok maksimum (dasar PR)", `${fmt(r.max)} ${u}`, r.target > 0 ? `stok fisik maks + ${fmt(d)} × lead time ${fmt(r.lead)}` : "target 0 = ROP (sheet lama)", true)}
-        ${line("Rata-rata stok fisik", r.avgDays == null ? "-" : `${fmt(r.avgDays, 1)} hari`, r.cycleDays == null ? "" : `bergerak ${fmt(r.buffer)}–${fmt(r.physDays)} hari · order tiap ±${fmt(r.cycleDays, 1)} hari`)}
+        ${line("Stok maksimum (dasar PR)", `${fmt(r.max)} ${u}`, r.orderBasis === "target" ? `${fmt(d)} × (MAX(${fmt(r.buffer)} + 1, 2 × ${fmt(r.target)} − ${fmt(r.buffer)}) + ${fmt(r.lead)}) · dasar Target DSI` : `= ROP · ${fmt(d)} × (${fmt(r.buffer)} + ${fmt(r.lead)}) · sesuai master`, true)}
+        ${line("Batas stok fisik (target)", `${fmt(r.physMax)} ${u}`, r.orderBasis === "target" ? `${fmt(d)} × MAX(${fmt(r.buffer)} + 1, 2 × ${fmt(r.target)} − ${fmt(r.buffer)})` : `${fmt(d)} × ${r.target > 0 ? `MAX(${fmt(r.buffer)} + 1, ${fmt(r.target)})` : `(${fmt(r.buffer)} + 1)`} · di atas ini = "Di atas target"`)}
         ${line("SOH Zahir", `${fmt(r.sohRaw)} ${u}`, !r.inZahir ? "tidak ada di file → 0" : r.sohBy && r.sohBy.length > 1 ? r.sohBy.map((x) => `${esc(x.gudang)} ${fmt(x.qty)}`).join(" + ") : `file Zahir · ${esc(r.gudang)}`, r.sohBy && r.sohBy.length > 1)}
         ${line("DSI", r.dsi == null ? "-" : `${fmt(r.dsi, 1)} hari`, `SOH ÷ pemakaian · ${esc(r.band)}`)}
-        ${line("Saran PR", `${fmt(r.saran)} ${u}`, r.saran > 0 ? `${fmt(r.max)} − ${fmt(r.soh)} (SOH ≤ ROP)` : "SOH di atas ROP / pemakaian 0", true)}
-        ${line("Kebutuhan", `${fmt(r.need || 0)} ${u}`, `Saran dibulatkan ke kelipatan ${fmt(r.kelipatan)}${r.kelipatanFromMaster ? " (master)" : r.kelipatan > 1 ? " (otomatis Gram/Ml)" : ""}`, true)}
+        ${line("Kebutuhan", `${fmt(r.need || 0)} ${u}`, r.saran > 0 ? `${fmt(r.max)} − ${fmt(r.soh)} (stok maks − SOH, karena SOH ≤ ROP)` : "SOH di atas ROP / pemakaian 0 → tidak perlu order", true)}
+        ${r.needPack !== r.need ? line("Dibulatkan kemasan", `${fmt(r.needPack || 0)} ${u}`, `kelipatan ${fmt(r.kelipatan)}${r.kelipatanFromMaster ? " (master)" : r.kelipatan > 1 ? " (otomatis Gram/Ml)" : ""}`) : ""}
         ${line("MOQ", r.moq ? `${fmt(r.moq)} ${u}` : "-", r.moqDays != null ? `= ${fmt(r.moqDays, 1)} hari pemakaian · MOQ wajar ±${fmt(r.moqSuggest)} (1 siklus order)` : "")}
         ${line("Aturan MOQ", r.moqRule || "-", r.moqHeld ? `ikut MOQ menambah ${fmt(r.moqExtraIfFollow)} ${u} (${fmt(r.moqExtraIfFollow / (r.usage || 1), 1)} hari) > batas ${fmt(settings().moqTolDays)} hari → PR = kebutuhan` : r.moqFollowed ? `menambah ${fmt(r.moqExtraIfFollow)} ${u} ≤ batas ${fmt(settings().moqTolDays)} hari` : "")}
         ${line("Final PR", `${fmt(r.final)} ${u}`, r.finalEdited ? `diubah manual · sistem ${fmt(r.finalAuto)}` : r.overNeed > 0 ? `lebih ${fmt(r.overNeed)} dari kebutuhan` : "sama dengan kebutuhan", true)}
@@ -703,6 +702,7 @@
     $("setSheet").placeholder = sc.raw && !state.settings.sheetUrl ? "Dari konfigurasi situs (kosongkan untuk tetap memakai itu)" : "https://docs.google.com/spreadsheets/d/…/edit#gid=0";
     $("setTab").value = state.settings.tab || ""; $("setTab").placeholder = sc.tab;
     $("setGid").value = state.settings.gid || ""; $("setGid").placeholder = sc.gid;
+    $("setBasis").value = s.orderBasis === "target" ? "target" : "master";
     $("setTarget").value = s.targetDsi; $("setOver").value = s.overstockDays; $("setMoqTol").value = s.moqTolDays;
     $("setRound").checked = !!s.roundGramMl; $("setStep").value = s.roundStep; $("setPrice").value = s.priceSource;
     $("dlgSettings").showModal();
@@ -713,6 +713,7 @@
     const d = Object.assign({}, Core.DEFAULT_SETTINGS, C.DEFAULTS || {});
     Object.assign(state.settings, {
       sheetUrl: $("setSheet").value.trim(), tab: $("setTab").value.trim(), gid: $("setGid").value.trim(),
+      orderBasis: $("setBasis").value === "target" ? "target" : "master",
       targetDsi: num("setTarget", d.targetDsi, 0), overstockDays: num("setOver", d.overstockDays, 1), moqTolDays: num("setMoqTol", d.moqTolDays, 0),
       roundGramMl: $("setRound").checked, roundStep: num("setStep", d.roundStep, 1), priceSource: $("setPrice").value === "zahir" ? "zahir" : "master",
     });
@@ -847,6 +848,8 @@
   // ---------------- start ----------------
   async function init() {
     state.settings = LS.get(KEY.settings, {}) || {};
+    // Pengaturan tersimpan sebelum ada "Dasar qty order": pakai default baru (kebutuhan = buffer + lead time, tanpa pembulatan Gram/Ml otomatis)
+    if (!state.settings.orderBasis) { delete state.settings.roundGramMl; state.settings.orderBasis = "master"; LS.set(KEY.settings, state.settings); }
     const fromHash = readHashConfig();
     try {
       const r = await fetch("config.local.json", { cache: "no-store" });

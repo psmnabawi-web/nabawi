@@ -109,13 +109,10 @@
         <div class="method-body">
           <table class="formula">
             <tr><th>Safety stock</th><td>Pemakaian/hari × Buffer (hari)</td></tr>
-            <tr><th>ROP</th><td>Pemakaian/hari × (Buffer + Lead time) <span class="muted">· sama dengan “Total Safety” di sheet lama</span></td></tr>
-            <tr><th>Target DSI</th><td>Rata-rata stok fisik dalam hari pemakaian <span class="muted">· sama dengan cara hitung KPI DSI gudang</span></td></tr>
-            <tr><th>Stok fisik maks</th><td>Pemakaian/hari × MAX(Buffer + 1, 2 × Target − Buffer) <span class="muted">· stok bergerak antara buffer dan angka ini, rata-ratanya = target</span></td></tr>
-            <tr><th>Stok maksimum</th><td>Stok fisik maks + Pemakaian/hari × Lead time <span class="muted">· dasar Saran PR; target 0 = ROP (sama persis dengan sheet lama)</span></td></tr>
-            <tr><th>Saran PR</th><td>Stok maksimum − SOH Zahir, bila SOH ≤ ROP</td></tr>
-            <tr><th>Kebutuhan</th><td>Saran PR dibulatkan ke atas ke kelipatan kemasan <span class="muted">· angka yang seharusnya dibeli</span></td></tr>
-            <tr><th>Final PR</th><td>MOQ diikuti hanya bila menambah ≤ batas MOQ (default 2 hari pemakaian); selebihnya = Kebutuhan dan ditandai “MOQ ditahan” · bisa diubah manual, tercatat di log</td></tr>
+            <tr><th>ROP</th><td>Pemakaian/hari × (Buffer + Lead time) <span class="muted">· sama dengan “Total Safety” di sheet lama; juga stok maksimum (dasar PR)</span></td></tr>
+            <tr><th>Kebutuhan</th><td>Pemakaian/hari × (Buffer + Lead time) − SOH Zahir, bila SOH ≤ ROP <span class="muted">· sesuai parameter master, sama dengan kolom PR sheet lama</span></td></tr>
+            <tr><th>Final PR</th><td>Kebutuhan dibulatkan ke Kelipatan Order master (bila diisi); MOQ diikuti hanya bila menambah ≤ batas MOQ (default 2 hari pemakaian), selebihnya ditandai “MOQ ditahan” · bisa diubah manual, tercatat di log</td></tr>
+            <tr><th>Target DSI</th><td>Default 3 hari, dipakai untuk KPI &amp; status “Di atas target” (SOH &gt; pemakaian × MAX(Buffer + 1, Target)) <span class="muted">· tidak menambah qty order, kecuali Dasar qty order diubah ke “Target DSI” di Pengaturan</span></td></tr>
             <tr><th>DSI</th><td>SOH ÷ Pemakaian/hari (hari)</td></tr>
             <tr><th>DSI gudang</th><td>Nilai stok ÷ nilai pemakaian per hari (semua item berparameter) <span class="muted">· sama dengan kolom DSI sheet lama</span></td></tr>
           </table>
@@ -157,6 +154,12 @@
       <fieldset>
         <legend>Perhitungan</legend>
         <div class="grid2">
+          <label class="field"><span>Dasar qty order (Kebutuhan)</span>
+            <select id="setBasis">
+              <option value="master">Buffer + Lead time (sesuai master)</option>
+              <option value="target">Target DSI (order lebih besar, lebih jarang)</option>
+            </select>
+          </label>
           <label class="field"><span>Target DSI (hari)</span><input type="number" id="setTarget" min="0" step="0.5"></label>
           <label class="field"><span>Batas overstock (DSI, hari)</span><input type="number" id="setOver" min="1" step="1"></label>
           <label class="field"><span>Batas kelebihan MOQ (hari pemakaian)</span><input type="number" id="setMoqTol" min="0" step="0.5"></label>
@@ -169,7 +172,7 @@
             <option value="zahir">Harga Zahir (HPP rata-rata), cadangan master</option>
           </select>
         </label>
-        <p class="muted small">Target DSI = rata-rata stok fisik (hari pemakaian), sama dengan KPI DSI gudang. Order dipicu saat SOH ≤ ROP, lalu ditutup sampai stok fisik maks (pemakaian × MAX(buffer + 1, 2 × target − buffer)) + pemakaian selama lead time. Target per item bisa diisi di kolom “Target DSI (Hari)” master. 0 = sama dengan sheet lama.</p>
+        <p class="muted small">Buffer + Lead time (default): order dipicu saat SOH ≤ ROP, Kebutuhan = pemakaian × (buffer + lead time) − SOH, persis parameter master. Target DSI tetap dipakai sebagai KPI dan status “Di atas target”. Pilihan “Target DSI”: stok maksimum = pemakaian × (MAX(buffer + 1, 2 × target − buffer) + lead time), rata-rata stok fisik = target. Target per item bisa diisi di kolom “Target DSI (Hari)” master.</p>
       </fieldset>
       <div class="dlg-foot">
         <button class="btn ghost" value="cancel" type="submit">Batal</button>

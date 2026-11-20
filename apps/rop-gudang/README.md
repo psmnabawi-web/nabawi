@@ -23,12 +23,12 @@ Perubahan manual tersimpan di browser per file (dikunci SHA-256 file), tercatat 
 
 MOQ yang terlalu besar membuat PR melebihi kebutuhan dan DSI tidak bisa turun ke target. Aturannya:
 
-- **Kebutuhan** = Saran PR dibulatkan ke kemasan. Ini angka yang seharusnya dibeli dan selalu ditampilkan di samping Final PR.
+- **Kebutuhan** = Pemakaian × (Buffer + Lead time) − SOH (sesuai parameter master). Ini angka yang seharusnya dibeli dan selalu ditampilkan di samping Final PR. MOQ diuji terhadap Kebutuhan yang sudah dibulatkan ke `Kelipatan Order` master.
 - **Batas kelebihan MOQ** (Pengaturan, default **2 hari pemakaian**): MOQ diikuti hanya bila menambah ≤ batas. Lebih dari itu, Final PR = Kebutuhan dan item ditandai **MOQ ditahan** (purchasing negosiasi MOQ/kemasan, cari supplier lain, atau isi Final PR manual bila memang harus ikut MOQ).
 - **0** = selalu sesuai kebutuhan (MOQ hanya info). **999** = selalu ikut MOQ (perilaku lama).
 - Kolom **MOQ (hari pemakaian)** menunjukkan seberapa besar MOQ dibanding pemakaian; Data issue *MOQ melebihi kebutuhan* memberi usulan **MOQ wajar = 1 siklus order** (pemakaian × hari antar order, dibulatkan kemasan).
 - **Lebih dari kebutuhan** (qty & Rp) = Final PR − Kebutuhan, termasuk karena edit manual. KPI dan Excel menampilkan nilai kebutuhan riil, kelebihan, dan jumlah MOQ ditahan.
-- Hasil sama persis dengan sheet lama: **Target DSI 0 + Batas MOQ 999**.
+- Hasil sama persis dengan kolom PR sheet lama: **Batas MOQ 999** (Kebutuhan sudah sama dengan sheet lama secara default).
 
 ## Stok dari beberapa gudang (SCM + Produksi)
 
@@ -42,26 +42,26 @@ Persediaan SCM = stok **gudang SCM PKU + gudang Produksi PKU**. Aplikasi menjuml
 
 ## Cara hitung
 
-Pemicu order sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (Total Safety = ROP). Qty order disetel supaya **rata-rata stok fisik = target DSI** (default **3 hari**), ditambah pembulatan MOQ/kelipatan. PO outstanding tidak dihitung:
+Default (**Dasar qty order = Buffer + Lead time**): pemicu dan qty order sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (Total Safety = ROP), mengikuti Buffer dan Lead time yang disetel di master. PO outstanding tidak dihitung:
 
 | Besaran | Rumus |
 |---|---|
 | Safety stock | Pemakaian/hari × Buffer (hari) |
-| ROP | Pemakaian/hari × (Buffer + Lead time) |
-| Stok fisik maksimum | Pemakaian/hari × MAX(Buffer + 1, 2 × Target DSI − Buffer) · stok sesaat setelah barang datang |
-| Stok maksimum (dasar PR) | Stok fisik maksimum + Pemakaian/hari × Lead time |
-| Saran PR | Stok maksimum − SOH Zahir (negatif dihitung 0), bila SOH ≤ ROP; selain itu 0 |
-| Kebutuhan | CEILING(Saran PR, Kelipatan) · angka yang seharusnya dibeli |
-| Final PR | MAX(MOQ, Kebutuhan) bila tambahan karena MOQ ≤ Batas MOQ × Pemakaian/hari; selain itu = Kebutuhan ("MOQ ditahan") |
+| ROP = Stok maksimum | Pemakaian/hari × (Buffer + Lead time) |
+| Kebutuhan | Pemakaian/hari × (Buffer + Lead time) − SOH Zahir (negatif dihitung 0), bila SOH ≤ ROP; selain itu 0 |
+| Dibulatkan kemasan | CEILING(Kebutuhan, Kelipatan Order master) · bila kelipatan kosong = Kebutuhan |
+| Final PR | MAX(MOQ, dibulatkan kemasan) bila tambahan karena MOQ ≤ Batas MOQ × Pemakaian/hari; selain itu = dibulatkan kemasan ("MOQ ditahan") |
+| Lebih dari kebutuhan | Final PR − Kebutuhan (karena kemasan, MOQ, atau edit manual) |
 | DSI | SOH ÷ Pemakaian/hari |
 | DSI gudang | Nilai stok ÷ nilai pemakaian per hari (semua item berparameter; sama dengan kolom DSI sheet lama) |
-| Kelebihan | SOH − Stok fisik maksimum (barang bergerak) · seluruh SOH (barang tidak bergerak) |
-| DSI desain | Rata-rata stok fisik bila semua item diorder sesuai rumus = (Buffer + hari stok fisik maks) ÷ 2, dibobot nilai pemakaian |
+| Batas stok fisik (target) | Pemakaian/hari × MAX(Buffer + 1, Target DSI) · SOH di atas ini = "Di atas target" |
+| Kelebihan | SOH − Batas stok fisik (barang bergerak) · seluruh SOH (barang tidak bergerak) |
+| DSI desain | Buffer + 0,5 hari, dibobot nilai pemakaian. ASUMSI: PR dibuat harian dan barang yang sudah di-PR tidak di-PR ulang sebelum datang |
 
-- **Target DSI 3 (default) = rata-rata stok FISIK 3 hari**, sama dengan cara hitung KPI DSI gudang (nilai stok ÷ nilai pemakaian per hari). Stok fisik bergerak antara Buffer (sesaat sebelum barang datang) dan stok fisik maksimum (sesaat setelah datang); rata-ratanya = target. Contoh buffer 2 hari, target 3: stok bergerak 2–4 hari, qty order ≈ 2 hari pemakaian (order tiap ±2 hari). ASUMSI: stok direview harian.
-- Bila Buffer + 0,5 > Target (buffer sudah di atas target), target tidak bisa dicapai; item ditandai *Target DSI tidak tercapai*.
-- Target bisa diubah di Pengaturan (berlaku semua item) atau per item lewat kolom `Target DSI (Hari)` di master. **Target 0** = hasil Saran PR sama persis dengan kolom PR di sheet lama (order hanya sampai ROP).
-- **Kelipatan**: kolom `Kelipatan Order` di master. Bila kosong, satuan Gram/Ml dibulatkan ke atas per 1.000 (bisa dimatikan di Pengaturan).
+- **Target DSI (default 3 hari)** dipakai untuk KPI dan status *Di atas target*; tidak menambah qty order. Bila Buffer + 0,5 > Target, item ditandai *Target DSI tidak tercapai* (buffer di master lebih besar dari target).
+- **Pilihan "Target DSI"** (Pengaturan → Dasar qty order, atau sel `C21` di sheet Ringkasan Excel): Stok maksimum = Pemakaian × (MAX(Buffer + 1, 2 × Target − Buffer) + Lead time), sehingga rata-rata stok fisik = target. Qty order lebih besar dan order lebih jarang. Target per item bisa diisi lewat kolom `Target DSI (Hari)` di master.
+- **Kelipatan**: kolom `Kelipatan Order` di master. Pembulatan otomatis Gram/Ml per 1.000 tidak aktif secara default (bisa dinyalakan di Pengaturan).
+- Pengaturan yang tersimpan di browser sebelum versi ini otomatis pindah ke default baru (Buffer + Lead time, tanpa pembulatan Gram/Ml otomatis).
 - **Harga**: kolom `Harga` di master (harga beli terakhir); bila kosong pakai harga satuan Zahir (HPP rata-rata).
 - Kode yang ada di master tetapi tidak ada di file dihitung stok 0 (sama dengan VLOOKUP sheet lama) dan ditandai di Data issue. Aturan ini hanya berlaku bila master memang untuk gudang yang dipilih (≥ 50% kode master ada di gudang itu).
 
@@ -70,8 +70,8 @@ Pemicu order sama dengan sheet "Perhitungan Kebutuhan /ROP WH" (Total Safety = R
 | OOS | Stok 0, ada pemakaian | Order hari ini / transfer |
 | Kritis | DSI ≤ lead time: habis sebelum barang datang | Order + percepat supplier |
 | Order | SOH ≤ ROP | Order sesuai Final PR |
-| Aman | Di atas ROP, tidak melebihi stok fisik maksimum | — |
-| Di atas target | Stok fisik melebihi stok fisik maksimum | Tahan order, habiskan dulu |
+| Aman | Di atas ROP, tidak melebihi batas stok fisik (target) | — |
+| Di atas target | SOH melebihi batas stok fisik (target) | Tahan order, habiskan dulu |
 | Overstock | DSI > batas overstock (default 30 hari) | Tahan order, dorong pemakaian |
 | Tidak bergerak | Ada stok, pemakaian 0 | Cek parameter / cuci gudang |
 | Tanpa parameter | Kode tidak ada di master | Lengkapi master |

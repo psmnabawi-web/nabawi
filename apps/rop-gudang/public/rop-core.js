@@ -7,15 +7,17 @@
  * Rumus (pemicu identik dengan sheet "Perhitungan Kebutuhan /ROP WH", ditambah target DSI):
  *   Safety stock  = Pemakaian/hari × Buffer (hari)
  *   ROP           = Pemakaian/hari × (Buffer + Lead time)          ← "Total Safety" di sheet lama
- *   Target DSI    = rata-rata stok FISIK dalam hari pemakaian (sama dengan KPI DSI gudang = nilai stok ÷ nilai pemakaian/hari)
- *   Stok fisik maksimum (saat barang datang) = Pemakaian × MAX(Buffer + 1, 2 × Target − Buffer)
- *                   → stok fisik bergerak antara Buffer dan stok fisik maksimum, rata-ratanya = Target (asumsi review harian)
- *   Stok maksimum (posisi, dasar PR)         = Stok fisik maksimum + Pemakaian × Lead time
- *                   Target 0 = sama persis dengan sheet lama (stok maksimum = ROP)
- *   Saran PR      = Stok maksimum − SOH, bila SOH ≤ ROP (dan < Stok maksimum); selain itu 0
- *   Kebutuhan     = CEILING(Saran PR, kelipatan)  ← angka yang seharusnya dibeli
- *   Final PR      = MAX(MOQ, Kebutuhan) bila kelebihan karena MOQ ≤ Batas MOQ (hari) × Pemakaian/hari;
- *                   selain itu Kebutuhan dan ditandai "MOQ ditahan" (purchasing negosiasi / putuskan manual)
+ *   Dasar qty order (pengaturan orderBasis):
+ *     "master" (default) → Stok maksimum = ROP = Pemakaian × (Buffer + Lead time), sesuai parameter master
+ *                          → Kebutuhan = Pemakaian × (Buffer + Lead time) − SOH  (sama dengan kolom PR sheet lama)
+ *     "target"           → Stok maksimum = Pemakaian × (MAX(Buffer + 1, 2 × Target − Buffer) + Lead time)
+ *                          (rata-rata stok fisik = Target DSI; qty order lebih besar, order lebih jarang)
+ *   Target DSI (default 3) selalu dipakai untuk KPI & status "Di atas target":
+ *     stok fisik maksimum = Pemakaian × MAX(Buffer + 1, Target)   [mode target: MAX(Buffer + 1, 2 × Target − Buffer)]
+ *   Kebutuhan (saran = need) = Stok maksimum − SOH, bila SOH ≤ ROP (dan < Stok maksimum); selain itu 0
+ *   needPack      = CEILING(Kebutuhan, Kelipatan Order)
+ *   Final PR      = MAX(MOQ, needPack) bila kelebihan karena MOQ ≤ Batas MOQ (hari) × Pemakaian/hari;
+ *                   selain itu needPack dan ditandai "MOQ ditahan" (purchasing negosiasi / putuskan manual)
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
@@ -470,7 +472,7 @@
   }
 
   // ---------- perhitungan ROP ----------
-  const DEFAULT_SETTINGS = { targetDsi: 3, moqTolDays: 2, overstockDays: 30, roundGramMl: true, roundStep: 1000, priceSource: "master", dsiMin: 3.5, dsiSafety: 6.5 };
+  const DEFAULT_SETTINGS = { orderBasis: "master", targetDsi: 3, moqTolDays: 2, overstockDays: 30, roundGramMl: false, roundStep: 1000, priceSource: "master", dsiMin: 3.5, dsiSafety: 6.5 };
   const STATUS = {
     OOS: { label: "OOS", rank: 0, desc: "Stok habis padahal ada pemakaian" },
     KRITIS: { label: "Kritis", rank: 1, desc: "Stok tidak cukup sampai barang datang (DSI ≤ lead time)" },
@@ -551,24 +553,28 @@
         row.ss = round6(d * row.buffer);
         row.rop = round6(d * (row.buffer + row.lead));
         // hari stok fisik maksimum & stok maksimum posisi (lihat rumus di kepala file)
-        row.physDays = row.target > 0 ? Math.max(row.buffer + 1, 2 * row.target - row.buffer) : row.buffer + 1;
-        row.maxDays = row.target > 0 ? row.physDays + row.lead : row.buffer + row.lead;
+        const byTarget = s.orderBasis === "target" && row.target > 0;
+        row.orderBasis = byTarget ? "target" : "master";
+        row.physDays = byTarget ? Math.max(row.buffer + 1, 2 * row.target - row.buffer) : row.target > 0 ? Math.max(row.buffer + 1, row.target) : row.buffer + 1;
+        row.maxDays = byTarget ? row.physDays + row.lead : row.buffer + row.lead;
         row.physMax = round6(d * row.physDays);
         row.max = round6(d * row.maxDays);
-        row.avgDays = d > 0 ? round6((row.buffer + row.physDays) / 2) : null;   // rata-rata stok fisik bila order sesuai rumus
-        row.cycleDays = d > 0 ? round6(row.physDays - row.buffer) : null;      // qty order ≈ sekian hari pemakaian = order tiap ± sekian hari
+        // rata-rata stok fisik bila order sesuai rumus & qty order dalam hari pemakaian (mode master: order ±harian → buffer + 0,5)
+        row.avgDays = d > 0 ? round6(byTarget ? (row.buffer + row.physDays) / 2 : row.buffer + 0.5) : null;
+        row.cycleDays = d > 0 ? round6(byTarget ? row.physDays - row.buffer : 1) : null;
         row.pos = soh; // posisi stok = SOH (PO outstanding tidak dihitung)
         row.dsi = d > 0 ? round6(soh / d) : null;
         const need = d > 0 && row.pos <= row.rop && row.pos < row.max;
         row.saran = need ? round6(row.max - row.pos) : 0;
         // Kebutuhan = Saran dibulatkan ke kemasan. MOQ diikuti hanya bila kelebihannya ≤ batas (hari pemakaian).
-        row.need = row.saran > 0 ? ceilStep(row.saran, row.kelipatan) : 0;
-        const withMoq = Math.max(row.moq || 0, row.need);
-        row.moqExtraIfFollow = round6(withMoq - row.need);
-        row.moqHeld = row.need > 0 && row.moqExtraIfFollow > round6(s.moqTolDays * d);
-        row.moqFollowed = row.need > 0 && row.moqExtraIfFollow > 0 && !row.moqHeld;
+        row.need = row.saran;                                                     // Kebutuhan = stok maksimum − SOH (apa adanya)
+        row.needPack = row.saran > 0 ? ceilStep(row.saran, row.kelipatan) : 0;    // dibulatkan ke kemasan (kelipatan master)
+        const withMoq = Math.max(row.moq || 0, row.needPack);
+        row.moqExtraIfFollow = round6(withMoq - row.needPack);
+        row.moqHeld = row.needPack > 0 && row.moqExtraIfFollow > round6(s.moqTolDays * d);
+        row.moqFollowed = row.needPack > 0 && row.moqExtraIfFollow > 0 && !row.moqHeld;
         row.moqRule = row.moqHeld ? "MOQ ditahan" : row.moqFollowed ? "MOQ diikuti" : "";
-        row.finalAuto = row.need > 0 ? (row.moqHeld ? row.need : withMoq) : 0;
+        row.finalAuto = row.needPack > 0 ? (row.moqHeld ? row.needPack : withMoq) : 0;
         row.moqDays = d > 0 && row.moq > 0 ? round6(row.moq / d) : null;
         row.final = eFinal[code] != null ? eFinal[code] : row.finalAuto;
         row.finalEdited = eFinal[code] != null && eFinal[code] !== row.finalAuto;
@@ -585,7 +591,7 @@
         row.band = dsiBand(row.dsi, s);
         row.excess = d > 0 ? (row.target > 0 ? Math.max(0, round6(soh - row.physMax)) : 0) : soh; // kelebihan di atas stok fisik maksimum (target)
       } else {
-        Object.assign(row, { ss: null, rop: null, max: null, pos: soh, dsi: null, saran: 0, need: 0, moqExtraIfFollow: 0, moqHeld: false, moqFollowed: false, moqRule: "", moqDays: null, finalAuto: 0, final: eFinal[code] != null ? eFinal[code] : 0, finalEdited: eFinal[code] != null, dsiAfter: null, status: STATUS.NOPARAM.label, rank: STATUS.NOPARAM.rank, band: "" });
+        Object.assign(row, { ss: null, rop: null, max: null, pos: soh, dsi: null, saran: 0, need: 0, needPack: 0, moqExtraIfFollow: 0, moqHeld: false, moqFollowed: false, moqRule: "", moqDays: null, finalAuto: 0, final: eFinal[code] != null ? eFinal[code] : 0, finalEdited: eFinal[code] != null, dsiAfter: null, status: STATUS.NOPARAM.label, rank: STATUS.NOPARAM.rank, band: "" });
       }
       row.nilaiPR = Math.round(row.final * (row.harga || 0) * 100) / 100;
       row.overNeed = Math.max(0, round6(row.final - (row.need || 0)));            // PR di atas kebutuhan (MOQ atau edit manual)
@@ -604,7 +610,7 @@
       if (row.sohRaw < 0) add("Stok negatif di Zahir", `Stok ${fmtNum(row.sohRaw)} dihitung 0.`, "Tinggi");
       if (st && st.unitConflict) add("Satuan beda antar gudang", st.sohBy.map((x) => `${x.gudang}: ${fmtNum(x.qty)} ${x.satuan}`).join(" · ") + ". Jumlah stok tidak valid sampai satuan disamakan di Zahir.", "Tinggi");
       if (m && row.final > 0 && !(row.harga > 0)) add("Harga kosong", "Nilai PR tidak terhitung.", "Sedang");
-      if (row.moqHeld) add("MOQ melebihi kebutuhan", `MOQ ${fmtNum(row.moq)} ${row.satuan} = ${fmtNum(row.moqDays, 1)} hari pemakaian; kebutuhan ${fmtNum(row.need)}. Bila ikut MOQ lebih ${fmtNum(row.moqExtraIfFollow)} (${fmtRp(row.moqExtraIfFollow * (row.harga || 0))}). PR diisi sesuai kebutuhan. MOQ wajar ±${fmtNum(row.moqSuggest)} (1 siklus order).`, "Sedang");
+      if (row.moqHeld) add("MOQ melebihi kebutuhan", `MOQ ${fmtNum(row.moq)} ${row.satuan} = ${fmtNum(row.moqDays, 1)} hari pemakaian; kebutuhan ${fmtNum(row.needPack)}. Bila ikut MOQ lebih ${fmtNum(row.moqExtraIfFollow)} (${fmtRp(row.moqExtraIfFollow * (row.harga || 0))}). PR diisi sesuai kebutuhan. MOQ wajar ±${fmtNum(row.moqSuggest)} (1 siklus order).`, "Sedang");
       if (m && d > 0 && row.target > 0 && row.buffer + 0.5 > row.target) add("Target DSI tidak tercapai", `Buffer ${fmtNum(row.buffer)} hari: rata-rata stok fisik minimal ±${fmtNum(row.buffer + 0.5)} hari, di atas target ${fmtNum(row.target)} hari. Turunkan buffer atau tetapkan target khusus item ini.`, "Rendah");
       rows.push(row);
     }
@@ -630,7 +636,7 @@
       if (!r.hasParam && r.sohRaw > 0) { k.noParamStock++; k.noParamValue += Math.max(0, r.sohRaw) * (r.hargaZahir || 0); }
       if (r.finalEdited) k.edited++;
       if (r.status === "Di atas target") k.above++;
-      if (r.final > 0) k.needValue += (r.need || 0) * (r.harga || 0);
+      k.needValue += (r.need || 0) * (r.harga || 0);
       if (r.overNeed > 0) { k.overNeedCount++; k.overNeedValue += r.overNeedValue; }
       if (r.moqHeld) { k.moqHeldCount++; k.moqHeldValue += (r.moqExtraIfFollow || 0) * (r.harga || 0); }
       if (r.moqFollowed) k.moqFollowedCount++;

@@ -18,7 +18,8 @@ const m = C.parseMaster(C.textToRows(fs.readFileSync(FX("master-contoh.csv"), "u
 const MAIN = "GUDANG PUSAT › GUDANG PUSAT";
 const edits = { final: { K002: 600 }, note: { K002: "naik karena promo" } };
 const result = C.compute({ stockItems: C.aggregateStock(z.items, [MAIN]), master: m, edits });
-const log = [{ t: Date.UTC(2026, 10, 16, 3), code: "K002", kode: "K002", nama: "Plastik Uji", field: "Final PR", from: 500, to: 600, system: 500, by: "Tes" }];
+const log = [{ t: Date.UTC(2026, 10, 16, 3), code: "K002", kode: "K002", nama: "Plastik Uji", field: "Final PR", from: 100, to: 600, system: 100, by: "Tes" }];
+const resultTgt = C.compute({ stockItems: C.aggregateStock(z.items, [MAIN]), master: m, edits, settings: { orderBasis: "target", roundGramMl: true } });
 const meta = { gudangLabel: "GUDANG PUSAT", company: "PT. Contoh Usaha", stockDate: "16/11/2026", preparedBy: "Tes", generatedAt: Date.UTC(2026, 10, 16, 3), fileName: "zahir-contoh.xls", fileHash: "abc123", gudangKeys: [MAIN], masterSource: "fixture", masterLoadedAt: Date.UTC(2026, 10, 16, 2) };
 const build = () => X.buildWorkbook(ExcelJS, { result, zahir: z, meta, log, prioritySort: C.prioritySort });
 const OUT = path.join(__dirname, "out");
@@ -41,21 +42,23 @@ test("workbook: sheet, header, rumus inti, input & override manual", async () =>
   const r = rowOf(ws, "A003");
   assert.ok(r > 5);
   assert.equal(ws.getCell(`M${r}`).formula, `G${r}*(H${r}+I${r})`); // ROP
-  assert.equal(ws.getCell(`P${r}`).formula, `IF(AND(N(G${r})>0,MAX(K${r},0)<=M${r},MAX(K${r},0)<N${r}),N${r}-MAX(K${r},0),0)`); // Saran PR
-  assert.equal(ws.getCell(`Q${r}`).formula, `IF(P${r}>0,CEILING(P${r},IF(N(T${r})>0,T${r},1)),0)`); // Kebutuhan
+  assert.equal(ws.getCell(`P${r}`).formula, `IF(AND(N(G${r})>0,MAX(K${r},0)<=M${r},MAX(K${r},0)<N${r}),N${r}-MAX(K${r},0),0)`); // Kebutuhan = stok maks − SOH
+  assert.equal(ws.getCell(`Q${r}`).formula, `IF(P${r}>0,CEILING(P${r},IF(N(T${r})>0,T${r},1)),0)`); // dibulatkan kemasan
   assert.equal(ws.getCell(`U${r}`).formula, `IF(Q${r}>0,IF(MAX(N(R${r}),Q${r})-Q${r}<=Ringkasan!$C$20*N(G${r}),MAX(N(R${r}),Q${r}),Q${r}),0)`); // Final PR
-  assert.equal(ws.getCell("Q5").value, "Kebutuhan (dibulatkan kemasan)"); assert.equal(ws.getCell("AM5").value, "Aturan MOQ");
+  assert.equal(ws.getCell("P5").value, "Kebutuhan (stok maks − SOH)"); assert.equal(ws.getCell("Q5").value, "Dibulatkan kemasan"); assert.equal(ws.getCell("AM5").value, "Aturan MOQ");
+  assert.equal(ws.getCell(`V${r}`).formula, `MAX(0,U${r}-P${r})`); // lebih dari kebutuhan = Final PR − Kebutuhan
   assert.equal(ws.getCell(`J${r}`).formula, "Ringkasan!$C$16"); // target DSI default dirujuk ke sel parameter global
   assert.equal(ws.getCell(`J5`).value, "Target DSI (hari)");
-  assert.equal(ws.getCell(`N${r}`).formula, `G${r}*IF(N(J${r})=0,H${r}+I${r},MAX(H${r}+1,2*J${r}-H${r})+I${r})`); // Stok maksimum
-  assert.equal(ws.getCell(`AJ5`).value, "Stok fisik maks");
+  const BYT = `AND(Ringkasan!$C$21="Target DSI",N(J${r})>0)`;
+  assert.equal(ws.getCell(`N${r}`).formula, `G${r}*IF(${BYT},MAX(H${r}+1,2*J${r}-H${r})+I${r},H${r}+I${r})`); // Stok maksimum (default = ROP)
+  assert.equal(ws.getCell(`AJ5`).value, "Batas stok fisik (target)");
   assert.equal(ws.getCell(`AG5`).value, "Rincian SOH per gudang");
   assert.match(ws.getCell(`K${r}`).formula, /^SUMIFS\('Stok Zahir'!\$G\$5:\$G\$\d+,'Stok Zahir'!\$M\$5:\$M\$\d+,"A003",'Stok Zahir'!\$L\$5:\$L\$\d+,"Ya"\)$/);
   const headers = []; ws.getRow(5).eachCell((c) => headers.push(String(c.value)));
   assert.ok(!headers.some((h) => /outstanding|posisi/i.test(h)), "kolom PO outstanding/posisi sudah dihapus");
   const k2 = rowOf(ws, "K002");
   assert.equal(ws.getCell(`U${k2}`).value, 600); // override = nilai, bukan rumus
-  assert.match(ws.getCell(`U${k2}`).note.texts ? ws.getCell(`U${k2}`).note.texts.map((t) => t.text).join("") : String(ws.getCell(`U${k2}`).note), /Rekomendasi sistem: 500/);
+  assert.match(ws.getCell(`U${k2}`).note.texts ? ws.getCell(`U${k2}`).note.texts.map((t) => t.text).join("") : String(ws.getCell(`U${k2}`).note), /Rekomendasi sistem: 100/);
   assert.equal(ws.getCell(`AD${k2}`).value, "naik karena promo");
   const k3 = rowOf(ws, "K003");
   assert.equal(ws.getCell(`G${k3}`).value, null); // tanpa parameter → input kosong
@@ -67,7 +70,7 @@ test("workbook: sheet, header, rumus inti, input & override manual", async () =>
   // Urutan PR: OOS (DSI sama 0 → nilai PR terbesar dulu) → Kritis → Order
   const pr = wb2.getWorksheet("PR");
   const prCodes = []; for (let i = 5; i < 5 + result.kpi.prCount; i++) prCodes.push(pr.getCell(`C${i}`).value);
-  assert.deepEqual(prCodes, ["A004", "K009", "A002", "K002", "A003", "A001"]);
+  assert.deepEqual(prCodes, ["A004", "K009", "A002", "K002", "A003"]);
   assert.equal(pr.getCell(`D${5 + result.kpi.prCount}`).value, "TOTAL");
   assert.equal(pr.getCell("L4").value, "Final PR");
   assert.match(pr.getCell("L5").formula, /^IFERROR\(INDEX\(Perhitungan!\$U\$6:\$U\$\d+,\$S5\),""\)$/);
@@ -81,6 +84,8 @@ test("workbook: sheet, header, rumus inti, input & override manual", async () =>
   const ip = kr("Item perlu order");
   assert.match(rs.getCell(`C${ip}`).formula, /^COUNTIF\(Perhitungan!\$U\$6:\$U\$\d+,">0"\)$/);
   assert.equal(rs.getCell("C20").value, 2); // batas kelebihan MOQ (hari)
+  assert.equal(rs.getCell("C21").value, "Buffer + Lead time"); // dasar qty order
+  assert.deepEqual(rs.getCell("C21").dataValidation.formulae, ['"Buffer + Lead time,Target DSI"']);
   assert.equal(rs.getCell(`C${ip}`).result, result.kpi.prCount);
   assert.equal(rs.getCell(`C${kr("Nilai PR")}`).result, result.kpi.prValue);
   assert.equal(rs.getCell(`C${kr("DSI gudang aktual")}`).result, result.kpi.dsiActual);
@@ -107,8 +112,11 @@ test("template master bisa dibaca balik oleh parseMaster", async () => {
 });
 
 const hasLO = spawnSync("soffice", ["--version"]).status === 0;
-test("rumus Excel dihitung ulang LibreOffice = hasil aplikasi", { skip: !hasLO && "LibreOffice tidak terpasang" }, async () => {
-  const wb = build();
+for (const [mode, res0] of [["Buffer + Lead time", result], ["Target DSI", resultTgt]])
+test(`rumus Excel dihitung ulang LibreOffice = hasil aplikasi (dasar qty order: ${mode})`, { skip: !hasLO && "LibreOffice tidak terpasang" }, async () => {
+  const result = res0;
+  const wb = X.buildWorkbook(ExcelJS, { result, zahir: z, meta, log, prioritySort: C.prioritySort });
+  assert.equal(wb.getWorksheet("Ringkasan").getCell("C21").value, mode);
   wb.eachSheet((ws) => ws.eachRow((row) => row.eachCell((cell) => { const v = cell.value; if (v && typeof v === "object" && v.formula) cell.value = { formula: v.formula }; })));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rop-lo-"));
   const src = path.join(dir, "nocache.xlsx");
@@ -125,14 +133,14 @@ test("rumus Excel dihitung ulang LibreOffice = hasil aplikasi", { skip: !hasLO &
     assert.ok(r, "kode " + kode);
     const n = (h) => Number(row[idx(h)] || 0);
     assert.equal(n("SOH Zahir"), r.sohRaw, `${kode} SOH`);
-    assert.equal(n("Kebutuhan (dibulatkan kemasan)"), r.need || 0, `${kode} Kebutuhan`);
+    assert.equal(n("Kebutuhan (stok maks − SOH)"), r.need || 0, `${kode} Kebutuhan`);
+    assert.equal(n("Dibulatkan kemasan"), r.needPack || 0, `${kode} Dibulatkan kemasan`);
     assert.equal(n("Lebih dari kebutuhan"), r.overNeed || 0, `${kode} Lebih`);
     assert.equal(row[idx("Aturan MOQ")] || "", r.moqRule || "", `${kode} Aturan MOQ`);
     assert.equal(n("ROP"), r.rop || 0, `${kode} ROP`);
     assert.equal(n("Stok maksimum"), r.max || 0, `${kode} Stok maksimum`);
-    if (r.hasParam) assert.equal(n("Kelebihan di atas stok fisik maks"), r.excess, `${kode} kelebihan`);
-    if (r.usage > 0) { assert.equal(n("Stok fisik maks"), r.physMax, `${kode} stok fisik maks`); assert.ok(Math.abs(n("Rata-rata stok fisik (hari)") - r.avgDays) < 1e-9, `${kode} rata-rata`); }
-    assert.equal(n("Saran PR"), r.saran, `${kode} Saran PR`);
+    if (r.hasParam) assert.equal(n("Kelebihan di atas batas target"), r.excess, `${kode} kelebihan`);
+    if (r.usage > 0) { assert.equal(n("Batas stok fisik (target)"), r.physMax, `${kode} batas stok fisik`); assert.ok(Math.abs(n("Rata-rata stok fisik (hari)") - r.avgDays) < 1e-9, `${kode} rata-rata`); }
     assert.equal(n("Final PR"), r.final, `${kode} Final PR`);
     assert.equal(Math.round(n("Nilai PR")), Math.round(r.nilaiPR), `${kode} Nilai PR`);
     assert.equal(row[idx("Status")], r.status, `${kode} Status`);
