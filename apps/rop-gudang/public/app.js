@@ -65,9 +65,7 @@
   function sheetConf() {
     const s = state.settings || {}, L = (state.local && state.local.MASTER) || {}, M = C.MASTER || {};
     const raw = (s.sheetUrl || L.SHEET_URL || M.SHEET_URL || "").trim();
-    const m = raw.match(/\/d\/([a-zA-Z0-9_-]{20,})/);
-    const id = m ? m[1] : (/^[a-zA-Z0-9_-]{20,}$/.test(raw) ? raw : "");
-    const gidUrl = (raw.match(/[#&?]gid=(\d+)/) || [])[1];
+    const ref = Core.parseSheetRef(raw), id = ref.id, gidUrl = ref.gid;
     return { raw, id, gid: String(s.gid || gidUrl || L.GID || M.GID || "0"), tab: s.tab || L.TAB || M.TAB || "PKU", locale: L.LOCALE || M.LOCALE || "id" };
   }
 
@@ -285,7 +283,7 @@
     } else if (state.masterError) {
       chip.className = "chip err"; chip.textContent = "Belum ada";
       info.innerHTML = `<span class="sev-Tinggi">${esc(state.masterError)}</span>
-        <span class="inline-form"><input type="url" id="inpSheetQuick" placeholder="https://docs.google.com/spreadsheets/d/…/edit" aria-label="Link Google Sheet parameter" value="${esc(state.settings.sheetUrl || "")}"><button type="button" class="btn small primary" id="btnSheetQuick">Simpan &amp; muat</button></span>`;
+        <span class="inline-form"><input type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" id="inpSheetQuick" placeholder="Tempel link Google Sheet di sini" aria-label="Link Google Sheet parameter" value="${esc(state.settings.sheetUrl || "")}"><button type="button" class="btn small primary" id="btnSheetQuick">Simpan &amp; muat</button></span>`;
     } else { chip.className = "chip"; chip.textContent = "Memuat…"; info.textContent = ""; }
     $("btnReloadMaster").disabled = !sheetConf().id;
   }
@@ -808,8 +806,7 @@
     const h = location.hash.replace(/^#/, "");
     if (!h) return false;
     const p = new URLSearchParams(h);
-    const raw = p.get("sheet") || "";
-    const id = (raw.match(/\/d\/([a-zA-Z0-9_-]{20,})/) || [])[1] || (/^[a-zA-Z0-9_-]{20,}$/.test(raw) ? raw : "");
+    const id = Core.parseSheetRef(p.get("sheet") || "").id;
     if (!id) return false;
     state.settings.sheetUrl = `https://docs.google.com/spreadsheets/d/${id}/edit`;
     const gid = (p.get("gid") || "").replace(/\D/g, "");
@@ -823,11 +820,12 @@
   function saveQuickSheet() {
     const el = $("inpSheetQuick");
     if (!el) return;
-    const raw = el.value.trim();
-    const id = (raw.match(/\/d\/([a-zA-Z0-9_-]{20,})/) || [])[1] || (/^[a-zA-Z0-9_-]{20,}$/.test(raw) ? raw : "");
-    if (!id) return toast("Link tidak valid. Contoh: https://docs.google.com/spreadsheets/d/…/edit", true);
-    state.settings.sheetUrl = `https://docs.google.com/spreadsheets/d/${id}/edit`;
-    const gid = (raw.match(/[#&?]gid=(\d+)/) || [])[1];
+    const ref = Core.parseSheetRef(el.value);
+    if (ref.empty) { el.focus(); return toast("Kolom link masih kosong. Tempel link Google Sheet parameter, atau buka link tim dari admin (alamat yang berisi #sheet=).", true); }
+    if (ref.published) return toast("Ini link \"Publikasikan ke web\". Pakai link dari tombol Bagikan → Salin link di Google Sheet (alamatnya berisi /spreadsheets/d/…).", true);
+    if (!ref.id) return toast("Bukan link Google Sheet. Contoh: https://docs.google.com/spreadsheets/d/…/edit", true);
+    state.settings.sheetUrl = `https://docs.google.com/spreadsheets/d/${ref.id}/edit`;
+    const gid = ref.gid;
     if (gid) state.settings.gid = gid;
     LS.set(KEY.settings, state.settings);
     state.masterError = "";

@@ -388,3 +388,15 @@ test("batas kelebihan MOQ: 0 = sesuai kebutuhan, 999 = selalu ikut MOQ, kecil = 
   assert.equal(byCode(ed, "A003").overNeed, 140); assert.equal(ed.kpi.overNeedCount, 3); // + pembulatan 1.000 g A001 & A002
   assert.equal(byCode(run(TGT), "A001").moqSuggest, 3000); // MOQ wajar = 1 siklus order (2 hari × 1.250) dibulatkan 1.000
 });
+
+test("parseSheetRef: link Sheet, link Drive, ID saja, kosong, link publikasi", () => {
+  const ID = "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-";
+  assert.deepEqual(C.parseSheetRef(`https://docs.google.com/spreadsheets/d/${ID}/edit?usp=sharing`), { id: ID, gid: "", empty: false, published: false });
+  assert.equal(C.parseSheetRef(`https://docs.google.com/spreadsheets/d/${ID}/edit#gid=12345`).gid, "12345");
+  assert.equal(C.parseSheetRef(`Perhitungan Kebutuhan ROP\n https://docs.google.com/spreadsheets/d/${ID}/edit?usp=drivesdk `).id, ID);
+  assert.equal(C.parseSheetRef(`https://drive.google.com/open?id=${ID}`).id, ID);
+  assert.equal(C.parseSheetRef(ID).id, ID);
+  assert.equal(C.parseSheetRef("   ").empty, true);
+  assert.equal(C.parseSheetRef("https://docs.google.com/spreadsheets/d/e/2PACX-1vSabcdefghijklmnopqrstuvwxyz/pubhtml").published, true);
+  assert.equal(C.parseSheetRef("https://example.com/halo").id, "");
+});

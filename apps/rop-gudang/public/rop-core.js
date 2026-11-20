@@ -735,7 +735,22 @@
     return Array.from(new Uint8Array(h)).map((x) => x.toString(16).padStart(2, "0")).join("");
   }
 
+  // ---------- link Google Sheet ----------
+  // Terima: link .../spreadsheets/d/<ID>/edit…, link Drive (?id= / open?id=), link lama (key=), atau ID saja; teks lain di sekitar link diabaikan.
+  // published = link "Publikasikan ke web" (/d/e/2PACX…) yang tidak bisa dipakai untuk membaca tab parameter.
+  function parseSheetRef(raw) {
+    const s = String(raw == null ? "" : raw).trim();
+    const out = { id: "", gid: "", empty: !s, published: false };
+    if (!s) return out;
+    if (/\/spreadsheets\/d\/e\/2PACX/i.test(s)) { out.published = true; return out; }
+    const m = s.match(/\/d\/([a-zA-Z0-9_-]{25,})/) || s.match(/[?&#](?:id|key)=([a-zA-Z0-9_-]{25,})/) || (/^[a-zA-Z0-9_-]{25,}$/.test(s) ? [s, s] : null);
+    if (m) out.id = m[1];
+    out.gid = (s.match(/[#&?]gid=(\d+)/) || [])[1] || "";
+    return out;
+  }
+
   return {
+    parseSheetRef,
     normCode, normText, normHeader, parseNum, detectLocale, sniff, decodeText, textToRows, markupToRows,
     parseZahir, mergeZahir, splitReports, aggregateStock, parseMaster, compute, summarize, prioritySort, prText, ceilStep, dsiBand, sha256Hex, fmtNum, fmtRp, poGroups, poLine, poNumber,
     MASTER_FIELDS, DEFAULT_SETTINGS, STATUS,

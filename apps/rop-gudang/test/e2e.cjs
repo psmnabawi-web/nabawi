@@ -238,6 +238,11 @@ const SHEET = "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnop
     await p3.setInputFiles("#fileZahir", FX("zahir-contoh.xls"));
     await p3.waitForSelector("#fileChip.ok");
     assert.equal(await p3.isHidden("#results"), true);
+    await p3.click("#btnSheetQuick"); // kolom kosong → pesan jelas, bukan "link tidak valid"
+    assert.match(await p3.textContent("#toast"), /Kolom link masih kosong/);
+    await p3.fill("#inpSheetQuick", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSabcdefghijklmnopqrstuvwxyz/pubhtml");
+    await p3.click("#btnSheetQuick");
+    assert.match(await p3.textContent("#toast"), /Publikasikan ke web/);
     await p3.fill("#inpSheetQuick", "https://docs.google.com/spreadsheets/d/TESTSHEET_abcdefghijklmnopqrstuvwxyz/edit?usp=sharing");
     await p3.click("#btnSheetQuick");
     await p3.waitForSelector("#masterChip.ok");
