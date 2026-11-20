@@ -1,0 +1,34 @@
+name: ROP Gudang (uji live)
+
+# Uji asap situs live dengan Firestore asli: kode tim acak sekali pakai + fixture sintetis (bukan data perusahaan).
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/zealous-carson-bns1ge"]
+    paths:
+      - ".github/workflows/rop-gudang-smoke.yml"
+      - "apps/rop-gudang/test/live-smoke.cjs"
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Playwright
+        working-directory: apps/rop-gudang
+        run: |
+          npm init -y >/dev/null 2>&1 || true
+          npm i --no-save --no-audit --no-fund playwright@1.48.2
+          npx playwright install --with-deps chromium
+      - name: Uji live
+        working-directory: apps/rop-gudang
+        env:
+          LIVE_URL: https://${{ vars.ROP_SITE || 'rop-gudang-pku' }}.web.app
+        run: node test/live-smoke.cjs
