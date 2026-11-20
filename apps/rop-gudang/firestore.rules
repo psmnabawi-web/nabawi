@@ -1,0 +1,67 @@
+rules_version = '2';
+
+// Firestore project sssg-dashboard-2026 — dipakai HANYA oleh ROP Gudang (cek 20/11/2026: sebelumnya Firestore belum aktif,
+// tidak ada rules lain). Bila nanti ada aplikasi lain yang memakai Firestore di project ini, gabungkan rules-nya di file ini,
+// karena deploy rules berlaku untuk seluruh project.
+//
+// ROP Gudang — data bersama per "kode tim": ropGudang/{kodeTim}. Kode tim = 32–64 karakter acak yang hanya ada di link tim,
+// jadi berfungsi sebagai kunci. Tanpa kode, data tidak bisa dibaca atau ditulis; daftar kode tidak bisa dilihat (list ditolak).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isTeamKey(k) { return k.size() >= 32 && k.size() <= 64 && k.matches('[A-Za-z0-9_-]+'); }
+    function optStr(d, f, max) { return !(f in d) || (d[f] is string && d[f].size() <= max); }
+    function optNum(d, f) { return !(f in d) || d[f] is number; }
+
+    match /ropGudang/{key} {
+      allow get: if isTeamKey(key);
+      allow create, update: if isTeamKey(key)
+        && request.resource.data.keys().hasOnly(['sheet', 'current', 'updatedAt', 'updatedBy'])
+        && optStr(request.resource.data, 'updatedBy', 80) && optNum(request.resource.data, 'updatedAt')
+        && (!('sheet' in request.resource.data) || (request.resource.data.sheet is map
+              && request.resource.data.sheet.keys().hasOnly(['url', 'gid', 'tab'])
+              && request.resource.data.sheet.url is string && request.resource.data.sheet.url.matches('https://docs[.]google[.]com/spreadsheets/d/[A-Za-z0-9_-]+/edit')))
+        && (!('current' in request.resource.data) || (request.resource.data.current is map && request.resource.data.current.id is string
+              && request.resource.data.current.keys().hasOnly(['id', 'at', 'by', 'name', 'size', 'count', 'items', 'hash', 'restoredAt', 'restoredBy'])));
+      allow list, delete: if false;
+
+      // File Zahir yang sudah diurai (JSON). Tidak bisa diubah/dihapus: riwayat upload aman dari salah timpa.
+      match /uploads/{id} {
+        allow get, list: if isTeamKey(key);
+        allow create: if isTeamKey(key)
+          && request.resource.data.keys().hasOnly(['v', 'at', 'by', 'name', 'size', 'count', 'items', 'hash', 'gudangKeys', 'json'])
+          && request.resource.data.json is string && request.resource.data.json.size() <= 1000000
+          && request.resource.data.hash is string && request.resource.data.hash.size() <= 128
+          && request.resource.data.at is number && optStr(request.resource.data, 'by', 80) && optStr(request.resource.data, 'name', 300);
+        allow update, delete: if false;
+      }
+
+      // Perubahan Final PR, catatan, log, tanggal stok, gudang dihitung — per file (hash)
+      match /edits/{hash} {
+        allow get: if isTeamKey(key);
+        allow create, update: if isTeamKey(key) && hash.size() <= 128
+          && request.resource.data.keys().hasOnly(['final', 'note', 'log', 'stockDate', 'gudangKeys', 'updatedAt', 'updatedBy'])
+          && (!('final' in request.resource.data) || request.resource.data.final is map)
+          && (!('note' in request.resource.data) || request.resource.data.note is map)
+          && (!('log' in request.resource.data) || (request.resource.data.log is list && request.resource.data.log.size() <= 3000))
+          && (!('gudangKeys' in request.resource.data) || (request.resource.data.gudangKeys is list && request.resource.data.gudangKeys.size() <= 50))
+          && optStr(request.resource.data, 'stockDate', 10) && optStr(request.resource.data, 'updatedBy', 80);
+        allow list, delete: if false;
+      }
+
+      // Nomor PO terakhir per tanggal (yyyymmdd)
+      match /poSeq/{ymd} {
+        allow get: if isTeamKey(key);
+        allow create, update: if isTeamKey(key) && ymd.matches('[0-9]{8}')
+          && request.resource.data.keys().hasOnly(['n', 'updatedAt'])
+          && request.resource.data.n is int && request.resource.data.n >= 0 && request.resource.data.n < 100000;
+        allow list, delete: if false;
+      }
+    }
+
+    // Selain ROP Gudang: tertutup.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

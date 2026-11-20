@@ -320,3 +320,11 @@ table.po-items { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
 .data td.num small.tag-sub { display: block; font-size: 10.5px; color: var(--muted); font-weight: 600; line-height: 1.1; white-space: nowrap; }
 .data td.num small.tag-held { display: block; font-size: 10.5px; color: var(--orange); font-weight: 700; line-height: 1.1; white-space: nowrap; cursor: help; }
 .data td.over-need { color: var(--orange); font-weight: 700; }
+
+/* data bersama tim */
+.shared-info { margin: 0 0 12px; }
+.shared-info .alert { align-items: center; flex-wrap: wrap; }
+.shared-info .alert > div { flex: 1; min-width: 0; }
+.shared-info .btn { margin-left: 6px; vertical-align: middle; }
+.shared-info code { font-size: 12px; background: rgba(0, 0, 0, .05); padding: 0 4px; border-radius: 4px; }
+#historyList { margin-top: 10px; max-height: 60vh; overflow: auto; }

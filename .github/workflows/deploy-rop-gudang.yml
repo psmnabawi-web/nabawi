@@ -4,6 +4,8 @@ name: Deploy ROP Gudang
 # Situs SSSG (sssg-dashboard-2026, dashboard-inti-warna) tidak pernah disentuh: config deploy ditulis dengan "site" eksplisit
 # dan script menolak nama situs SSSG. Link Google Sheet parameter TIDAK ikut ter-deploy (dibagikan lewat link #sheet=...).
 # Disetujui pemilik project (16/11/2026): app ini ditaruh sebagai situs terpisah di project sssg-dashboard-2026.
+# Disetujui pemilik (20/11/2026): data bersama tim di Cloud Firestore project yang sama (koleksi ropGudang, akses per
+# kode tim). Firestore belum pernah dipakai di project ini, jadi firestore.rules ROP Gudang = rules seluruh project.
 on:
   workflow_dispatch:
   push:
@@ -11,6 +13,8 @@ on:
     paths:
       - "apps/rop-gudang/public/**"
       - "apps/rop-gudang/firebase.json"
+      - "apps/rop-gudang/firestore.rules"
+      - "apps/rop-gudang/scripts/firestore-setup.mjs"
       - ".github/workflows/deploy-rop-gudang.yml"
 
 concurrency:
@@ -61,6 +65,31 @@ jobs:
           case ",$PROTECTED," in *",$SITE,"*) echo "::error::Menolak deploy ke situs SSSG ($SITE)"; exit 1 ;; esac
           echo "Situs: $SITE"
           echo "site=$SITE" >> "$GITHUB_OUTPUT"
+      - name: Data bersama — database Firestore, rules, web app
+        id: db
+        working-directory: apps/rop-gudang
+        continue-on-error: true
+        run: |
+          FB="npx -y firebase-tools@latest"
+          node scripts/firestore-setup.mjs
+          echo '{"firestore":{"rules":"firestore.rules"}}' > firebase.rules.json
+          $FB deploy --only firestore:rules --config firebase.rules.json --project "$PROJECT" --non-interactive
+          $FB apps:list WEB --project "$PROJECT" --json > /tmp/apps.json
+          APP_ID=$(node -e 'const j=JSON.parse(require("fs").readFileSync("/tmp/apps.json","utf8")); const a=(j.result||[]).find(x=>x.displayName==="ROP Gudang"); process.stdout.write(a?a.appId:"")')
+          if [ -z "$APP_ID" ]; then
+            $FB apps:create WEB "ROP Gudang" --project "$PROJECT" --json > /tmp/app.json
+            APP_ID=$(node -e 'const j=JSON.parse(require("fs").readFileSync("/tmp/app.json","utf8")); process.stdout.write((j.result&&j.result.appId)||"")')
+          fi
+          if [ -z "$APP_ID" ]; then echo "::error::Web app ROP Gudang tidak bisa dibuat"; exit 1; fi
+          $FB apps:sdkconfig WEB "$APP_ID" --project "$PROJECT" --json > /tmp/sdk.json
+          node -e '
+            const j=JSON.parse(require("fs").readFileSync("/tmp/sdk.json","utf8")); const r=j.result||{};
+            let c=r.sdkConfig;
+            if(!c&&r.fileContents){const m=String(r.fileContents).match(/\{[\s\S]*\}/); if(m) c=JSON.parse(m[0]);}
+            if(!c||!c.apiKey||!c.projectId){console.error("sdkconfig tidak terbaca");process.exit(1);}
+            const out={apiKey:c.apiKey,authDomain:c.authDomain,projectId:c.projectId,appId:c.appId};
+            require("fs").writeFileSync("/tmp/firebase-web.json",JSON.stringify(out));
+            console.log("Web app:",c.appId,"project:",c.projectId);'
       - name: Deploy ke Firebase Hosting
         working-directory: apps/rop-gudang
         env:
@@ -70,16 +99,18 @@ jobs:
           ROP_SHEET_URL: ${{ secrets.ROP_SHEET_URL }}
         run: |
           rm -f public/config.local.json
-          if [ -n "$ROP_SHEET_URL" ]; then
-            node -e '
-              const u=process.env.ROP_SHEET_URL.trim();
+          node -e '
+            const fs=require("fs"), out={};
+            const u=(process.env.ROP_SHEET_URL||"").trim();
+            if(u){
               if(!/docs\.google\.com\/spreadsheets\/d\/[A-Za-z0-9_-]{20,}/.test(u)){console.error("ROP_SHEET_URL tidak valid");process.exit(1);}
-              const gid=(u.match(/[#&?]gid=(\d+)/)||[])[1]||"0";
-              require("fs").writeFileSync("public/config.local.json",JSON.stringify({MASTER:{SHEET_URL:u,GID:gid,TAB:"PKU"}}));'
-            echo "Sumber parameter: dari secret ROP_SHEET_URL"
-          else
-            echo "Secret ROP_SHEET_URL kosong: pengguna memakai link #sheet= atau kotak tempel link"
-          fi
+              out.MASTER={SHEET_URL:u,GID:(u.match(/[#&?]gid=(\d+)/)||[])[1]||"0",TAB:"PKU"};
+              console.log("Sumber parameter: dari secret ROP_SHEET_URL");
+            } else console.log("Secret ROP_SHEET_URL kosong: sumber parameter dari link tim / data bersama / kotak tempel link");
+            if(fs.existsSync("/tmp/firebase-web.json")){ out.FIREBASE={config:JSON.parse(fs.readFileSync("/tmp/firebase-web.json","utf8"))}; console.log("Data bersama tim: aktif"); }
+            else console.log("::warning::Data bersama tim tidak aktif (langkah database gagal)");
+            if(Object.keys(out).length) fs.writeFileSync("public/config.local.json",JSON.stringify(out));'
+          rm -f firebase.rules.json
           node -e '
             const fs=require("fs"); const c=JSON.parse(fs.readFileSync("firebase.json","utf8"));
             c.hosting.site=process.env.SITE; fs.writeFileSync("firebase.ci.json", JSON.stringify(c,null,2));'
@@ -92,5 +123,11 @@ jobs:
           URL="https://$SITE.web.app"
           curl -sSf -o /dev/null "$URL/" && echo "$URL halaman OK"
           curl -sS "$URL/rop-core.js" | grep -q parseZahir && echo "$URL rop-core.js versi baru OK"
-          curl -sSI "$URL/" | grep -i "content-security-policy" >/dev/null && echo "CSP aktif"
+          curl -sSI "$URL/" | grep -i "content-security-policy" | grep -q "firestore.googleapis.com" && echo "CSP aktif (Firestore diizinkan)"
+          if [ -f /tmp/firebase-web.json ]; then curl -sS "$URL/config.local.json" | grep -q '"FIREBASE"' && echo "config.local.json: data bersama aktif"; fi
           echo "### ROP Gudang tayang: $URL" >> "$GITHUB_STEP_SUMMARY"
+      - name: Status data bersama
+        if: steps.db.outcome == 'failure'
+        run: |
+          echo "::error::Hosting sudah ter-deploy, tetapi langkah database Firestore gagal. Aplikasi berjalan tanpa data bersama; cek log langkah 'Data bersama'."
+          exit 1

@@ -29,6 +29,9 @@
     parts: [], zahir: null, file: null, gudangKeys: [],
     edits: emptyEdits(),
     result: null,
+    // data bersama tim (Firestore): status off | nokey | connecting | on | err
+    shared: null, sharedStatus: "off", sharedErr: "", sharedMeta: null, sharedUploadId: "", sharedLoadSeq: 0, sharedSeeded: false, sharedLoaded: false,
+    rootUnsub: null, editsUnsub: null, editsHash: "", pendingRemote: null,
     tab: "pr",
     sort: { pr: null, all: { key: "nama", dir: 1 }, over: { key: "excessValue", dir: -1 }, issue: null },
     filters: { q: "", brand: "", status: "", edited: false },
@@ -132,6 +135,7 @@
       await setParts(parts, append ? state.edits : null);
       const z = state.zahir;
       toast(`${parts.length} file terbaca: ${z.items.length} baris produk, ${z.gudangs.length} gudang. Dihitung: ${selLabel()}.`);
+      if (state.shared) await publishShared();
     } catch (e) {
       console.error(e);
       $("fileChip").className = "chip err"; $("fileChip").textContent = "Gagal dibaca";
@@ -288,7 +292,22 @@
     $("btnReloadMaster").disabled = !sheetConf().id;
   }
 
+  function renderSharedInfo() {
+    const el = $("sharedInfo");
+    const st = state.sharedStatus, c = state.sharedMeta;
+    $("dropNote").textContent = st === "on" ? "File dibaca di browser ini, lalu hasilnya disimpan sebagai data terbaru untuk tim." : "File diproses di browser ini saja, tidak dikirim ke server.";
+    if (st === "off") { el.hidden = true; el.innerHTML = ""; return; }
+    el.hidden = false;
+    const when = (t) => (t ? new Date(t).toLocaleString("id-ID", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
+    if (st === "nokey") el.innerHTML = alertBox("warn", "<b>Data bersama belum aktif di perangkat ini.</b> Buka link tim dari admin sekali (berisi <code>team=</code>), supaya file Zahir terbaru dari siapa pun langsung tampil di sini.");
+    else if (st === "connecting") el.innerHTML = alertBox("", "Menyambung ke data bersama tim…");
+    else if (st === "err") el.innerHTML = alertBox("err", `<b>Data bersama gagal tersambung.</b> ${esc(state.sharedErr)} Data di perangkat ini tetap bisa dipakai.`);
+    else if (c && c.id) el.innerHTML = alertBox("ok", `<b>Data bersama tim aktif.</b> File terbaru: ${esc(c.name || "-")} · ${fmt(c.items || 0)} baris · diupload ${esc(c.by || "tanpa nama")} ${esc(when(c.at))}${c.restoredAt ? ` · dipilih dari riwayat oleh ${esc(c.restoredBy || "tanpa nama")} ${esc(when(c.restoredAt))}` : ""}${state.sharedUploadId !== c.id ? " · memuat…" : ""} <button type="button" class="btn small ghost" id="btnHistory">Riwayat</button>`);
+    else el.innerHTML = alertBox("ok", "<b>Data bersama tim aktif.</b> Belum ada file. Upload pertama langsung tampil di semua perangkat tim.");
+  }
+
   function renderFilePanel() {
+    renderSharedInfo();
     const chip = $("fileChip"), box = $("fileInfo");
     if (!state.zahir || !state.file) { box.hidden = true; if (!/err/.test(chip.className)) { chip.className = "chip muted"; chip.textContent = "Belum ada file"; } return; }
     const z = state.zahir, f = state.file;
@@ -532,9 +551,14 @@
       if (v == null || v === r.finalAuto) { delete E.final[code]; after = r.finalAuto; } else { E.final[code] = v; after = v; }
     }
     if (String(before) === String(after)) return;
-    E.log.push({ t: Date.now(), code, kode: r.kode, nama: r.nama, field: { final: "Final PR", note: "Catatan" }[field], from: before, to: after, system: field === "final" ? r.finalAuto : "", by: state.settings.preparedBy || "" });
+    const logEntry = { t: Date.now(), code, kode: r.kode, nama: r.nama, field: { final: "Final PR", note: "Catatan" }[field], from: before, to: after, system: field === "final" ? r.finalAuto : "", by: state.settings.preparedBy || "" };
+    E.log.push(logEntry);
     if (E.log.length > 2000) E.log = E.log.slice(-2000);
     saveEdits();
+    if (state.shared && state.sharedUploadId && state.file) {
+      const val = field === "final" ? (code in E.final ? E.final[code] : null) : (code in E.note ? E.note[code] : null);
+      state.shared.edit(state.file.hash, field, code, val, logEntry).catch((e) => sharedWriteFail(e));
+    }
     const ae = document.activeElement;
     const keep = ae && ae.dataset && ae.dataset.code ? { code: ae.dataset.code, field: ae.dataset.field } : null;
     recompute();
@@ -615,7 +639,9 @@
   function setPOPrefix(iso) {
     const ymd = iso.replace(/-/g, "");
     $("poPrefix").value = defaultPrefix(iso);
-    $("poSeq").value = (Number(LS.get(poSeqKey(ymd), 0)) || 0) + 1;
+    const local = Number(LS.get(poSeqKey(ymd), 0)) || 0;
+    $("poSeq").value = local + 1;
+    if (state.shared && state.sharedStatus === "on") state.shared.peekPoSeq(ymd).then((n) => { if ($("poPrefix").value === defaultPrefix(iso)) $("poSeq").value = Math.max(local, n) + 1; }).catch(() => {});
   }
   function renderPOGroups() {
     const by = $("poBy").value;
@@ -668,7 +694,7 @@
     </section>`;
   }
 
-  function doPrintPO() {
+  async function doPrintPO() {
     const groups = selectedPOGroups();
     if (!groups.length) return;
     const opt = {
@@ -677,20 +703,152 @@
       sign: [$("poSign1").value.trim(), $("poSign2").value.trim(), $("poSign3").value.trim()],
     };
     LS.set(PO_KEY, { by: opt.by, price: opt.price, convert: opt.convert, note: opt.note, sign2: opt.sign[1], sign3: opt.sign[2] });
+    const ymd0 = (opt.prefix.match(/(\d{8})/) || [])[1] || opt.date.replace(/-/g, "");
+    if (state.shared && state.sharedStatus === "on") { // nomor PO diambil dari data tim supaya dua perangkat tidak memakai nomor yang sama
+      try {
+        const start = await state.shared.takePoSeq(ymd0, groups.length, opt.seq);
+        if (start !== opt.seq) toast(`Nomor ${opt.seq} sudah dipakai anggota tim lain; PO mulai dari ${start}.`);
+        opt.seq = start;
+      } catch (e) { sharedWriteFail(e); }
+    }
     const numbers = groups.map((g, i) => Core.poNumber(opt.prefix, opt.seq + i));
     $("printArea").innerHTML = groups.map((g, i) => poHtml(g, numbers[i], opt)).join("");
     // nomor urut berikutnya per tanggal (per perangkat) supaya cetak ulang tidak memakai nomor yang sama
-    const ymd = (opt.prefix.match(/(\d{8})/) || [])[1] || opt.date.replace(/-/g, "");
-    LS.set(poSeqKey(ymd), Math.max(Number(LS.get(poSeqKey(ymd), 0)) || 0, opt.seq + groups.length - 1));
+    LS.set(poSeqKey(ymd0), Math.max(Number(LS.get(poSeqKey(ymd0), 0)) || 0, opt.seq + groups.length - 1));
     const items = groups.reduce((a, g) => a + g.items.length, 0), value = groups.reduce((a, g) => a + g.total, 0);
-    state.edits.log.push({ t: Date.now(), code: "", kode: numbers.join(", "), nama: groups.map((g) => g.key).join(", "), field: "Cetak PO", from: "", to: `${groups.length} PO`, system: `${items} item · ${fmtRp(value)}`, by: opt.sign[0] || state.settings.preparedBy || "" });
+    const logEntry = { t: Date.now(), code: "", kode: numbers.join(", "), nama: groups.map((g) => g.key).join(", "), field: "Cetak PO", from: "", to: `${groups.length} PO`, system: `${items} item · ${fmtRp(value)}`, by: opt.sign[0] || state.settings.preparedBy || "" };
+    state.edits.log.push(logEntry);
     saveEdits();
+    if (state.shared && state.sharedUploadId && state.file) state.shared.setMeta(state.file.hash, {}, logEntry).catch((e) => sharedWriteFail(e));
     $("dlgPO").close();
     document.body.classList.add("printing");
     const done = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", done); };
     window.addEventListener("afterprint", done);
     toast(`${numbers.length} PO siap dicetak (${numbers[0]}${numbers.length > 1 ? " … " + numbers[numbers.length - 1] : ""}). Pilih “Simpan sebagai PDF” untuk menyimpan file.`);
     setTimeout(() => window.print(), 50);
+  }
+
+  // ---------------- data bersama tim ----------------
+  const sharedEnabled = () => !!(state.local && state.local.FIREBASE && state.local.FIREBASE.config && window.ROPShared);
+  // sedang mengetik di sel tabel (isi belum disimpan) → perubahan dari tim ditunda sampai sel ditinggalkan
+  const typingInTable = () => { const a = document.activeElement; return !!(a && a.tagName === "INPUT" && $("tbl").contains(a) && a.value !== a.defaultValue); };
+  async function ensureFirebase() {
+    if (!window.firebase) await loadScript("vendor/firebase-app-compat.js");
+    if (!window.firebase.firestore) await loadScript("vendor/firebase-firestore-compat.js");
+  }
+  function stopShared() {
+    if (state.rootUnsub) state.rootUnsub();
+    if (state.editsUnsub) state.editsUnsub();
+    Object.assign(state, { shared: null, rootUnsub: null, editsUnsub: null, editsHash: "", sharedMeta: null, sharedUploadId: "", sharedErr: "", sharedSeeded: false, sharedLoaded: false, pendingRemote: null });
+  }
+  async function startShared() {
+    stopShared();
+    if (!sharedEnabled()) { state.sharedStatus = "off"; renderSharedInfo(); return; }
+    if (!ROPShared.isTeamKey(state.settings.teamKey)) { state.sharedStatus = "nokey"; renderSharedInfo(); return; }
+    state.sharedStatus = "connecting"; renderSharedInfo();
+    try {
+      await ensureFirebase();
+      const F = state.local.FIREBASE;
+      const sh = ROPShared.connect({ config: F.config, emulator: F.emulator, teamKey: state.settings.teamKey, getBy: () => state.settings.preparedBy || "" });
+      state.shared = sh;
+      state.rootUnsub = sh.onRoot((d) => { if (state.shared !== sh) return; state.sharedStatus = "on"; state.sharedErr = ""; onSharedRoot(d); }, (e) => sharedFail(e));
+    } catch (e) { sharedFail(e); }
+  }
+  function sharedFail(e) {
+    console.error(e);
+    state.sharedStatus = "err";
+    state.sharedErr = /permission/i.test(String(e && (e.code || e.message))) ? "Akses ditolak (kode tim tidak valid?)." : /offline|unavailable|network/i.test(String(e && (e.code || e.message))) ? "Tidak ada koneksi internet." : String((e && e.message) || e).slice(0, 160);
+    renderSharedInfo();
+  }
+  function sharedWriteFail(e) {
+    console.error(e);
+    toast("Gagal menyimpan ke data tim: " + String((e && (e.code || e.message)) || e).slice(0, 120) + ". Perubahan tersimpan di perangkat ini.", true);
+  }
+  function shareSheet() {
+    const sc = sheetConf();
+    if (state.shared && state.sharedStatus === "on" && sc.id) state.shared.setSheet({ url: `https://docs.google.com/spreadsheets/d/${sc.id}/edit`, gid: sc.gid, tab: sc.tab }).catch((e) => sharedWriteFail(e));
+  }
+  function onSharedRoot(d) {
+    // sumber parameter: ikut tim; perangkat yang sudah punya link mengisi untuk tim bila belum ada
+    const sc = sheetConf();
+    if (d && d.sheet && d.sheet.url) {
+      const ref = Core.parseSheetRef(d.sheet.url);
+      const gid = String(d.sheet.gid || "0"), tab = d.sheet.tab || "PKU";
+      if (ref.id && (ref.id !== sc.id || gid !== sc.gid || tab !== sc.tab)) {
+        Object.assign(state.settings, { sheetUrl: `https://docs.google.com/spreadsheets/d/${ref.id}/edit`, gid, tab });
+        LS.set(KEY.settings, state.settings);
+        state.masterError = "";
+        loadMasterFromSheet(false);
+      }
+    } else if (sc.id) shareSheet();
+    const c = d && d.current;
+    state.sharedMeta = c && c.id ? c : null;
+    if (c && c.id) {
+      if (c.id === state.sharedUploadId) { renderSharedInfo(); return; }
+      if (state.file && c.hash === state.file.hash) { state.sharedUploadId = c.id; state.sharedLoaded = true; subscribeEdits(c.hash); renderSharedInfo(); return; }
+      renderSharedInfo();
+      loadSharedUpload(c);
+    } else {
+      // ruang tim masih kosong: perangkat pertama yang sudah punya file membagikannya
+      if (state.parts.length && !state.sharedSeeded) { state.sharedSeeded = true; publishShared(); }
+      renderSharedInfo();
+    }
+  }
+  async function loadSharedUpload(c) {
+    const seq = ++state.sharedLoadSeq;
+    try {
+      const u = await state.shared.loadUpload(c.id);
+      if (seq !== state.sharedLoadSeq || !state.shared) return;
+      if (Array.isArray(u.meta.gudangKeys) && u.meta.gudangKeys.length) state.gudangKeys = u.meta.gudangKeys.slice();
+      state.sharedUploadId = c.id;
+      await setParts(u.parts, null);
+      subscribeEdits(state.file.hash);
+      if (state.sharedLoaded) toast(`File terbaru dari ${c.by || "anggota tim"} sudah dimuat (${new Date(c.at).toLocaleString("id-ID")}).`);
+      state.sharedLoaded = true;
+      renderSharedInfo();
+    } catch (e) { sharedFail(e); }
+  }
+  function subscribeEdits(hash) {
+    if (state.editsHash === hash && state.editsUnsub) return;
+    if (state.editsUnsub) state.editsUnsub();
+    state.editsHash = hash; state.pendingRemote = null;
+    state.editsUnsub = state.shared.onEdits(hash, (d) => { if (state.file && state.file.hash === hash && d) applyRemoteEdits(d); }, (e) => sharedFail(e));
+  }
+  function applyRemoteEdits(d) {
+    const exist = new Set(state.zahir ? state.zahir.gudangs.map((g) => g.key) : []);
+    const keys = Array.isArray(d.gudangKeys) ? d.gudangKeys.filter((k) => exist.has(k)) : [];
+    const next = { final: d.final || {}, note: d.note || {}, log: Array.isArray(d.log) ? d.log.slice().sort((a, b) => (a.t || 0) - (b.t || 0)) : [], stockDate: d.stockDate || state.edits.stockDate || today() };
+    const sig = (e, k) => JSON.stringify([e.final, e.note, e.stockDate, k, e.log.length]);
+    const nextKeys = keys.length ? keys : state.gudangKeys;
+    if (sig(next, nextKeys) === sig(state.edits, state.gudangKeys)) return;
+    if (typingInTable()) { state.pendingRemote = d; return; }
+    state.edits = next; state.gudangKeys = nextKeys;
+    saveEdits(); saveStockCache();
+    const ae = document.activeElement;
+    const keep = ae && ae.dataset && ae.dataset.code && $("tbl").contains(ae) ? { code: ae.dataset.code, field: ae.dataset.field } : null;
+    recompute();
+    if (keep) { const el = $("tbl").querySelector(`input[data-code="${CSS.escape(keep.code)}"][data-field="${keep.field}"]`); if (el) el.focus(); }
+  }
+  async function publishShared() {
+    if (!state.shared || !state.parts.length || !state.file) return;
+    try {
+      const id = await state.shared.publish({ parts: state.parts, file: state.file, gudangKeys: state.gudangKeys, stockDate: state.edits.stockDate, edits: state.edits });
+      state.sharedUploadId = id; state.sharedLoaded = true;
+      subscribeEdits(state.file.hash);
+      renderSharedInfo();
+      toast("File tersimpan sebagai data terbaru tim. Semua perangkat dengan link tim melihat data ini.");
+    } catch (e) { sharedWriteFail(e); }
+  }
+  async function openHistory() {
+    if (!state.shared) return;
+    $("historyList").innerHTML = '<p class="muted small">Memuat…</p>';
+    $("dlgHistory").showModal();
+    try {
+      const rows = await state.shared.listUploads(10);
+      state.historyRows = rows;
+      const cur = state.sharedMeta && state.sharedMeta.id;
+      $("historyList").innerHTML = rows.map((u, i) => `<div class="file-row"><div><b>${esc(u.name || "-")}</b><span>${esc(new Date(u.at).toLocaleString("id-ID"))} · ${esc(u.by || "tanpa nama")} · ${fmt(u.items || 0)} baris${u.id === cur ? " · <b>dipakai sekarang</b>" : ""}</span></div>${u.id === cur ? "" : `<button type="button" class="btn small ghost" data-use-upload="${i}">Pakai versi ini</button>`}</div>`).join("") || '<p class="muted small">Belum ada upload.</p>';
+    } catch (e) { $("historyList").innerHTML = `<p class="sev-Tinggi">${esc((e && e.message) || e)}</p>`; }
   }
 
   // ---------------- pengaturan ----------------
@@ -700,13 +858,18 @@
     $("setSheet").placeholder = sc.raw && !state.settings.sheetUrl ? "Dari konfigurasi situs (kosongkan untuk tetap memakai itu)" : "https://docs.google.com/spreadsheets/d/…/edit#gid=0";
     $("setTab").value = state.settings.tab || ""; $("setTab").placeholder = sc.tab;
     $("setGid").value = state.settings.gid || ""; $("setGid").placeholder = sc.gid;
+    $("fsTeam").hidden = !sharedEnabled();
+    $("setTeam").value = state.settings.teamKey || "";
     $("setBasis").value = s.orderBasis === "target" ? "target" : "master";
     $("setTarget").value = s.targetDsi; $("setOver").value = s.overstockDays; $("setMoqTol").value = s.moqTolDays;
     $("setRound").checked = !!s.roundGramMl; $("setStep").value = s.roundStep; $("setPrice").value = s.priceSource;
     $("dlgSettings").showModal();
   }
   function saveSettings() {
-    const prevSheet = JSON.stringify(sheetConf());
+    const prevSheet = JSON.stringify(sheetConf()), prevTeam = state.settings.teamKey || "";
+    const team = $("setTeam").value.trim();
+    if (sharedEnabled() && team && !ROPShared.isTeamKey(team)) toast("Kode tim tidak valid (32–64 huruf/angka). Kode tidak diubah.", true);
+    else if (sharedEnabled()) state.settings.teamKey = team;
     const num = (id, def, min) => { const v = Number($(id).value); return isFinite(v) && v >= min ? v : def; };
     const d = Object.assign({}, Core.DEFAULT_SETTINGS, C.DEFAULTS || {});
     Object.assign(state.settings, {
@@ -716,7 +879,10 @@
       roundGramMl: $("setRound").checked, roundStep: num("setStep", d.roundStep, 1), priceSource: $("setPrice").value === "zahir" ? "zahir" : "master",
     });
     LS.set(KEY.settings, state.settings);
-    if (JSON.stringify(sheetConf()) !== prevSheet) loadMasterFromSheet(true); else recompute();
+    const sheetChanged = JSON.stringify(sheetConf()) !== prevSheet;
+    if ((state.settings.teamKey || "") !== prevTeam) startShared();
+    else if (sheetChanged) shareSheet();
+    if (sheetChanged) loadMasterFromSheet(true); else recompute();
     toast("Pengaturan disimpan.");
   }
 
@@ -728,8 +894,8 @@
       const b = e.target.closest("[data-remove-file]");
       if (!b) return;
       const i = Number(b.dataset.removeFile), p = state.parts[i];
-      if (!p || !confirm(`Hapus ${p.file.name} dari perhitungan?`)) return;
-      setParts(state.parts.filter((_, k) => k !== i), state.edits);
+      if (!p || !confirm(`Hapus ${p.file.name} dari perhitungan?${state.shared ? " Perubahan ini juga berlaku untuk tim." : ""}`)) return;
+      setParts(state.parts.filter((_, k) => k !== i), state.edits).then(() => { if (state.shared && state.parts.length) publishShared(); });
     });
     $("fileMaster").addEventListener("change", (e) => { handleMasterFile(e.target.files[0]); e.target.value = ""; });
     const drop = $("drop");
@@ -753,6 +919,21 @@
     $("stepMaster").addEventListener("click", (e) => { if (e.target.closest("#btnSheetQuick")) saveQuickSheet(); });
     $("stepMaster").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.id === "inpSheetQuick") { e.preventDefault(); saveQuickSheet(); } });
     $("dlgSettings").addEventListener("close", () => { if ($("dlgSettings").returnValue === "save") saveSettings(); });
+    $("btnNewTeam").addEventListener("click", () => {
+      if ($("setTeam").value.trim() && !confirm("Buat kode tim baru? Perangkat lain baru melihat data setelah membuka link tim yang baru.")) return;
+      $("setTeam").value = ROPShared.newTeamKey();
+    });
+    $("sharedInfo").addEventListener("click", (e) => { if (e.target.closest("#btnHistory")) openHistory(); });
+    $("historyList").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-use-upload]");
+      if (!b || !state.historyRows) return;
+      const u = state.historyRows[Number(b.dataset.useUpload)];
+      if (!u || !confirm(`Jadikan "${u.name}" (${new Date(u.at).toLocaleString("id-ID")}) data terbaru untuk semua orang?`)) return;
+      state.shared.useUpload(u).then(() => { $("dlgHistory").close(); toast("Versi dipilih. Semua perangkat memuat versi ini."); }).catch((err) => sharedWriteFail(err));
+    });
+    $("tbl").addEventListener("focusout", () => setTimeout(() => {
+      if (state.pendingRemote && !typingInTable()) { const d = state.pendingRemote; state.pendingRemote = null; applyRemoteEdits(d); }
+    }, 0));
 
     $("gudangChecks").addEventListener("change", () => {
       const keys = Array.from($("gudangChecks").querySelectorAll("input:checked")).map((el) => el.value);
@@ -760,8 +941,12 @@
       state.gudangKeys = keys;
       saveStockCache();
       recompute();
+      if (state.shared && state.sharedUploadId && state.file) state.shared.setMeta(state.file.hash, { gudangKeys: keys }).catch((e) => sharedWriteFail(e));
     });
-    $("inpDate").addEventListener("change", (e) => { state.edits.stockDate = e.target.value; saveEdits(); });
+    $("inpDate").addEventListener("change", (e) => {
+      state.edits.stockDate = e.target.value; saveEdits();
+      if (state.shared && state.sharedUploadId && state.file) state.shared.setMeta(state.file.hash, { stockDate: e.target.value }).catch((err) => sharedWriteFail(err));
+    });
     $("inpBy").addEventListener("change", (e) => { state.settings.preparedBy = e.target.value.trim().slice(0, 60); LS.set(KEY.settings, state.settings); });
 
     $("tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (!b) return; state.tab = b.dataset.tab; renderFilters(); renderTable(); });
@@ -775,9 +960,11 @@
       const n = Object.keys(state.edits.final).length + Object.keys(state.edits.note).length;
       if (!n) return toast("Belum ada perubahan manual.");
       if (!confirm(`Hapus ${n} perubahan manual (Final PR, catatan) untuk file ini? Log tetap disimpan.`)) return;
-      state.edits.log.push({ t: Date.now(), code: "", kode: "", nama: "(semua)", field: "Reset perubahan", from: n, to: 0, system: "", by: state.settings.preparedBy || "" });
+      const logEntry = { t: Date.now(), code: "", kode: "", nama: "(semua)", field: "Reset perubahan", from: n, to: 0, system: "", by: state.settings.preparedBy || "" };
+      state.edits.log.push(logEntry);
       Object.assign(state.edits, { final: {}, note: {} });
       saveEdits(); recompute();
+      if (state.shared && state.sharedUploadId && state.file) state.shared.resetEdits(state.file.hash, logEntry).catch((e) => sharedWriteFail(e));
     });
 
     const tbl = $("tbl");
@@ -807,12 +994,17 @@
     if (!h) return false;
     const p = new URLSearchParams(h);
     const id = Core.parseSheetRef(p.get("sheet") || "").id;
-    if (!id) return false;
-    state.settings.sheetUrl = `https://docs.google.com/spreadsheets/d/${id}/edit`;
-    const gid = (p.get("gid") || "").replace(/\D/g, "");
-    if (gid) state.settings.gid = gid;
-    const tab = (p.get("tab") || "").trim().slice(0, 60);
-    if (tab) state.settings.tab = tab;
+    const team = (p.get("team") || "").trim();
+    const okTeam = !!(window.ROPShared && ROPShared.isTeamKey(team));
+    if (!id && !okTeam) return false;
+    if (okTeam) state.settings.teamKey = team;
+    if (id) {
+      state.settings.sheetUrl = `https://docs.google.com/spreadsheets/d/${id}/edit`;
+      const gid = (p.get("gid") || "").replace(/\D/g, "");
+      if (gid) state.settings.gid = gid;
+      const tab = (p.get("tab") || "").trim().slice(0, 60);
+      if (tab) state.settings.tab = tab;
+    }
     LS.set(KEY.settings, state.settings);
     try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* abaikan */ }
     return true;
@@ -829,17 +1021,21 @@
     if (gid) state.settings.gid = gid;
     LS.set(KEY.settings, state.settings);
     state.masterError = "";
+    shareSheet();
     loadMasterFromSheet(true);
   }
   function teamLink() {
-    const sc = sheetConf();
-    if (!sc.id) return "";
-    return `${location.origin}${location.pathname}#sheet=${sc.id}&gid=${encodeURIComponent(sc.gid)}&tab=${encodeURIComponent(sc.tab)}`;
+    const sc = sheetConf(), team = sharedEnabled() && window.ROPShared && ROPShared.isTeamKey(state.settings.teamKey) ? state.settings.teamKey : "";
+    if (!sc.id && !team) return "";
+    const parts = [];
+    if (sc.id) parts.push(`sheet=${sc.id}`, `gid=${encodeURIComponent(sc.gid)}`, `tab=${encodeURIComponent(sc.tab)}`);
+    if (team) parts.push(`team=${team}`);
+    return `${location.origin}${location.pathname}#${parts.join("&")}`;
   }
   async function copyTeamLink() {
     const link = teamLink();
     if (!link) return toast("Isi dan simpan link Google Sheet dulu.", true);
-    try { await navigator.clipboard.writeText(link); toast("Link aplikasi untuk tim tersalin."); }
+    try { await navigator.clipboard.writeText(link); toast(/team=/.test(link) ? "Link tim tersalin (parameter + data bersama). Kirim hanya ke anggota tim." : "Link aplikasi untuk tim tersalin."); }
     catch (e) { prompt("Salin link ini untuk tim:", link); }
   }
 
@@ -865,12 +1061,13 @@
       await setParts([{ file: cached.file, z: cached.zahir }], null);
     }
     renderAll();
+    startShared();
     await loadMasterFromSheet(false);
     recompute();
-    if (fromHash && state.master && !state.masterError) toast("Sumber parameter tersimpan dari link. Berikutnya cukup buka alamat aplikasi.");
+    if (fromHash && state.master && !state.masterError) toast(state.settings.teamKey && sharedEnabled() ? "Link tim tersimpan di perangkat ini. Berikutnya cukup buka alamat aplikasi; file terbaru tim tampil otomatis." : "Sumber parameter tersimpan dari link. Berikutnya cukup buka alamat aplikasi.");
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 
   // Untuk tes & debugging di console
-  window.ROPApp = { state, recompute, handleZahirFiles, handleMasterFile, loadMasterFromSheet };
+  window.ROPApp = { state, recompute, handleZahirFiles, handleMasterFile, loadMasterFromSheet, startShared };
 })();

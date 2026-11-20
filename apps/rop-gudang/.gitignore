@@ -5,3 +5,5 @@ firebase-debug.log
 public/config.local.json
 test/out/
 firebase.ci.json
+firebase.rules.json
+firestore-debug.log

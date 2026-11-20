@@ -10,15 +10,26 @@ function globToRe(g) { // dukungan glob sederhana ala Firebase: **, *, @(a|b)
   s = s.replace(/@\(([^)]*)\)/g, "($1)").replace(/\*\*\/?/g, "\u0000").replace(/\*/g, "[^/]*").replace(/\u0000/g, ".*");
   return new RegExp("^/?" + s + "$");
 }
-function serve(port) {
+// opts (khusus tes): connectSrc = sumber tambahan untuk CSP connect-src (mis. emulator Firestore),
+//                    files = { "/config.local.json": "<isi>" } file virtual yang tidak ada di public/
+function serve(port, opts) {
+  const o = opts || {};
   const srv = http.createServer((req, res) => {
     let p = decodeURIComponent(new URL(req.url, "http://x").pathname);
+    if (o.files && Object.prototype.hasOwnProperty.call(o.files, p)) {
+      res.writeHead(200, { "Content-Type": TYPES[path.extname(p)] || "text/plain", "Cache-Control": "no-cache" });
+      return res.end(o.files[p]);
+    }
     if (p.endsWith("/")) p += "index.html";
     let file = path.join(ROOT, path.normalize(p).replace(/^(\.\.[/\\])+/, ""));
     if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
     if (!fs.existsSync(file) && fs.existsSync(file + ".html")) file += ".html";
     const rel = "/" + path.relative(ROOT, file).split(path.sep).join("/");
-    for (const h of cfg.headers || []) if (globToRe(h.source).test(rel)) for (const kv of h.headers) res.setHeader(kv.key, kv.value);
+    for (const h of cfg.headers || []) if (globToRe(h.source).test(rel)) for (const kv of h.headers) {
+      let v = kv.value;
+      if (kv.key === "Content-Security-Policy" && o.connectSrc && o.connectSrc.length) v = v.replace(/connect-src ([^;]*)/, (m, a) => `connect-src ${a} ${o.connectSrc.join(" ")}`);
+      res.setHeader(kv.key, v);
+    }
     if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404, { "Content-Type": "text/html" }); return res.end("<h1>404</h1>"); }
     res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] || "application/octet-stream" });
     fs.createReadStream(file).pipe(res);

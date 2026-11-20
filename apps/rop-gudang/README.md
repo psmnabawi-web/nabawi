@@ -1,10 +1,10 @@
 # ROP Gudang — rekomendasi pembelian dari stok Zahir
 
-Web app statis (tanpa server, tanpa database). Alur kerja tim:
+Web app statis + data bersama tim (Cloud Firestore). Alur kerja tim:
 
-**Download stok dari Zahir → upload ke aplikasi → rekomendasi PR muncul → export Excel / salin teks PR ke purchasing.**
+**Download stok dari Zahir → upload ke aplikasi → rekomendasi PR muncul di semua perangkat tim → export Excel / salin teks PR / cetak PO.**
 
-File Zahir diproses di browser pengguna dan **tidak dikirim ke server mana pun**. Parameter ROP (pemakaian/hari, buffer, lead time, MOQ, harga) dibaca langsung dari Google Sheet yang sudah dipakai tim (tab `PKU`), jadi tidak ada data ganda.
+File Zahir dibaca di browser; hasilnya disimpan sebagai **data terbaru tim** sehingga siapa pun yang membuka aplikasi (dengan link tim) melihat file yang di-upload terakhir. Parameter ROP (pemakaian/hari, buffer, lead time, MOQ, harga) dibaca langsung dari Google Sheet yang sudah dipakai tim (tab `PKU`), jadi tidak ada data ganda.
 
 ## SOP harian (untuk admin SCM / purchasing)
 
@@ -17,7 +17,20 @@ File Zahir diproses di browser pengguna dan **tidak dikirim ke server mana pun**
 | 5 | Review tab **Rekomendasi PR** dari atas (OOS → Kritis → Order). Ubah **Final PR** bila perlu + isi catatan. | 10–15 menit |
 | 6 | **Export Excel** (arsip & dasar PO) dan/atau **Salin teks PR** (kirim ke WhatsApp purchasing). | 1 menit |
 
-Perubahan manual tersimpan di browser per file (dikunci SHA-256 file), tercatat di sheet **Log Perubahan**, dan bisa dibatalkan dengan **Reset perubahan**.
+Perubahan manual tersimpan per file (dikunci SHA-256 file) untuk seluruh tim, tercatat di sheet **Log Perubahan**, dan bisa dibatalkan dengan **Reset perubahan**.
+
+## Data bersama tim
+
+| Yang dibagikan | Perilaku |
+|---|---|
+| File Zahir terakhir | Upload siapa pun langsung jadi data terbaru di semua perangkat (tanpa reload). Upload lama tersimpan di **Riwayat** dan bisa dipakai lagi. |
+| Final PR, catatan, tanggal stok, gudang dihitung | Tersinkron per file; dua orang yang mengedit item berbeda tidak saling menimpa. Saat seseorang sedang mengetik di sel, perubahan dari tim ditunda sampai sel ditinggalkan. |
+| Nomor PO | Diambil dari nomor terakhir tim (transaksi), jadi dua perangkat tidak mencetak nomor yang sama. |
+| Link Google Sheet parameter | Ikut tersimpan untuk tim; perangkat baru cukup punya kode tim. |
+
+**Akses = kode tim.** Data ada di `ropGudang/{kodeTim}` (Firestore project `sssg-dashboard-2026`). Kode tim (43 karakter acak) hanya ada di **link tim** `https://<situs>.web.app/#team=<KODE>` (Pengaturan → **Salin link aplikasi untuk tim**, sudah membawa link sheet). Tiap perangkat cukup membuka link itu sekali. Tanpa kode, data tidak bisa dibaca/ditulis dan daftar kode tidak bisa dilihat (`firestore.rules`). Bila link bocor: Pengaturan → **Buat kode tim baru** → upload ulang → kirim link baru ke tim.
+
+Tanpa koneksi atau bila Firestore gagal, aplikasi tetap jalan dengan data di perangkat itu (pesan kuning/merah di kartu Upload).
 
 ## MOQ (minimum order purchasing)
 
@@ -127,13 +140,15 @@ Rumus Excel diuji: workbook ditulis tanpa nilai cache, dihitung ulang oleh Libre
 
 Workflow `.github/workflows/deploy-rop-gudang.yml` menerbitkan `public/` ke situs Firebase Hosting **terpisah** di project `sssg-dashboard-2026` setiap ada perubahan di branch pengembangan / `main` (tes dulu, baru deploy). Situs SSSG tidak disentuh: config deploy memakai `site` eksplisit dan nama situs SSSG ditolak. Bisa juga dijalankan manual dari tab Actions.
 
-**Link untuk tim.** Link Google Sheet tidak ikut ter-deploy. Bagikan alamat aplikasi dengan sumber parameter di belakang `#`:
+Langkah **Data bersama** di workflow (aman diulang): aktifkan Cloud Firestore API, buat database `(default)` di `asia-southeast2` bila belum ada (`scripts/firestore-setup.mjs`), deploy `firestore.rules`, daftarkan web app "ROP Gudang", lalu tulis konfigurasi web app ke `config.local.json` saat deploy (tidak di-commit). Firestore sebelumnya tidak dipakai di project ini, jadi `firestore.rules` di sini adalah rules seluruh project: bila kelak ada aplikasi lain yang memakai Firestore di project yang sama, gabungkan rules-nya di file ini.
+
+**Link untuk tim.** Link Google Sheet dan kode tim tidak ikut ter-deploy. Bagikan alamat aplikasi dengan keduanya di belakang `#`:
 
 ```
-https://<situs>.web.app/#sheet=<ID_SPREADSHEET>&gid=0&tab=PKU
+https://<situs>.web.app/#sheet=<ID_SPREADSHEET>&gid=0&tab=PKU&team=<KODE_TIM>
 ```
 
-Bagian setelah `#` tidak pernah dikirim ke server. Cukup dibuka sekali per perangkat; setelah itu alamat biasa sudah memakai sheet tersebut. Link ini juga bisa disalin dari menu Pengaturan → **Salin link aplikasi untuk tim**.
+Bagian setelah `#` tidak pernah dikirim ke server. Cukup dibuka sekali per perangkat; setelah itu alamat biasa sudah memakai sheet dan data tim. Link ini juga bisa disalin dari menu Pengaturan → **Salin link aplikasi untuk tim**.
 
 ## Deploy manual ke project sendiri (opsional, ±5 menit)
 
@@ -156,9 +171,13 @@ public/
   index.html, style.css, app.js   UI
   rop-core.js                     parser Zahir & master, rumus ROP, KPI, teks PR (dipakai browser & tes Node)
   excel-export.js                 workbook Excel berformula (ExcelJS)
-  config.js                       konfigurasi umum (tanpa link sheet)
+  shared.js                       data bersama tim (Firestore): upload terakhir, edit, nomor PO, riwayat
+  config.js                       konfigurasi umum (tanpa link sheet / kode tim)
   vendor/exceljs.min.js           ExcelJS 4.4.0 (MIT)
+  vendor/firebase-*-compat.js     Firebase JS SDK 10.14.1 (Apache-2.0), dimuat hanya bila data bersama aktif
+firestore.rules                   akses Firestore per kode tim + validasi bentuk data
 scripts/serve.cjs                 server lokal dengan header = firebase.json (CSP)
+scripts/firestore-setup.mjs       dipakai workflow: aktifkan Firestore & buat database (sekali)
 test/                             tes unit, export (LibreOffice), e2e (Playwright), fixture SINTETIS
 deploy.sh, firebase.json
 ```
@@ -168,14 +187,18 @@ deploy.sh, firebase.json
 ```bash
 npm test            # logika + export Excel (+ hitung ulang LibreOffice bila terpasang)
 npm run test:e2e    # Chromium: muat parameter, upload, edit, export, salin, reload, mobile, tanpa error CSP
+npx -y firebase-tools@13 emulators:exec --only firestore --project demo-rop --config firebase.emulator.json "node test/shared.e2e.cjs"
+                    # data bersama: 3 perangkat, realtime, nomor PO, riwayat, rules (butuh Java)
 ```
 
 Fixture di `test/fixtures` adalah data sintetis. **Jangan commit file Zahir asli** (repo ini publik dan file berisi nilai persediaan).
 
 ## Keamanan & batasan
 
-- Tidak ada login: siapa pun yang tahu alamat situs bisa membuka aplikasi, tetapi aplikasi tidak menyimpan data di server. Yang terlihat hanya parameter dari sheet (karena itu sheet harus *Pelihat*).
-- CSP ketat: skrip hanya dari situs sendiri (+ cdn.sheetjs.com untuk .xls biner lama), koneksi hanya ke Google Sheets.
-- Data tersimpan di localStorage browser: pengaturan, cache parameter, file terakhir, dan perubahan manual. Ganti perangkat = mulai dari upload lagi.
+- Tidak ada login: akses data stok = memegang **kode tim** (link tim). Siapa pun yang punya link tim bisa melihat stok/harga dan meng-upload file; jadi kirim link hanya ke anggota tim. Riwayat upload tidak bisa dihapus/diubah dari aplikasi, jadi upload yang salah bisa dikembalikan lewat **Riwayat**.
+- Google Sheet parameter sebaiknya *Pelihat* (bukan Editor): link sheet ikut di link tim.
+- CSP ketat: skrip hanya dari situs sendiri (+ cdn.sheetjs.com untuk .xls biner lama), koneksi hanya ke Google Sheets dan Firestore.
+- localStorage browser tetap dipakai sebagai cache (pengaturan, parameter, file terakhir, perubahan), sehingga aplikasi tetap bisa dibuka saat offline.
+- Kuota Firestore paket gratis (Spark): 50.000 baca & 20.000 tulis per hari, jauh di atas pemakaian tim (ASUMSI ≤ 20 pengguna).
 - PO outstanding sengaja tidak dihitung (keputusan pemilik). Barang yang sudah dipesan tetapi belum diterima akan direkomendasikan lagi sampai stoknya masuk Zahir: nolkan Final PR-nya secara manual.
-- Belum ada alur approval PR multi-user; butuh backend (pengembangan tahap berikutnya).
+- Belum ada alur approval PR (siapa menyetujui); log perubahan mencatat nama dari kolom "Disiapkan oleh".

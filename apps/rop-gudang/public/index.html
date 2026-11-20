@@ -51,9 +51,10 @@
           <h2>Upload stok Zahir</h2>
           <span id="fileChip" class="chip muted">Belum ada file</span>
         </div>
+        <div id="sharedInfo" class="shared-info" hidden></div>
         <label id="drop" class="drop" for="fileZahir">
           <strong>Tarik file ke sini atau klik untuk memilih</strong>
-          <span>Laporan Zahir <em>Daftar Produk Per Gudang</em> (.xls hasil download, tanpa diedit). Bisa pilih beberapa file sekaligus, mis. stok gudang SCM + stok Produksi; stoknya dijumlah. File diproses di browser ini saja, tidak dikirim ke server.</span>
+          <span>Laporan Zahir <em>Daftar Produk Per Gudang</em> (.xls hasil download, tanpa diedit). Bisa pilih beberapa file sekaligus, mis. stok gudang SCM + stok Produksi; stoknya dijumlah. <span id="dropNote">File diproses di browser ini saja, tidak dikirim ke server.</span></span>
         </label>
         <input type="file" id="fileZahir" accept=".xls,.xlsx,.csv,.txt,.htm,.html" class="visually-hidden" multiple>
         <input type="file" id="fileZahirAdd" accept=".xls,.xlsx,.csv,.txt,.htm,.html" class="visually-hidden" multiple>
@@ -151,6 +152,12 @@
         <p class="muted small">Sheet harus dibagikan “Siapa saja yang memiliki link: <b>Pelihat</b>”. Disimpan hanya di browser ini. Untuk tim: kirim link aplikasi yang sudah membawa sumber parameter (tombol di bawah); cukup dibuka sekali per perangkat.</p>
         <div><button type="button" class="btn small" id="btnShareLink">Salin link aplikasi untuk tim</button></div>
       </fieldset>
+      <fieldset id="fsTeam" hidden>
+        <legend>Data bersama tim</legend>
+        <label class="field"><span>Kode tim</span><input type="text" id="setTeam" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Terisi otomatis dari link tim"></label>
+        <p class="muted small">Semua perangkat dengan kode tim yang sama melihat file Zahir terbaru, perubahan Final PR/catatan, dan nomor PO yang sama. Kode ikut di link aplikasi untuk tim. Jangan bagikan ke luar tim; bila bocor, buat kode baru lalu kirim link baru ke tim.</p>
+        <div><button type="button" class="btn small ghost" id="btnNewTeam">Buat kode tim baru</button></div>
+      </fieldset>
       <fieldset>
         <legend>Perhitungan</legend>
         <div class="grid2">
@@ -226,6 +233,14 @@
     </form>
   </dialog>
 
+  <dialog id="dlgHistory" class="dlg">
+    <form method="dialog" class="dlg-inner">
+      <div class="dlg-head"><h3>Riwayat upload tim</h3><button class="btn icon" value="cancel" aria-label="Tutup">✕</button></div>
+      <p class="muted small">10 upload terakhir. “Pakai versi ini” menjadikan versi tersebut data terbaru untuk semua orang. Perubahan Final PR tersimpan per versi.</p>
+      <div id="historyList" class="files-list"></div>
+    </form>
+  </dialog>
+
   <div id="printArea" aria-hidden="true"></div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -233,6 +248,7 @@
   <script src="config.js"></script>
   <script src="rop-core.js"></script>
   <script src="excel-export.js"></script>
+  <script src="shared.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
