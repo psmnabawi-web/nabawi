@@ -25,7 +25,7 @@ jobs:
         working-directory: apps/rop-gudang
         run: |
           npm init -y >/dev/null 2>&1 || true
-          npm i --no-save --no-audit --no-fund playwright@1.48.2
+          npm i --no-save --no-audit --no-fund playwright@1.63.0
           npx playwright install --with-deps chromium
       - name: Uji live
         working-directory: apps/rop-gudang
